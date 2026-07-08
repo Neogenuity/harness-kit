@@ -80,7 +80,7 @@ done
 # needs a human decision (delete the stub or add the canonical skill), so the
 # exit code must not read as "all clean".
 for provider in $PROVIDERS; do
-    for stub_dir in "$ROOT"/$provider/skills/*/; do
+    for stub_dir in "$ROOT/$provider"/skills/*/; do
         [ -d "$stub_dir" ] || continue
         slug=$(basename "$stub_dir")
         if [ ! -f "$ROOT/$CANONICAL_SKILLS/$slug/SKILL.md" ]; then

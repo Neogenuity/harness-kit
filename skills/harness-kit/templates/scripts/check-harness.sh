@@ -42,7 +42,7 @@ done
 #    stay small so full copies (which drift) cannot reappear.
 STUB_MAX_LINES=25
 for provider_dir in $PROVIDERS; do
-    for stub in "$ROOT"/$provider_dir/skills/*/SKILL.md; do
+    for stub in "$ROOT/$provider_dir"/skills/*/SKILL.md; do
         [ -f "$stub" ] || continue
         stub_rel=${stub#"$ROOT"/}
         canonical=$(grep -oE "${CANONICAL_SKILLS}/[A-Za-z0-9/_.-]+" "$stub" | head -1 || true)
