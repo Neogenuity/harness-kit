@@ -33,12 +33,32 @@ whatever ships next — without maintaining N parallel configurations.
    link goes dead, or a hook regression test breaks. The pattern survives
    only because divergence is mechanically impossible to merge.
 
-5. **Guards are layered and fail open.** Secret-file reads are denied both by
-   the portable hook (works in every harness, symlink- and case-aware) and by
-   the harness's native permission deny list (works even when hooks don't
-   fire, e.g. some subagent contexts). Advisory checks (project invariants)
-   warn the agent exactly once and never hard-block — the enforcing gate is
-   tests/CI.
+5. **Guards are layered, fail open, and guard the harness itself.**
+   Secret-file reads are denied both by the portable hook (works in every
+   harness, symlink- and case-aware; patterns single-sourced in
+   `harness.conf`) and by the harness's native permission deny list (works
+   even when hooks don't fire, e.g. some subagent contexts) —
+   `check-harness.sh` fails when the two drift apart. The mechanism is
+   protected from the agent too: `guard-config.sh` denies edits to hook
+   scripts, machinery, and lint configs, and the manifest checksum
+   verification in CI catches whatever the hook can't see. Advisory checks
+   (project invariants) warn the agent exactly once and never hard-block —
+   the enforcing gate is tests/CI.
+
+6. **Verification is executable, and feedback lands at the fastest layer.**
+   `scripts/verify.sh` is the one executable definition of "done"; AGENTS.md,
+   CLAUDE.md, and skills point at it instead of listing commands, so the
+   gates cannot drift across docs. The same policy runs at three latencies:
+   the post-edit hook feeds lint findings back within the turn
+   (milliseconds), the advisory stop-hook can run `verify.sh --fast`
+   (seconds), CI runs everything (minutes). Agents can't ignore a failing
+   gate the way they ignore prose.
+
+7. **Observability closes the loop.** Every deny, advisory, and lint finding
+   appends one JSON line to `.harness/log.jsonl` (git-ignored). The audit
+   workflow summarizes it: a guard that fires repeatedly on the same path is
+   the signal for what to engineer away permanently — tighten a pattern, add
+   a lint rule, write the convention doc.
 
 ## Anatomy of an installed harness
 
@@ -52,17 +72,24 @@ docs/
   agents/<name>.md             # canonical persona docs
   plans/                       # execution plans (surfaced by session-context.sh)
 scripts/
-  harness.conf                 # shared tailoring surface (providers, paths)
-  sync-agent-skills.sh         # stub generator (+ --check mode, orphan detection)
-  check-harness.sh             # CI drift gate
-  .harness-manifest            # kit version + checksums (upgrade bookkeeping)
+  harness.conf                 # shared tailoring surface (providers, paths,
+                               #   secret patterns, log toggle)     [tailored]
+  verify.sh                    # executable "done": ordered quality gates
+                               #   (--fast subset for the stop-hook) [tailored]
+  sync-agent-skills.sh         # stub + skill-resource mirror generator
+                               #   (+ --check mode, orphan detection)
+  check-harness.sh             # CI drift gate + manifest integrity + doctor
+  .harness-manifest            # kit version + checksums (upgrade + CI integrity)
   hooks/
-    lib.sh                     # stdin parsing, deny, advise-once protocol
-    format.sh                  # post-edit formatter dispatch      [tailored]
-    guard-secrets.sh           # pre-read secret denial            [tailored]
+    lib.sh                     # stdin parsing, deny, feedback, advise-once, hook_log
+    format.sh                  # post-edit format + lint feedback  [tailored]
+    guard-secrets.sh           # pre-read secret denial (patterns from harness.conf)
+    guard-config.sh            # pre-edit mechanism/lint-config protection [tailored]
     guard-project-policy.sh    # advisory stop-hook invariants     [tailored]
-    session-context.sh         # session-start orientation banner
+    session-context.sh         # session-start orientation banner (branch,
+                               #   recent commits, active plans)
     test-*.sh                  # regression tests, run by check-harness.sh
+.harness/                      # hook event log (JSONL, git-ignored)
 .claude/   settings.json (permissions + hook wiring), skills/ (stubs), agents/ (thin)
 .cursor/   hooks.json, rules/*.mdc (thin), skills/ (stubs), agents/ (thin), mcp.json
 .codex/    config.toml (MCP), hooks.json, agents/*.toml (thin)   # skills come from .agents/
@@ -74,8 +101,8 @@ scripts/
 
 | Layer | Examples | Packaging treatment |
 | --- | --- | --- |
-| **Mechanism** | sync script, check script, lib.sh, hook tests | Copied verbatim; upgraded via manifest |
-| **Policy** | secret patterns, formatter map, permission allowlist, plans dir | Templates with marked `TAILOR` blocks; filled at init |
+| **Mechanism** | sync script, check script, lib.sh, hook tests | Copied verbatim; upgraded via manifest; integrity-checked in CI |
+| **Policy** | quality gates (verify.sh), secret patterns, formatter/lint maps, protected paths, permission allowlist, plans dir | Templates with marked `TAILOR` blocks; filled at init; never auto-overwritten |
 | **Content** | AGENTS.md, conventions, skills, personas, invariant checks | Authored per-project; kit provides skeletons + interview |
 
 ## Why stubs instead of symlinks or full copies
@@ -91,10 +118,21 @@ The stub-size cap in `check-harness.sh` (25 lines) exists so full copies
 cannot quietly reappear — any provider SKILL.md that grows past a pointer
 fails the build.
 
+Skill *resource* directories (`references/`, `scripts/`, `assets/` per the
+Agent Skills standard) are the deliberate exception: the generator mirrors
+them verbatim next to each stub so harnesses that resolve resources relative
+to the skill directory keep working, and `--check` pins the mirrors
+recursively — full copies, but mechanically incapable of drifting.
+
 ## Upgrade model
 
 At install, the kit writes `scripts/.harness-manifest`: the kit version plus
-a sha256 per installed mechanism file. On `update`, files whose checksum
-still matches the manifest are upgraded in place; files that differ were
-tailored by the project, so the kit shows a diff instead of overwriting.
-Policy templates (TAILOR blocks) are always treated as tailored after init.
+a sha256 per installed mechanism file, pinned AFTER init-time tailoring.
+`check-harness.sh` verifies those checksums on every run, so any later edit
+— agent, human, or merge — fails CI until its line is deliberately re-pinned.
+A line suffixed ` # tailored` marks a deliberate local fork: the integrity
+check skips it, and `update` will only ever diff that file, never replace
+it. On `update`, files whose checksum still matches the manifest are
+upgraded in place; files that differ (or are marked tailored) get a diff
+instead of an overwrite. Policy templates (TAILOR blocks) are always treated
+as tailored after init.

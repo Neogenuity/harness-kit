@@ -3,11 +3,13 @@ name: harness-kit
 description: >-
     Scaffolds and maintains a standardized cross-agent harness (Claude Code,
     Cursor, Codex, OpenCode, .agents) in any repository: a canonical docs/
-    knowledge base, generated provider skill stubs, provider-agnostic hook
-    scripts, shared permissions, and a CI drift gate. Activates when asked to
-    set up or standardize an agent/AI harness in a repo, audit an existing
-    harness, add a skill/subagent/hook to the harness, sync provider stubs,
-    or upgrade harness machinery ("harness init", "harness audit").
+    knowledge base, an executable quality-gate runner (verify.sh), generated
+    provider skill stubs, provider-agnostic hook scripts with lint feedback
+    and observability logging, shared permissions, and a CI drift gate with
+    mechanism integrity checks. Activates when asked to set up or
+    standardize an agent/AI harness in a repo, audit an existing harness,
+    add a skill/subagent/hook to the harness, sync provider stubs, or
+    upgrade/migrate harness machinery ("harness init", "harness audit").
 ---
 
 # Harness Kit
@@ -44,6 +46,9 @@ behavior from the repo alone.
    - Quality gates: the ordered commands that define "done" (recon proposes,
      user confirms). These are written into `scripts/verify.sh`, which is the
      single executable source for them — docs only point at it.
+   - The millisecond-fast linter per file type for the post-edit feedback
+     loop (`format.sh`'s second TAILOR map) — recon proposes from the
+     toolchain; slow static analysis stays in `verify.sh`.
    - Which providers to wire beyond Claude Code + `AGENTS.md` (Cursor?
      Codex? OpenCode? `.agents`? — cheap to include, default to all five).
    - The 2-4 conventions worth a `docs/conventions/` doc (what do reviewers
@@ -134,11 +139,12 @@ behavior from the repo alone.
    project deliberately forks that file (update mode will then only ever
    diff it, never replace it).
 
-9. **Verify — do not skip**: `bash scripts/check-harness.sh` passes; each
-   `scripts/hooks/test-*.sh` passes standalone; feed `guard-secrets.sh` a
-   real payload for the repo's own `.env` and confirm exit 2; confirm every
-   AGENTS.md link opens. Report results honestly, including anything left
-   unwired.
+9. **Verify — do not skip**: `bash scripts/verify.sh` and
+   `bash scripts/check-harness.sh` pass; each `scripts/hooks/test-*.sh`
+   passes standalone; feed `guard-secrets.sh` a real payload for the repo's
+   own `.env` and `guard-config.sh` one for `scripts/hooks/lib.sh`, confirm
+   exit 2 for both; confirm every AGENTS.md link opens. Report results
+   honestly, including anything left unwired.
 
 ## audit
 

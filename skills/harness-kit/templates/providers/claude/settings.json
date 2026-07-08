@@ -9,6 +9,8 @@
       "Bash(bash scripts/check-harness.sh:*)",
       "Bash(bash scripts/sync-agent-skills.sh:*)",
       "Bash(bash scripts/hooks/test-guard-secrets.sh:*)",
+      "Bash(bash scripts/hooks/test-guard-config.sh:*)",
+      "Bash(bash scripts/hooks/test-format-feedback.sh:*)",
       "Bash(bash scripts/hooks/test-advise-once.sh:*)"
     ],
     "deny": [
