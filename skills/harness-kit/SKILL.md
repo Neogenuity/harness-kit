@@ -70,6 +70,9 @@ behavior from the repo alone.
      (`guard-secrets.sh` enforces it, `check-harness.sh` verifies the native
      deny lists against it). Mirror additions into
      `hooks/test-guard-secrets.sh` cases.
+   - `hooks/guard-config.sh`: extend `PROTECTED_PATHS` with the repo's
+     linter/formatter configs — the files an agent could edit to make
+     findings disappear. The harness mechanism is protected by default.
    - `hooks/guard-project-policy.sh`: implement the invariant check from the
      interview (follow the in-file example), or leave the no-op skeleton.
 
@@ -114,13 +117,18 @@ behavior from the repo alone.
    `.github/workflows/harness-check.yml` (or add the `check-harness.sh` step
    to existing CI; translate for other CI systems).
 
-8. **Write the manifest** for future upgrades:
+8. **Write the manifest** for upgrades *and* CI integrity — do this AFTER
+   step 4, so the checksums pin the tailored state:
    ```bash
    { echo "# harness-kit <kit-version>"; \
-     find scripts/hooks scripts/sync-agent-skills.sh scripts/check-harness.sh -type f ! -name '.harness-manifest' \
+     find scripts/hooks scripts/sync-agent-skills.sh scripts/check-harness.sh scripts/verify.sh -type f ! -name '.harness-manifest' \
      | sort | xargs shasum -a 256; } > scripts/.harness-manifest
    ```
    (kit version = `version` in the kit's `.claude-plugin/plugin.json`).
+   `check-harness.sh` verifies these checksums from now on, so every later
+   edit must re-pin its line; append ` # tailored` to a line when the
+   project deliberately forks that file (update mode will then only ever
+   diff it, never replace it).
 
 9. **Verify — do not skip**: `bash scripts/check-harness.sh` passes; each
    `scripts/hooks/test-*.sh` passes standalone; feed `guard-secrets.sh` a
@@ -135,7 +143,7 @@ Grade an existing repo against the pattern. Check, in order: canonical
 AGENTS.md as TOC with live links; skills canonical + stubs generated
 everywhere `harness.conf` claims; hooks portable, executable, tested; native
 permission deny list mirroring the secret guard; CI running the drift gate;
-manifest present. Then run `scripts/check-harness.sh` and the hook tests if
+manifest present and passing its checksum verification. Then run `scripts/check-harness.sh` and the hook tests if
 they exist. Output: a table of pattern element → status (present / drifted /
 missing) with the concrete fix for each, ordered by risk (secret exposure
 first, drift second, missing content last). Offer to fix; don't fix unasked.
@@ -162,8 +170,11 @@ first, drift second, missing content last). Offer to fix; don't fix unasked.
 1. Read the target's `scripts/.harness-manifest` (version + checksums). If
    missing, fall back to audit and offer to adopt the manifest.
 2. For each mechanism file: checksum matches manifest → replace with the
-   new kit version; differs → the project tailored it; show a diff of
-   old-kit → new-kit and apply only what the user approves.
+   new kit version; differs, or its manifest line is marked ` # tailored` →
+   the project owns it; show a diff of old-kit → new-kit and apply only
+   what the user approves. Set `HARNESS_ALLOW_MECHANISM_EDITS=1` for the
+   session if `guard-config.sh` is wired — upgrading the mechanism is the
+   intended use of that escape hatch.
 3. Never auto-overwrite policy files (`verify.sh`, `format.sh`,
    `guard-secrets.sh`, `guard-project-policy.sh`, `harness.conf`, provider
    configs) — diff only.

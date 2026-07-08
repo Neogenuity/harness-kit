@@ -73,9 +73,15 @@ if [ -f "$ROOT/scripts/sync-agent-skills.sh" ]; then
     fi
 fi
 
-# 4. Relative markdown links in AGENTS.md must resolve (it is the table of
-#    contents for the knowledge base — a dead link strands every agent).
-if [ -f "$ROOT/AGENTS.md" ]; then
+# 4. Relative markdown links in the knowledge base must resolve — AGENTS.md
+#    (root and nested, per the hierarchical standard) and every doc under
+#    docs/. A dead link strands every agent. Fenced code blocks are ignored;
+#    a link passes if it resolves from the doc's own directory OR the repo
+#    root (both conventions are common).
+check_doc_links() {
+    local doc="$1" doc_rel base link target
+    doc_rel=${doc#"$ROOT"/}
+    base=$(dirname "$doc")
     while IFS= read -r link; do
         [ -z "$link" ] && continue
         case "$link" in
@@ -83,16 +89,22 @@ if [ -f "$ROOT/AGENTS.md" ]; then
         esac
         target="${link%%#*}"
         [ -z "$target" ] && continue
-        if [ ! -e "$ROOT/$target" ]; then
-            echo "ERROR: AGENTS.md links to '$target' but it does not exist"
+        if [ ! -e "$base/$target" ] && [ ! -e "$ROOT/$target" ]; then
+            echo "ERROR: $doc_rel links to '$target' but it does not exist"
             ERRORS=$((ERRORS + 1))
         fi
-    done < <(grep -oE '\]\([^)]+\)' "$ROOT/AGENTS.md" 2>/dev/null | sed -E 's/^\]\(//; s/\)$//' | sort -u)
-fi
+    done < <(awk '/^```/ { fence = !fence; next } !fence' "$doc" 2>/dev/null \
+        | grep -oE '\]\([^)]+\)' | sed -E 's/^\]\(//; s/\)$//' | sort -u)
+}
+while IFS= read -r doc; do
+    check_doc_links "$doc"
+done < <({ find "$ROOT" -name AGENTS.md \
+             -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*'; \
+           [ -d "$ROOT/docs" ] && find "$ROOT/docs" -name '*.md'; } 2>/dev/null | sort -u)
 
-# 5. Hook scripts must be executable (a chmod lost in a copy or checkout
-#    silently disables the hook — most harnesses skip non-executables).
-for hook in "$ROOT"/scripts/hooks/*.sh; do
+# 5. Harness scripts must be executable (a chmod lost in a copy or checkout
+#    silently disables a hook — most harnesses skip non-executables).
+for hook in "$ROOT"/scripts/*.sh "$ROOT"/scripts/hooks/*.sh; do
     [ -f "$hook" ] || continue
     if [ ! -x "$hook" ]; then
         echo "ERROR: ${hook#"$ROOT"/} is not executable — run 'chmod +x' and commit"
@@ -149,6 +161,72 @@ if command -v jq >/dev/null 2>&1 && [ -n "${SECRET_PATTERNS:-}" ] \
     done
     set +f
 fi
+
+# 9. Mechanism files must match scripts/.harness-manifest (kit version plus
+#    sha256 per file, written at init). An un-pinned edit — agent, human, or
+#    merge — fails CI, so nobody can quietly rewrite a guard. Lines ending in
+#    '# tailored' are deliberate local forks: skipped here, and never
+#    auto-replaced by the kit's update mode.
+sha256_of() {
+    if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+    elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+    fi
+}
+if [ -f "$ROOT/scripts/.harness-manifest" ] && [ -n "$(sha256_of "$ROOT/scripts/.harness-manifest")" ]; then
+    while IFS= read -r line; do
+        case "$line" in
+            \#*|"") continue ;;
+            *"# tailored"*) continue ;;
+        esac
+        want=${line%% *}
+        path=$(printf '%s\n' "$line" | awk '{print $2}')
+        [ -n "$path" ] || continue
+        if [ ! -f "$ROOT/$path" ]; then
+            echo "ERROR: scripts/.harness-manifest lists '$path' but it does not exist — restore the file or remove the manifest line"
+            ERRORS=$((ERRORS + 1))
+            continue
+        fi
+        have=$(sha256_of "$ROOT/$path")
+        if [ "$have" != "$want" ]; then
+            echo "ERROR: '$path' does not match scripts/.harness-manifest. If the change is intentional, re-pin its line (shasum -a 256 $path) — append ' # tailored' for a deliberate fork the kit's update mode must never overwrite"
+            ERRORS=$((ERRORS + 1))
+        fi
+    done < "$ROOT/scripts/.harness-manifest"
+fi
+
+# 10. Doctor: conditions that silently weaken the harness. Warnings only —
+#     they don't fail the build, they tell you where the floor is soft.
+command -v jq >/dev/null 2>&1 \
+    || echo "WARNING: jq not found — every guard hook fails open without it; the native permission deny lists are the only live layer"
+if [ -f "$ROOT/AGENTS.md" ]; then
+    agents_lines=$(wc -l < "$ROOT/AGENTS.md" | tr -d '[:space:]')
+    [ "$agents_lines" -gt 120 ] \
+        && echo "WARNING: AGENTS.md is $agents_lines lines (target <=120) — it should route to docs/, not explain; instruction compliance degrades as it grows"
+fi
+for skill in "$ROOT/$CANONICAL_SKILLS"/*/SKILL.md; do
+    [ -f "$skill" ] || continue
+    skill_rel=${skill#"$ROOT"/}
+    skill_lines=$(wc -l < "$skill" | tr -d '[:space:]')
+    [ "$skill_lines" -gt 500 ] \
+        && echo "WARNING: $skill_rel is $skill_lines lines (target <=500) — move detail into the skill's references/ (progressive disclosure)"
+    name_val=$(grep -m1 -E '^name:' "$skill" | sed -E 's/^name:[[:space:]]*//' || true)
+    if [ -n "$name_val" ]; then
+        case "$name_val" in
+            *[!a-z0-9-]*) echo "WARNING: $skill_rel frontmatter name '$name_val' is not kebab-case (Agent Skills spec: lowercase a-z, 0-9, hyphens)" ;;
+        esac
+        [ "${#name_val}" -gt 64 ] \
+            && echo "WARNING: $skill_rel frontmatter name exceeds 64 characters (Agent Skills spec limit)"
+    fi
+    desc_len=$(awk '
+        NR==1 && $0=="---" { fm=1; next }
+        fm && $0=="---"    { exit }
+        fm && /^description:/ { d=1; sub(/^description:[[:space:]]*[>|]?-?[[:space:]]*/, ""); len+=length($0); next }
+        d && /^[A-Za-z_-]+:/  { d=0 }
+        d { gsub(/^[[:space:]]+/, ""); len+=length($0) }
+        END { print len+0 }' "$skill")
+    [ "$desc_len" -gt 1024 ] \
+        && echo "WARNING: $skill_rel frontmatter description is $desc_len characters (Agent Skills spec limit 1024) — routers truncate; tighten the trigger"
+done
 
 # -- TAILOR: project-specific freshness checks below ---------------------------
 # Add checks that keep YOUR docs honest against YOUR code layout, e.g.:
