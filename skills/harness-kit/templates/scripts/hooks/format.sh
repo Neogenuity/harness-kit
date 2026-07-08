@@ -65,6 +65,7 @@ esac
 # ------------------------------------------------------------------------------
 
 if [ -n "$diagnostics" ]; then
+    hook_log lint-findings "$file" "$diagnostics"
     hook_feedback "Lint findings in $file — fix before finishing:
 $diagnostics"
 fi

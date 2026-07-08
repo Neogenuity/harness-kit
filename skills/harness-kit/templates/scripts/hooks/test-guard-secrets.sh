@@ -15,6 +15,9 @@ HOOK="$(cd "$(dirname "$0")" && pwd)/guard-secrets.sh"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
+# Keep hook_log out of the repo during tests; explicit log cases opt back in.
+export HARNESS_LOG=0
+
 fails=0
 
 # run <expected-exit> <description> <json-payload>
@@ -93,6 +96,24 @@ run_conf() {
 run_conf 2 "conf pattern mysecret.txt denied"     "$(payload "$WORK/mysecret.txt")"
 run_conf 0 "conf allow mysecret.example allowed"  "$(payload "$WORK/mysecret.example")"
 run_conf 0 "conf replaces defaults (.env allowed under custom conf)" "$(payload "$WORK/.env")"
+
+# --- observability: a deny appends one valid JSON line; HARNESS_LOG=0 doesn't ---
+LOG="$WORK/log.jsonl"
+printf '%s' "$(payload "$WORK/.env")" | env HARNESS_LOG=1 HARNESS_LOG_FILE="$LOG" "$HOOK" >/dev/null 2>&1
+if [ -f "$LOG" ] && [ "$(wc -l < "$LOG" | tr -d '[:space:]')" = "1" ] \
+    && jq -e 'select(.event == "deny" and .hook == "guard-secrets.sh")' "$LOG" >/dev/null 2>&1; then
+    echo "ok:   deny appends one valid JSON log line"
+else
+    echo "FAIL: deny did not append one valid JSON log line"
+    fails=$((fails + 1))
+fi
+printf '%s' "$(payload "$WORK/.env")" | env HARNESS_LOG=0 HARNESS_LOG_FILE="$WORK/off.jsonl" "$HOOK" >/dev/null 2>&1
+if [ -e "$WORK/off.jsonl" ]; then
+    echo "FAIL: HARNESS_LOG=0 must not write a log"
+    fails=$((fails + 1))
+else
+    echo "ok:   HARNESS_LOG=0 writes nothing"
+fi
 
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails guard-secrets case(s)"

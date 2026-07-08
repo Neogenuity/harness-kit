@@ -57,7 +57,9 @@ behavior from the repo alone.
 3. **Install mechanism** from `templates/scripts/` into `scripts/`:
    `harness.conf`, `sync-agent-skills.sh`, `check-harness.sh`, `verify.sh`,
    and `hooks/` (all scripts + tests + README). `chmod +x scripts/hooks/*.sh
-   scripts/*.sh`. Tailor `harness.conf` (providers, plans dir).
+   scripts/*.sh`. Tailor `harness.conf` (providers, plans dir, secret
+   patterns). Append `.harness/` to the repo's `.gitignore` — the hook
+   observability log lives there.
 
 4. **Tailor policy** in the marked `TAILOR` blocks:
    - `verify.sh`: write the interviewed quality gates as `gate` (fast:
@@ -144,9 +146,14 @@ AGENTS.md as TOC with live links; skills canonical + stubs generated
 everywhere `harness.conf` claims; hooks portable, executable, tested; native
 permission deny list mirroring the secret guard; CI running the drift gate;
 manifest present and passing its checksum verification. Then run `scripts/check-harness.sh` and the hook tests if
-they exist. Output: a table of pattern element → status (present / drifted /
-missing) with the concrete fix for each, ordered by risk (secret exposure
-first, drift second, missing content last). Offer to fix; don't fix unasked.
+they exist. If `.harness/log.jsonl` exists, summarize it: deny / advise /
+lint-findings counts by hook and by file — a repeatedly-denied path or a
+warning surfaced every session is the next mistake to engineer away
+(tighten a pattern, add a lint rule, write a convention doc). Output: a
+table of pattern element → status (present / drifted / missing) with the
+concrete fix for each, ordered by risk (secret exposure first, drift
+second, missing content last), plus the log summary when available. Offer
+to fix; don't fix unasked.
 
 ## add-skill / add-agent / add-hook
 

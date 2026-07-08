@@ -28,7 +28,7 @@ cursor_payload() { printf '{"file_path":"%s"}' "$1"; }
 # run <expected-exit> <description> <json-payload> [env]
 run() {
     local expected="$1" desc="$2" payload="$3" actual
-    printf '%s' "$payload" | env ${4:-HARNESS_ALLOW_MECHANISM_EDITS=0} "$HOOK" >/dev/null 2>&1
+    printf '%s' "$payload" | env HARNESS_LOG=0 ${4:-HARNESS_ALLOW_MECHANISM_EDITS=0} "$HOOK" >/dev/null 2>&1
     actual=$?
     if [ "$actual" != "$expected" ]; then
         echo "FAIL: $desc — expected exit $expected, got $actual"

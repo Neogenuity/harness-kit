@@ -50,3 +50,8 @@ layouts, so one script serves every harness.
   harness enforces identical behavior.
 - Every guard that denies or advises gets a `test-*.sh` regression script
   here, wired into `scripts/check-harness.sh` (CI-gated).
+- Every deny / advisory / lint-findings event is appended as one JSON line to
+  `.harness/log.jsonl` (git-ignored) via `hook_log` — toggle with
+  `HARNESS_LOG` in `harness.conf` (env overrides win). The audit workflow
+  summarizes the log; repeated entries mark the next mistake to engineer
+  away.
