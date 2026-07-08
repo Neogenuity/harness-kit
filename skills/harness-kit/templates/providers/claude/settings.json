@@ -5,6 +5,7 @@
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(git show:*)",
+      "Bash(bash scripts/verify.sh:*)",
       "Bash(bash scripts/check-harness.sh:*)",
       "Bash(bash scripts/sync-agent-skills.sh:*)",
       "Bash(bash scripts/hooks/test-guard-secrets.sh:*)",

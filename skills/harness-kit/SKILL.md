@@ -42,7 +42,8 @@ behavior from the repo alone.
 
 2. **Interview (only what recon can't answer).** Ask, ideally in one round:
    - Quality gates: the ordered commands that define "done" (recon proposes,
-     user confirms).
+     user confirms). These are written into `scripts/verify.sh`, which is the
+     single executable source for them — docs only point at it.
    - Which providers to wire beyond Claude Code + `AGENTS.md` (Cursor?
      Codex? OpenCode? `.agents`? — cheap to include, default to all five).
    - The 2-4 conventions worth a `docs/conventions/` doc (what do reviewers
@@ -54,11 +55,14 @@ behavior from the repo alone.
      migration, unregistered route). Skippable; the hook ships as a no-op.
 
 3. **Install mechanism** from `templates/scripts/` into `scripts/`:
-   `harness.conf`, `sync-agent-skills.sh`, `check-harness.sh`, and `hooks/`
-   (all scripts + tests + README). `chmod +x scripts/hooks/*.sh
+   `harness.conf`, `sync-agent-skills.sh`, `check-harness.sh`, `verify.sh`,
+   and `hooks/` (all scripts + tests + README). `chmod +x scripts/hooks/*.sh
    scripts/*.sh`. Tailor `harness.conf` (providers, plans dir).
 
 4. **Tailor policy** in the marked `TAILOR` blocks:
+   - `verify.sh`: write the interviewed quality gates as `gate` (fast:
+     formatter/linter) and `full_gate` (typecheck, tests) lines, ordered
+     cheapest-first. Keep the default `harness` gate.
    - `hooks/format.sh`: uncomment/add extension → formatter lines for the
      detected stack.
    - `hooks/guard-secrets.sh`: extend allow/secret patterns for the repo's
@@ -70,7 +74,9 @@ behavior from the repo alone.
 5. **Author content** (this is authoring, not copying — use the codebase):
    - `AGENTS.md` from `templates/AGENTS.md.tmpl`: fill every placeholder,
      delete sections that don't apply yet rather than leaving stubs.
-   - `CLAUDE.md` from `templates/CLAUDE.md.tmpl` with the quality gates.
+   - `CLAUDE.md` from `templates/CLAUDE.md.tmpl` — a thin `@AGENTS.md`
+     import plus a `verify.sh` pointer; the gates themselves live only in
+     `scripts/verify.sh`.
    - `docs/conventions/<topic>.md` for each interviewed convention — short,
      example-driven, written from real code in the repo.
    - `docs/skills/<slug>/SKILL.md` per initial skill, following
@@ -154,8 +160,9 @@ first, drift second, missing content last). Offer to fix; don't fix unasked.
 2. For each mechanism file: checksum matches manifest → replace with the
    new kit version; differs → the project tailored it; show a diff of
    old-kit → new-kit and apply only what the user approves.
-3. Never auto-overwrite policy files (`format.sh`, `guard-secrets.sh`,
-   `guard-project-policy.sh`, `harness.conf`, provider configs) — diff only.
+3. Never auto-overwrite policy files (`verify.sh`, `format.sh`,
+   `guard-secrets.sh`, `guard-project-policy.sh`, `harness.conf`, provider
+   configs) — diff only.
 4. Rewrite the manifest with the new version/checksums, re-run
    `check-harness.sh` and all hook tests.
 

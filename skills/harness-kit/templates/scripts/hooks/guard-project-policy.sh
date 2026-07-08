@@ -34,6 +34,15 @@ append() { warnings="${warnings}$1"$'\n'; }
 #     fi
 # done < <(hook_new_files '^modules/[^/]+/src/Domain/Models/.+\.php$')
 #
+# Advisory verification (fast gates only — keep the stop-hook cheap; the full
+# suite belongs in CI, not on every stop):
+#
+# if [ -x scripts/verify.sh ] && ! out=$(bash scripts/verify.sh --fast 2>&1); then
+#     append "VERIFY WARNING: fast quality gates are failing:"
+#     append "$out"
+#     append "Fix, then run 'bash scripts/verify.sh' before finishing."
+# fi
+#
 # Close with a pointer to the enforcing gate, e.g.:
 # [ -n "$warnings" ] && append "Run the architecture test suite to verify before finishing."
 # ------------------------------------------------------------------------------
