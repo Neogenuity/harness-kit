@@ -3,9 +3,10 @@
 # Each case feeds a hook payload on stdin and asserts the exit code:
 #   0 = allowed, 2 = denied.
 #
-# If you tailor the classify() lists in guard-secrets.sh, extend these cases
-# to match — the test pins the deny boundary, including the symlink and
-# case-folding behavior that is easy to regress.
+# If you tailor SECRET_PATTERNS / SECRET_ALLOW_PATTERNS in harness.conf,
+# extend these cases to match — the test pins the deny boundary, including
+# the symlink and case-folding behavior that is easy to regress, plus the
+# fact that harness.conf is the authoritative pattern source.
 set -uo pipefail
 
 command -v jq >/dev/null 2>&1 || { echo "SKIP: jq not available"; exit 0; }
@@ -65,6 +66,33 @@ run 0 "symlink safe.link->example allowed" "$(payload "$WORK/safe.link")"
 run 0 "ordinary source file allowed" "$(payload "$WORK/config.php")"
 run 0 "Grep on directory allowed"    "$(grep_payload "$WORK")"
 run 0 "empty payload fails open"     '{}'
+
+# --- harness.conf is the authoritative pattern source ---
+# A tailored conf fully replaces the defaults: its own globs deny/allow, and
+# patterns absent from it (like .env) no longer match.
+CONF_ROOT="$WORK/conf-root"
+mkdir -p "$CONF_ROOT/scripts/hooks"
+cp "$(dirname "$HOOK")/lib.sh" "$CONF_ROOT/scripts/hooks/lib.sh"
+cp "$HOOK" "$CONF_ROOT/scripts/hooks/guard-secrets.sh"
+cat > "$CONF_ROOT/scripts/harness.conf" <<'EOF'
+SECRET_PATTERNS="mysecret.*"
+SECRET_ALLOW_PATTERNS="mysecret.example"
+EOF
+CONF_HOOK="$CONF_ROOT/scripts/hooks/guard-secrets.sh"
+run_conf() {
+    local expected="$1" desc="$2" payload="$3" actual
+    printf '%s' "$payload" | "$CONF_HOOK" >/dev/null 2>&1
+    actual=$?
+    if [ "$actual" != "$expected" ]; then
+        echo "FAIL: $desc — expected exit $expected, got $actual"
+        fails=$((fails + 1))
+    else
+        echo "ok:   $desc"
+    fi
+}
+run_conf 2 "conf pattern mysecret.txt denied"     "$(payload "$WORK/mysecret.txt")"
+run_conf 0 "conf allow mysecret.example allowed"  "$(payload "$WORK/mysecret.example")"
+run_conf 0 "conf replaces defaults (.env allowed under custom conf)" "$(payload "$WORK/.env")"
 
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails guard-secrets case(s)"

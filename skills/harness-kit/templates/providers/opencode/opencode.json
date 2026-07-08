@@ -1,4 +1,19 @@
 {
     "$schema": "https://opencode.ai/config.json",
+    "permission": {
+        "read": {
+            "**/.env": "deny",
+            "**/.env.*": "deny",
+            "**/.env.example": "allow",
+            "**/.env.sample": "allow",
+            "**/.env.dist": "allow",
+            "**/.env.testing": "allow",
+            "**/auth.json": "deny",
+            "**/credentials.json": "deny",
+            "**/*.pem": "deny",
+            "**/id_rsa": "deny",
+            "**/id_ed25519": "deny"
+        }
+    },
     "mcp": {}
 }

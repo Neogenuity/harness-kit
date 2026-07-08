@@ -130,6 +130,26 @@ if [ -d "$ROOT/.cursor/rules" ]; then
     done
 fi
 
+# 8. The Claude Code native deny list must cover the shared secret patterns
+#    from harness.conf. guard-secrets.sh only works where hooks fire; the
+#    native list is the backstop (subagent contexts, hookless sessions), so
+#    the two layers drifting apart is a silent hole. Matching is substring-
+#    based (a deny entry mentioning the pattern counts) — this detects drift,
+#    it does not prove equivalence. Skipped when jq or the conf vars are
+#    absent (pre-0.2.0 installs).
+if command -v jq >/dev/null 2>&1 && [ -n "${SECRET_PATTERNS:-}" ] \
+    && [ -f "$ROOT/.claude/settings.json" ]; then
+    deny_list=$(jq -r '.permissions.deny[]? // empty' "$ROOT/.claude/settings.json" 2>/dev/null)
+    set -f
+    for pat in $SECRET_PATTERNS; do
+        if ! printf '%s\n' "$deny_list" | grep -qF "$pat"; then
+            echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching Read(...) entry in .claude/settings.json permissions.deny — add one; the native deny list must mirror the guard"
+            ERRORS=$((ERRORS + 1))
+        fi
+    done
+    set +f
+fi
+
 # -- TAILOR: project-specific freshness checks below ---------------------------
 # Add checks that keep YOUR docs honest against YOUR code layout, e.g.:
 #   - every module dir referenced in the architecture doc exists

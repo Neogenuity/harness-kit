@@ -13,7 +13,7 @@ used recently — hook event names in particular are still evolving.
 | Skills | `.claude/skills/<slug>/SKILL.md` (stub) | `.cursor/skills/` (stub) | reads `.agents/skills/` (no `.codex/skills/`) | `.opencode/skills/` (stub; also reads `.claude/` + `.agents/`) | `.agents/skills/` (stub) |
 | Subagents | `.claude/agents/*.md` (thin) | `.cursor/agents/*.md` (thin) | `.codex/agents/*.toml` (thin TOML) | `.opencode/agents/*.md` (thin, `mode: subagent`) | — |
 | Hooks | `.claude/settings.json` → `hooks` | `.cursor/hooks.json` | `.codex/hooks.json` (or `config.toml` `[hooks]`; trust-gated) | `.opencode/plugins/*.ts` shim (JS/TS only) | — |
-| Permissions | `.claude/settings.json` → `permissions` | (harness UI) | (trust model + `PermissionRequest` hook) | (config `permission`) | — |
+| Permissions | `.claude/settings.json` → `permissions` | (harness UI) | (trust model + `PermissionRequest` hook) | `opencode.json` `permission.read` denies (mirror `harness.conf` `SECRET_PATTERNS`) | — |
 | MCP servers | `.mcp.json` (project) | `.cursor/mcp.json` | `.codex/config.toml` `[mcp_servers.*]` | `opencode.json` `"mcp"` | `~/.agents/mcp-settings.json` (proposed, user-level) |
 
 ## Hook event mapping

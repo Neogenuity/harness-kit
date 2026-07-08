@@ -65,8 +65,10 @@ behavior from the repo alone.
      cheapest-first. Keep the default `harness` gate.
    - `hooks/format.sh`: uncomment/add extension → formatter lines for the
      detected stack.
-   - `hooks/guard-secrets.sh`: extend allow/secret patterns for the repo's
-     actual secret files; mirror any additions into
+   - `harness.conf` `SECRET_PATTERNS` / `SECRET_ALLOW_PATTERNS`: extend for
+     the repo's actual secret files — this is the single source
+     (`guard-secrets.sh` enforces it, `check-harness.sh` verifies the native
+     deny lists against it). Mirror additions into
      `hooks/test-guard-secrets.sh` cases.
    - `hooks/guard-project-policy.sh`: implement the invariant check from the
      interview (follow the in-file example), or leave the no-op skeleton.
@@ -91,8 +93,9 @@ behavior from the repo alone.
 6. **Wire providers** (for each provider chosen in the interview):
    - Claude Code: `templates/providers/claude/settings.json` →
      `.claude/settings.json`. Extend `permissions.allow` with the quality-gate
-     commands and `permissions.deny` with `Read(...)` entries matching the
-     tailored secret list. Merge, don't clobber, an existing file.
+     commands and `permissions.deny` with `Read(...)` entries covering every
+     tailored `SECRET_PATTERNS` glob — `check-harness.sh` fails when the deny
+     list misses one. Merge, don't clobber, an existing file.
    - Cursor: `templates/providers/cursor/hooks.json` → `.cursor/hooks.json`;
      one `.cursor/rules/<topic>.mdc` per convention doc from
      `templates/providers/cursor/rules/_example.mdc`.
@@ -100,10 +103,11 @@ behavior from the repo alone.
      (hooks; loads only when the project is trusted); `config.toml` only if
      MCP servers are needed. Skills come from `.agents/skills/` — no Codex
      skill dir.
-   - OpenCode: `opencode.json` only if MCP servers are needed; optionally a
-     TS plugin shim in `.opencode/plugins/` that shells out to the portable
-     hooks (see provider matrix) — otherwise guards degrade to native
-     permissions + CI.
+   - OpenCode: `opencode.json` — its `permission.read` deny block mirrors
+     `SECRET_PATTERNS` (keep the two in sync when tailoring; add `"mcp"`
+     servers only if needed); optionally a TS plugin shim in
+     `.opencode/plugins/` that shells out to the portable hooks (see provider
+     matrix) — otherwise guards degrade to these native permissions + CI.
    - Run `bash scripts/sync-agent-skills.sh` to generate all skill stubs.
 
 7. **CI gate**: install `templates/ci/github-actions-harness-check.yml` as
