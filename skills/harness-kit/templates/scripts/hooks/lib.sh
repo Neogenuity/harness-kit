@@ -26,6 +26,25 @@ hook_deny() {
     exit 2
 }
 
+# Post-tool feedback: surface diagnostics to the agent AFTER a tool already
+# ran (the post-edit lint loop). Claude Code and Codex feed a PostToolUse
+# hook's stderr to the model when it exits 2 — the edit is not undone, the
+# agent just sees the findings and self-corrects within the turn. Cursor's
+# layout (top-level file_path) gets plain stdout instead. No jq, empty
+# stdin, or an unknown layout falls back to stdout + exit 0 (fail open).
+#
+# Usage: hook_feedback "$diagnostics"   (call last; never blocks the edit)
+hook_feedback() {
+    local diagnostics="$1"
+    if command -v jq >/dev/null 2>&1 && [ -n "${HOOK_INPUT:-}" ] \
+        && printf '%s' "$HOOK_INPUT" | jq -e 'has("tool_input")' >/dev/null 2>&1; then
+        printf '%s\n' "$diagnostics" >&2
+        exit 2
+    fi
+    printf '%s\n' "$diagnostics"
+    exit 0
+}
+
 # Advisory stop-hook protocol: surface a warning to the agent exactly once.
 #
 # Plain stdout from a stop hook is not fed back to the model in either

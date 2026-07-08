@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Agent hook (after file edit): format the edited file with the project's
-# formatter for that file type.
+# formatter for that file type, then run the fast linter for that type and
+# feed any findings straight back to the agent (via hook_feedback) so it
+# self-corrects within the turn — the fastest layer of the verification loop.
 #
 # Provider-agnostic: reads the hook event JSON on stdin and accepts either the
 # Cursor (`file_path`) or Claude Code (`tool_input.file_path`) field layout.
-# Fails open — a missing file, missing formatter binary, or formatter error
-# never blocks the edit.
+# Fails open — a missing file, missing formatter/linter binary, or formatter
+# error never blocks the edit; lint findings are feedback, not a block.
 set -uo pipefail
 
 . "$(dirname "$0")/lib.sh" 2>/dev/null || exit 0
@@ -39,5 +41,32 @@ case "$file" in
     *) : ;;
 esac
 # ------------------------------------------------------------------------------
+
+# Run a linter only if its binary exists; a non-zero exit captures its output
+# as diagnostics to feed back. A passing lint (or missing binary) stays silent.
+diagnostics=""
+lint() {
+    local bin="$1" out
+    { [ -x "$bin" ] || command -v "$bin" >/dev/null 2>&1; } || return 0
+    if ! out=$("$@" 2>&1); then
+        diagnostics="$out"
+    fi
+}
+
+# -- TAILOR: map file extensions to a FAST linter (the feedback loop) ---------
+# Millisecond-fast linters only — slow static analysis belongs in verify.sh,
+# not on every edit. Examples:
+case "$file" in
+    # *.py)                  lint ruff check "$file" ;;
+    # *.ts|*.tsx|*.js|*.jsx) lint npx oxlint "$file" ;;
+    # *.php)                 lint php -l "$file" ;;
+    *) : ;;
+esac
+# ------------------------------------------------------------------------------
+
+if [ -n "$diagnostics" ]; then
+    hook_feedback "Lint findings in $file — fix before finishing:
+$diagnostics"
+fi
 
 exit 0

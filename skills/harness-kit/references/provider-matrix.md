@@ -26,7 +26,7 @@ a deny; the same script wires into all three.
 | --- | --- | --- | --- | --- |
 | `session-context.sh` | `SessionStart` | `sessionStart` | `SessionStart` | Plain stdout injected into context. Codex also fires it on resume/clear/compact. Cursor has reported bugs (`additional_context` not always injected; doesn't re-fire after compaction) |
 | `guard-secrets.sh` | `PreToolUse` matcher `Read\|Grep` | `beforeReadFile` | `PreToolUse` | Exit 2 = deny in all three |
-| `format.sh` | `PostToolUse` matcher `Edit\|Write` | `afterFileEdit` | `PostToolUse` | Always exits 0 |
+| `format.sh` | `PostToolUse` matcher `Edit\|Write` | `afterFileEdit` | `PostToolUse` | Formats, then feeds lint findings back: exit 2 + stderr on Claude Code/Codex (PostToolUse stderr reaches the model; the edit is not undone), plain stdout on the Cursor layout |
 | `guard-project-policy.sh` | `Stop` | `stop` | `Stop` | advise-once protocol (see lib.sh) |
 
 **OpenCode** has no JSON/shell hook config — only JS/TS plugins in
