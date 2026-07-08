@@ -105,9 +105,11 @@ behavior from the repo alone.
      one `.cursor/rules/<topic>.mdc` per convention doc from
      `templates/providers/cursor/rules/_example.mdc`.
    - Codex: `templates/providers/codex/hooks.json` → `.codex/hooks.json`
-     (hooks; loads only when the project is trusted); `config.toml` only if
-     MCP servers are needed. Skills come from `.agents/skills/` — no Codex
-     skill dir.
+     (hooks are experimental + flag-gated and load only when the project is
+     trusted — see provider matrix; wire them, but treat Codex's native
+     trust/permission layer as the primary guard until they GA);
+     `config.toml` only if MCP servers are needed. Skills come from
+     `.agents/skills/` — no Codex skill dir.
    - OpenCode: `opencode.json` — its `permission.read` deny block mirrors
      `SECRET_PATTERNS` (keep the two in sync when tailoring; add `"mcp"`
      servers only if needed); optionally a TS plugin shim in
@@ -185,8 +187,13 @@ to fix; don't fix unasked.
 3. Never auto-overwrite policy files (`verify.sh`, `format.sh`,
    `guard-secrets.sh`, `guard-project-policy.sh`, `harness.conf`, provider
    configs) — diff only.
-4. Rewrite the manifest with the new version/checksums, re-run
-   `check-harness.sh` and all hook tests.
+4. Rewrite the manifest with the new version/checksums (preserving
+   ` # tailored` markers), re-run `check-harness.sh` and all hook tests.
+5. When the request is really a *standards* shift — a provider newly reads
+   `.agents/skills/` natively, Claude Code ships AGENTS.md support, a new
+   harness appears — follow the matching playbook in
+   [references/migrations.md](references/migrations.md) instead of
+   improvising.
 
 ## Rules that hold in every mode
 
