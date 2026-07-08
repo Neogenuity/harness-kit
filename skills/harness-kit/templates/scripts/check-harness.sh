@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # shellcheck source=/dev/null
 [ -f "$ROOT/scripts/harness.conf" ] && . "$ROOT/scripts/harness.conf"
-PROVIDERS="${PROVIDERS:-.claude .cursor .codex .opencode .agents}"
+PROVIDERS="${PROVIDERS:-.claude .cursor .opencode .agents}"
 CANONICAL_SKILLS="${CANONICAL_SKILLS:-docs/skills}"
 
 echo "Checking agent harness..."

@@ -1,6 +1,11 @@
 {
   "version": 1,
   "hooks": {
+    "sessionStart": [
+      {
+        "command": "scripts/hooks/session-context.sh"
+      }
+    ],
     "afterFileEdit": [
       {
         "command": "scripts/hooks/format.sh"

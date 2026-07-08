@@ -3,8 +3,8 @@
 Provider-agnostic hook scripts for AI coding agents. All behavior lives here
 as plain executables that read the hook event JSON on stdin; each agent
 harness wires them with a thin config shim. The scripts accept both the
-Cursor (`file_path`) and Claude Code (`tool_input.file_path`) stdin layouts,
-so one script serves every harness.
+Cursor (`file_path`) and Claude Code/Codex (`tool_input.file_path`) stdin
+layouts, so one script serves every harness.
 
 | Script | Event | Behavior |
 | --- | --- | --- |
@@ -21,9 +21,17 @@ so one script serves every harness.
   carries the shared permission policy: quality gates and harness scripts
   allow-listed, secret files natively denied for `Read` as a second layer
   alongside `guard-secrets.sh`.
-- **Cursor** — `.cursor/hooks.json` (`afterFileEdit`, `beforeReadFile`,
-  `stop`; no session-start event yet, so `session-context.sh` is Claude
-  Code-only for now).
+- **Cursor** — `.cursor/hooks.json` (`sessionStart`, `afterFileEdit`,
+  `beforeReadFile`, `stop`).
+- **Codex** — `.codex/hooks.json` (`SessionStart`, `PreToolUse`,
+  `PostToolUse`, `Stop`); loads only when the project is trusted. Codex has
+  no dedicated Read tool (files are read via shell), so `guard-secrets.sh`
+  fails open on payloads without a file path — the native permission/trust
+  layer stays the primary guard there. Verify the `PostToolUse` payload
+  carries a file path for your Codex version before relying on `format.sh`.
+- **OpenCode** — no shell hooks; a small TS plugin in `.opencode/plugins/`
+  hooks `tool.execute.before`/`after`, shells out to these scripts, and
+  throws on exit 2 (OpenCode's block mechanism).
 - **Other harnesses** — point the equivalent lifecycle event at the same
   script; exit code 2 means "deny", exit 0 with no output means
   "allow/continue".
@@ -33,7 +41,7 @@ so one script serves every harness.
 - Scripts must be executable, depend only on `bash`, `jq`, and `git`, and
   fail open (exit 0) when a dependency or input is missing.
 - Deny decisions use exit code 2 with a human-readable reason on stderr —
-  both Cursor and Claude Code interpret this as a block.
+  Claude Code, Cursor, and Codex all interpret this as a block.
 - Keep policy in the scripts, not in the per-provider configs, so every
   harness enforces identical behavior.
 - Every guard that denies or advises gets a `test-*.sh` regression script

@@ -23,8 +23,9 @@ whatever ships next — without maintaining N parallel configurations.
 3. **Behavior lives in portable executables, not harness config.** Hooks are
    plain bash scripts in `scripts/hooks/` that read the event JSON on stdin
    and tolerate every harness's field layout. Per-provider hook configs
-   (`.claude/settings.json`, `.cursor/hooks.json`) are one-line wirings. This
-   keeps policy identical across harnesses and testable in isolation.
+   (`.claude/settings.json`, `.cursor/hooks.json`, `.codex/hooks.json`, an
+   OpenCode plugin shim) are one-line wirings. This keeps policy identical
+   across harnesses and testable in isolation.
 
 4. **Drift is a CI failure, not a code-review hope.** `scripts/check-harness.sh`
    fails the build when a stub is hand-edited, a canonical skill changes
@@ -64,9 +65,9 @@ scripts/
     test-*.sh                  # regression tests, run by check-harness.sh
 .claude/   settings.json (permissions + hook wiring), skills/ (stubs), agents/ (thin)
 .cursor/   hooks.json, rules/*.mdc (thin), skills/ (stubs), agents/ (thin), mcp.json
-.codex/    config.toml (MCP), skills/ (stubs)
-.opencode/ skills/ (stubs)          + opencode.json (MCP) at root
-.agents/   skills/ (stubs)          # emerging cross-vendor standard location
+.codex/    config.toml (MCP), hooks.json, agents/*.toml (thin)   # skills come from .agents/
+.opencode/ skills/ (stubs), agents/ (thin), plugins/ (hook shim) + opencode.json (MCP) at root
+.agents/   skills/ (stubs)          # cross-vendor standard; also read by Codex + OpenCode
 ```
 
 ## The three layers (what to copy vs. generate)
