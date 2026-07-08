@@ -1,0 +1,24 @@
+# Claude Code Instructions
+
+This file provides instructions for Claude Code working on this repository.
+All detailed documentation lives in `docs/`.
+
+## Quick Start
+
+Read [AGENTS.md](AGENTS.md) first — it's the table of contents for the entire
+knowledge base.
+
+## Quality Gates
+
+```bash
+{{QUALITY_GATE_1}}   # 1. e.g. formatter/linter
+{{QUALITY_GATE_2}}   # 2. e.g. static analysis / typecheck
+{{QUALITY_GATE_3}}   # 3. e.g. test suite
+```
+
+## Task Approach
+
+1. Read [AGENTS.md](AGENTS.md) for the relevant docs links
+2. Check existing code patterns in similar areas
+3. Follow the appropriate skill from `docs/skills/`
+4. Run quality gates before finishing

@@ -1,0 +1,68 @@
+# AI Agent Instructions
+
+This file is the **table of contents** for the repository knowledge base. All
+detailed documentation lives in `docs/`. Start here, then follow links to
+deeper sources.
+
+## Project
+
+**{{PROJECT_NAME}}** — {{ONE_LINE_DESCRIPTION: what it is, stack, the one or
+two architectural facts an agent must know before touching anything}}.
+
+## Architecture
+
+- [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) — tech stack, directory structure, layering
+<!-- add deeper architecture docs (dependency maps, data flows) as they exist -->
+
+## Conventions
+
+<!-- one line per convention doc; each doc covers one topic an agent gets
+     wrong without guidance (language style, testing, domain invariants) -->
+- [docs/conventions/{{TOPIC}}.md](docs/conventions/{{TOPIC}}.md) — {{summary}}
+
+## Skills (Task Workflows)
+
+<!-- one line per canonical skill -->
+- [docs/skills/{{SLUG}}/SKILL.md](docs/skills/{{SLUG}}/SKILL.md) — {{summary}}
+
+The per-harness copies (`.claude/skills/`, `.cursor/skills/`, `.codex/skills/`,
+`.opencode/skills/`, `.agents/skills/`) are **generated** pointer stubs. Edit
+the canonical file here, then run `bash scripts/sync-agent-skills.sh`;
+`check-harness.sh` (CI-gated) fails if stubs drift from the generator output.
+
+## Agents (Role-Based Personas)
+
+Subagent definitions wired via `.claude/agents/` (and `.cursor/agents/` where
+used); canonical persona docs live in `docs/agents/`:
+
+- [docs/agents/{{NAME}}.md](docs/agents/{{NAME}}.md) — {{summary}}
+
+## Plans
+
+- [docs/plans/README.md](docs/plans/README.md) — active and completed execution plans
+
+## Quality Gates
+
+Run these checks in order before any task is complete:
+
+```bash
+{{QUALITY_GATE_1}}   # 1. e.g. formatter/linter
+{{QUALITY_GATE_2}}   # 2. e.g. static analysis / typecheck
+{{QUALITY_GATE_3}}   # 3. e.g. test suite
+```
+
+## Security Checklist
+
+<!-- keep the 3-6 items agents must verify before finishing; delete the rest -->
+- [ ] Input validation on every new external surface
+- [ ] Authorization checks in place
+- [ ] Sensitive data not logged
+- [ ] No secrets in code or commits
+
+## Enforcement
+
+```bash
+bash scripts/check-harness.sh          # Harness coherence: stub sync, doc links, hook tests
+bash scripts/sync-agent-skills.sh      # Regenerate provider skill stubs from docs/skills/
+{{PROJECT_STRUCTURAL_CHECKS}}          # e.g. architecture tests, boundary checks
+```

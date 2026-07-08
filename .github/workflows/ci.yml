@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hook templates are executable
+        run: |
+          fails=0
+          for f in skills/harness-kit/templates/scripts/hooks/*.sh \
+                   skills/harness-kit/templates/scripts/*.sh; do
+            [ -x "$f" ] || { echo "not executable: $f"; fails=1; }
+          done
+          exit $fails
+      - name: Hook regression tests
+        run: |
+          bash skills/harness-kit/templates/scripts/hooks/test-guard-secrets.sh
+          bash skills/harness-kit/templates/scripts/hooks/test-advise-once.sh
+      - name: ShellCheck
+        run: |
+          sudo apt-get update -q && sudo apt-get install -qy shellcheck
+          shellcheck -x skills/harness-kit/templates/scripts/*.sh \
+                        skills/harness-kit/templates/scripts/hooks/*.sh

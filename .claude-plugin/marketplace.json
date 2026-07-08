@@ -1,0 +1,14 @@
+{
+  "name": "harness-kit",
+  "owner": {
+    "name": "Chase",
+    "email": "chase@neogenuity.com"
+  },
+  "plugins": [
+    {
+      "name": "harness-kit",
+      "source": "./",
+      "description": "Scaffold and maintain a standardized cross-agent harness (canonical docs/, generated provider skill stubs, portable hooks, shared permissions, CI drift gate) in any repository."
+    }
+  ]
+}

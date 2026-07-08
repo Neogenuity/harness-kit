@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": "scripts/hooks/format.sh"
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": "scripts/hooks/guard-secrets.sh"
+      }
+    ],
+    "stop": [
+      {
+        "command": "scripts/hooks/guard-project-policy.sh"
+      }
+    ]
+  }
+}

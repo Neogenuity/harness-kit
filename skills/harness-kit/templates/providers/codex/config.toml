@@ -1,0 +1,16 @@
+# Codex project config (loaded when the project is trusted).
+#
+# Codex reads AGENTS.md natively for instructions and .codex/skills/ for the
+# generated skill stubs — nothing to configure for those. This file exists to
+# declare project-scoped MCP servers, mirroring the servers wired for the
+# other harnesses. Keep secrets out: pass tokens via env_vars and document
+# the expected variables in an .env.mcp.example.
+#
+# [mcp_servers.<name>]
+# command = "npx"
+# args = ["-y", "<package>"]
+#
+# [mcp_servers.<name-with-secret>]
+# command = "sh"
+# args = ["-c", "exec npx -y <package> \"$SOME_URL\""]
+# env_vars = ["SOME_URL"]

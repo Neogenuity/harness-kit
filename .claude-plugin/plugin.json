@@ -1,0 +1,9 @@
+{
+  "name": "harness-kit",
+  "version": "0.1.0",
+  "description": "Scaffold and maintain a standardized cross-agent harness (canonical docs/, generated provider skill stubs, portable hooks, shared permissions, CI drift gate) in any repository.",
+  "author": {
+    "name": "Chase",
+    "email": "chase@neogenuity.com"
+  }
+}
