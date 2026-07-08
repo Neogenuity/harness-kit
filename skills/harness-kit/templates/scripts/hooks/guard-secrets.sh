@@ -45,10 +45,15 @@ file=$(hook_file_path)
 classify() {
     local name pat
     name=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+    # $pat is deliberately unquoted: conf entries are globs, and case-glob
+    # matching is the point (noglob above keeps the shell from expanding
+    # them first).
     for pat in $SECRET_ALLOW_PATTERNS; do
+        # shellcheck disable=SC2254
         case "$name" in $pat) echo allow; return ;; esac
     done
     for pat in $SECRET_PATTERNS; do
+        # shellcheck disable=SC2254
         case "$name" in $pat) echo secret; return ;; esac
     done
     echo other

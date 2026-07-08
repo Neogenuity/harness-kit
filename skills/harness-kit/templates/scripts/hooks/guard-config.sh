@@ -49,9 +49,13 @@ scripts/.harness-manifest
 set -f
 
 base=$(basename "$rel")
+# $pat is deliberately unquoted in the case patterns below: the protected
+# list is globs, and case-glob matching is the point.
 for pat in $PROTECTED_PATHS; do
     hit=0
+    # shellcheck disable=SC2254
     case "$rel" in $pat) hit=1 ;; esac
+    # shellcheck disable=SC2254
     case "$pat" in
         */*) ;;
         *) case "$base" in $pat) hit=1 ;; esac ;;
