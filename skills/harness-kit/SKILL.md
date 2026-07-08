@@ -90,7 +90,14 @@ behavior from the repo alone.
    - Cursor: `templates/providers/cursor/hooks.json` → `.cursor/hooks.json`;
      one `.cursor/rules/<topic>.mdc` per convention doc from
      `templates/providers/cursor/rules/_example.mdc`.
-   - Codex / OpenCode: config templates only if MCP servers are needed.
+   - Codex: `templates/providers/codex/hooks.json` → `.codex/hooks.json`
+     (hooks; loads only when the project is trusted); `config.toml` only if
+     MCP servers are needed. Skills come from `.agents/skills/` — no Codex
+     skill dir.
+   - OpenCode: `opencode.json` only if MCP servers are needed; optionally a
+     TS plugin shim in `.opencode/plugins/` that shells out to the portable
+     hooks (see provider matrix) — otherwise guards degrade to native
+     permissions + CI.
    - Run `bash scripts/sync-agent-skills.sh` to generate all skill stubs.
 
 7. **CI gate**: install `templates/ci/github-actions-harness-check.yml` as
@@ -130,8 +137,9 @@ first, drift second, missing content last). Offer to fix; don't fix unasked.
   `bash scripts/sync-agent-skills.sh`, run `check-harness.sh`, commit
   canonical + stubs together.
 - **add-agent**: author `docs/agents/<name>.md`, add thin provider stubs
-  (`.claude/agents/`, `.cursor/agents/`) with minimal `tools:` frontmatter,
-  link from AGENTS.md.
+  (`.claude/agents/`, `.cursor/agents/`, `.opencode/agents/` as markdown;
+  `.codex/agents/<name>.toml` with `developer_instructions` pointing at the
+  canonical doc) with minimal frontmatter, link from AGENTS.md.
 - **add-hook**: write the script in `scripts/hooks/` sourcing `lib.sh`,
   following the conventions in `scripts/hooks/README.md` (fail open, exit 2
   to deny, `hook_advise_once` for stop-hooks). Add a `test-<name>.sh`

@@ -1,10 +1,12 @@
 # Codex project config (loaded when the project is trusted).
 #
-# Codex reads AGENTS.md natively for instructions and .codex/skills/ for the
-# generated skill stubs — nothing to configure for those. This file exists to
-# declare project-scoped MCP servers, mirroring the servers wired for the
-# other harnesses. Keep secrets out: pass tokens via env_vars and document
-# the expected variables in an .env.mcp.example.
+# Codex reads AGENTS.md natively for instructions and .agents/skills/ for the
+# generated skill stubs — nothing to configure for those. Hooks wire via
+# .codex/hooks.json (see the template next to this file); subagents are TOML
+# files in .codex/agents/. This file exists to declare project-scoped MCP
+# servers, mirroring the servers wired for the other harnesses. Keep secrets
+# out: pass tokens via env_vars and document the expected variables in an
+# .env.mcp.example.
 #
 # [mcp_servers.<name>]
 # command = "npx"

@@ -14,8 +14,9 @@ the pattern is exercised daily across multiple harnesses.
   skills (`docs/skills/<slug>/SKILL.md`), agent personas (`docs/agents/`),
   indexed by an `AGENTS.md` table of contents (with a thin `CLAUDE.md`).
 - **Generated provider stubs** — `scripts/sync-agent-skills.sh` renders
-  pointer stubs into `.claude/.cursor/.codex/.opencode/.agents/skills/`,
-  copying frontmatter verbatim so activation triggers stay in sync.
+  pointer stubs into `.claude/.cursor/.opencode/.agents/skills/` (Codex
+  reads `.agents/skills/` natively), copying frontmatter verbatim so
+  activation triggers stay in sync.
 - **Portable hooks** — `scripts/hooks/*.sh` read the hook event JSON on
   stdin and serve every harness: post-edit formatting, pre-read secret
   denial (symlink- and case-aware), an advisory stop-hook for project
@@ -73,6 +74,8 @@ domain invariant worth an advisory stop-hook.
 
 ## Status
 
-Private for now. Before open-sourcing: add a LICENSE, re-verify the provider
-matrix against current harness docs (hook event names are still evolving),
-and scrub any project-specific examples.
+Private for now. Provider matrix last validated against harness docs
+2026-07 (Codex hooks/subagents, Cursor sessionStart, OpenCode plugins,
+`.agents` skills adoption). Before open-sourcing: add a LICENSE, re-verify
+the matrix again (hook event names are still evolving), and scrub any
+project-specific examples.

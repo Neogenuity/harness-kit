@@ -25,15 +25,17 @@ two architectural facts an agent must know before touching anything}}.
 <!-- one line per canonical skill -->
 - [docs/skills/{{SLUG}}/SKILL.md](docs/skills/{{SLUG}}/SKILL.md) — {{summary}}
 
-The per-harness copies (`.claude/skills/`, `.cursor/skills/`, `.codex/skills/`,
-`.opencode/skills/`, `.agents/skills/`) are **generated** pointer stubs. Edit
-the canonical file here, then run `bash scripts/sync-agent-skills.sh`;
-`check-harness.sh` (CI-gated) fails if stubs drift from the generator output.
+The per-harness copies (`.claude/skills/`, `.cursor/skills/`,
+`.opencode/skills/`, `.agents/skills/` — Codex reads `.agents/skills/`) are
+**generated** pointer stubs. Edit the canonical file here, then run
+`bash scripts/sync-agent-skills.sh`; `check-harness.sh` (CI-gated) fails if
+stubs drift from the generator output.
 
 ## Agents (Role-Based Personas)
 
-Subagent definitions wired via `.claude/agents/` (and `.cursor/agents/` where
-used); canonical persona docs live in `docs/agents/`:
+Subagent definitions wired via `.claude/agents/` (and `.cursor/agents/`,
+`.codex/agents/` (TOML), `.opencode/agents/` where used); canonical persona
+docs live in `docs/agents/`:
 
 - [docs/agents/{{NAME}}.md](docs/agents/{{NAME}}.md) — {{summary}}
 

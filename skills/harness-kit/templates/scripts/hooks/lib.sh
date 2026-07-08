@@ -12,15 +12,15 @@ hook_read_input() {
 }
 
 # Extract the target file path from the event across harness layouts:
-# Cursor puts it at top level (`file_path`); Claude Code nests it as
-# `tool_input.file_path` (Read/Edit/Write) or `tool_input.path` (Grep).
+# Cursor puts it at top level (`file_path`); Claude Code and Codex nest it
+# as `tool_input.file_path` (Read/Edit/Write) or `tool_input.path` (Grep).
 hook_file_path() {
     command -v jq >/dev/null 2>&1 || return 0
     printf '%s' "${HOOK_INPUT:-}" | jq -r '.file_path // .tool_input.file_path // .tool_input.path // empty' 2>/dev/null
 }
 
 # Deny the pending tool call: human-readable reason on stderr, exit 2 (the
-# deny code in both Claude Code and Cursor).
+# deny code in Claude Code, Cursor, and Codex).
 hook_deny() {
     echo "$1" >&2
     exit 2
@@ -30,9 +30,9 @@ hook_deny() {
 #
 # Plain stdout from a stop hook is not fed back to the model in either
 # harness, so on the FIRST stop this asks the harness to continue the turn —
-# Claude Code via `{"decision":"block","reason":...}`, Cursor via
+# Claude Code and Codex via `{"decision":"block","reason":...}`, Cursor via
 # `{"followup_message":...}`. The loop guards carried on stdin
-# (`stop_hook_active` for Claude Code, `loop_count` for Cursor) make the
+# (`stop_hook_active` for Claude Code/Codex, `loop_count` for Cursor) make the
 # SECOND stop print plain text and succeed, so the run is never hard-blocked.
 # Unknown harnesses and empty stdin get the plain-text fallback.
 #

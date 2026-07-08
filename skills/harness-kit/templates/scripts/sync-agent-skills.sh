@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Generates the provider skill stubs (.claude/.cursor/.codex/.opencode/.agents)
+# Generates the provider skill stubs (.claude/.cursor/.opencode/.agents —
+# Codex reads .agents/skills/, so it needs no directory of its own)
 # from the canonical skills in docs/skills/. docs/ is the single source of
 # truth; the stubs exist only so each harness registers and auto-activates the
 # skill. Frontmatter (name + description — the activation trigger) is copied
@@ -20,7 +21,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # shellcheck source=/dev/null
 [ -f "$ROOT/scripts/harness.conf" ] && . "$ROOT/scripts/harness.conf"
-PROVIDERS="${PROVIDERS:-.claude .cursor .codex .opencode .agents}"
+PROVIDERS="${PROVIDERS:-.claude .cursor .opencode .agents}"
 CANONICAL_SKILLS="${CANONICAL_SKILLS:-docs/skills}"
 
 MODE="${1:-write}"
