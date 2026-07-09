@@ -17,6 +17,9 @@ LIB="$(cd "$(dirname "$0")" && pwd)/lib.sh"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
+# Keep hook_log out of the repo during tests; the explicit log case opts in.
+export HARNESS_LOG=0
+
 # Fixture hook: always warns, so every case exercises the protocol.
 cp "$LIB" "$WORK/lib.sh"
 cat > "$WORK/fixture-hook.sh" <<'EOF'
@@ -62,6 +65,16 @@ run "Cursor first stop: followup_message JSON"  '{"loop_count": 0}' '"followup_m
 run "Cursor second stop: plain text, no followup" '{"loop_count": 1}' 'TEST WARNING' '"followup_message"'
 run "unknown payload: plain-text fallback"      '{}' 'TEST WARNING' '"decision"|"followup_message"'
 run "empty stdin: plain-text fallback"          '' 'TEST WARNING' '"decision"|"followup_message"'
+
+# --- observability: an advisory appends one valid JSON line ---
+LOG="$WORK/log.jsonl"
+printf '%s' '{"stop_hook_active": false}' | env HARNESS_LOG=1 HARNESS_LOG_FILE="$LOG" "$HOOK" >/dev/null 2>&1
+if [ -f "$LOG" ] && jq -e 'select(.event == "advise")' "$LOG" >/dev/null 2>&1; then
+    echo "ok:   advisory appends a valid JSON log line"
+else
+    echo "FAIL: advisory did not append a valid JSON log line"
+    fails=$((fails + 1))
+fi
 
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails advise-once case(s)"

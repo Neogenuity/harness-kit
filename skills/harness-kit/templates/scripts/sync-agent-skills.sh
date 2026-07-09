@@ -7,6 +7,11 @@
 # verbatim from the canonical file, so tuning a trigger in the canonical
 # skill propagates to every harness on the next sync.
 #
+# Skill resource directories (references/, scripts/, assets/ — the Agent
+# Skills standard) are mirrored verbatim next to each stub, so harnesses that
+# resolve resources relative to the skill directory keep working; --check
+# pins the mirrors to the canonical content just like the stubs.
+#
 #   bash scripts/sync-agent-skills.sh          # (re)write all stubs
 #   bash scripts/sync-agent-skills.sh --check  # exit 1 if stubs are stale/missing/orphaned
 #
@@ -73,6 +78,30 @@ for canonical in "$ROOT/$CANONICAL_SKILLS"/*/SKILL.md; do
             printf '%s\n' "$stub" > "$dest"
             echo "wrote $dest_rel"
         fi
+
+        # Mirror the skill's resource directories (Agent Skills standard).
+        for res in references scripts assets; do
+            src_dir="$(dirname "$canonical")/$res"
+            dst_dir="$(dirname "$dest")/$res"
+            dst_rel="$provider/skills/$slug/$res"
+            if [ "$MODE" = "--check" ]; then
+                if [ -d "$src_dir" ]; then
+                    if ! diff -rq "$src_dir" "$dst_dir" >/dev/null 2>&1; then
+                        echo "STALE: $dst_rel does not match canonical $CANONICAL_SKILLS/$slug/$res — run 'bash scripts/sync-agent-skills.sh' and commit the result"
+                        fail=1
+                    fi
+                elif [ -d "$dst_dir" ]; then
+                    echo "STALE: $dst_rel exists but the canonical skill has no $res/ — run 'bash scripts/sync-agent-skills.sh' and commit the result"
+                    fail=1
+                fi
+            else
+                rm -rf "$dst_dir"
+                if [ -d "$src_dir" ]; then
+                    cp -R "$src_dir" "$dst_dir"
+                    echo "wrote $dst_rel/"
+                fi
+            fi
+        done
     done
 done
 

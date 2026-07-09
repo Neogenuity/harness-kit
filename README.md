@@ -12,21 +12,34 @@ the pattern is exercised daily across multiple harnesses.
 
 - **`docs/` as single source of truth** — architecture, conventions,
   skills (`docs/skills/<slug>/SKILL.md`), agent personas (`docs/agents/`),
-  indexed by an `AGENTS.md` table of contents (with a thin `CLAUDE.md`).
+  indexed by an `AGENTS.md` table of contents (with a thin `CLAUDE.md`
+  that `@AGENTS.md`-imports it).
+- **An executable definition of "done"** — `scripts/verify.sh` holds the
+  ordered quality gates; docs point at it instead of listing commands, and
+  its `--fast` subset feeds the advisory stop-hook.
 - **Generated provider stubs** — `scripts/sync-agent-skills.sh` renders
   pointer stubs into `.claude/.cursor/.opencode/.agents/skills/` (Codex
   reads `.agents/skills/` natively), copying frontmatter verbatim so
-  activation triggers stay in sync.
+  activation triggers stay in sync, and mirroring skill resource dirs
+  (`references/`, `scripts/`, `assets/`) per the Agent Skills standard.
 - **Portable hooks** — `scripts/hooks/*.sh` read the hook event JSON on
-  stdin and serve every harness: post-edit formatting, pre-read secret
-  denial (symlink- and case-aware), an advisory stop-hook for project
-  invariants (surfaces warnings exactly once, never hard-blocks), and a
-  session-start orientation banner. Each guard ships with a regression test.
-- **Shared permissions** — a Claude Code `settings.json` template pairing the
-  secret-read hook with a native deny list, plus a quality-gate allowlist.
+  stdin and serve every harness: post-edit formatting *plus lint feedback
+  the agent self-corrects on*, pre-read secret denial (symlink- and
+  case-aware, patterns single-sourced in `harness.conf`), pre-edit
+  protection of the harness mechanism and lint configs, an advisory
+  stop-hook for project invariants (surfaces warnings exactly once, never
+  hard-blocks), and a session-start orientation banner (branch, recent
+  commits, active plans). Each guard ships with a regression test and logs
+  denies/advisories to a git-ignored JSONL for the audit loop.
+- **Shared permissions** — a Claude Code `settings.json` and OpenCode
+  `permission` template mirroring the secret patterns; `check-harness.sh`
+  fails when the native deny lists drift from the guard.
 - **CI drift gate** — `scripts/check-harness.sh` fails the build on
-  hand-edited stubs, stale syncs, dead AGENTS.md links, non-executable
-  hooks, or failing hook tests.
+  hand-edited stubs, stale syncs or resource mirrors, dead links anywhere in
+  the knowledge base, non-executable hooks, failing hook tests, un-pinned
+  edits to mechanism files (manifest checksums), or a native deny list
+  missing a secret pattern — plus doctor warnings for silently-weakened
+  setups (no jq, oversized AGENTS.md/skills).
 
 The kit **vendors everything into the target repo**: nothing at runtime
 depends on this kit being installed, so teammates on any harness get
@@ -40,7 +53,8 @@ skills/harness-kit/
   SKILL.md                the skill: init / audit / add-* / update workflows
   references/
     pattern.md            the architecture and its rationale
-    provider-matrix.md    per-harness file locations, hook events, payloads
+    provider-matrix.md    per-harness file locations, hook events, payloads (cited)
+    migrations.md         sunset playbooks as providers adopt the open standards
   templates/
     AGENTS.md.tmpl, CLAUDE.md.tmpl
     docs/                 skill + agent authoring templates
@@ -74,8 +88,9 @@ domain invariant worth an advisory stop-hook.
 
 ## Status
 
-Private for now. Provider matrix last validated against harness docs
-2026-07 (Codex hooks/subagents, Cursor sessionStart, OpenCode plugins,
-`.agents` skills adoption). Before open-sourcing: add a LICENSE, re-verify
-the matrix again (hook event names are still evolving), and scrub any
-project-specific examples.
+Private for now, v0.2.0. Provider matrix last validated against primary
+harness docs 2026-07 (per-fact "verified" stamps + Sources section in the
+matrix; notably Codex hooks are experimental/flag-gated, and Cursor has no
+pre-edit event — the CI manifest check backstops guard-config there).
+Before open-sourcing: add a LICENSE, re-verify the matrix (hook event names
+are still evolving), and scrub any project-specific examples.

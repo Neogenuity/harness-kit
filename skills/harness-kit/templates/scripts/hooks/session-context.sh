@@ -27,6 +27,8 @@ if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; th
         state="$dirty uncommitted change(s)"
     fi
     echo "Branch: $branch ($state)"
+    recent=$(git log --oneline -5 2>/dev/null)
+    [ -n "$recent" ] && printf 'Recent commits:\n%s\n' "$recent"
 fi
 
 if [ -d "$PLANS_DIR" ]; then

@@ -4,6 +4,10 @@ This file is the **table of contents** for the repository knowledge base. All
 detailed documentation lives in `docs/`. Start here, then follow links to
 deeper sources.
 
+<!-- Monorepo subtrees may carry their own nested AGENTS.md (the hierarchical
+     AGENTS.md standard — nearest file wins for files under that subtree).
+     check-harness.sh link-checks every AGENTS.md it finds. -->
+
 ## Project
 
 **{{PROJECT_NAME}}** — {{ONE_LINE_DESCRIPTION: what it is, stack, the one or
@@ -45,13 +49,16 @@ docs live in `docs/agents/`:
 
 ## Quality Gates
 
-Run these checks in order before any task is complete:
+The ordered gates live in **`scripts/verify.sh`** — the executable definition
+of "done". Run it before any task is complete:
 
 ```bash
-{{QUALITY_GATE_1}}   # 1. e.g. formatter/linter
-{{QUALITY_GATE_2}}   # 2. e.g. static analysis / typecheck
-{{QUALITY_GATE_3}}   # 3. e.g. test suite
+bash scripts/verify.sh          # every gate (format, lint, typecheck, tests)
+bash scripts/verify.sh --fast   # fast gates only (formatter/linter)
 ```
+
+Edit the gates in that script, never here — this doc points, the script
+defines.
 
 ## Security Checklist
 

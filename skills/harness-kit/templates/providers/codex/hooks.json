@@ -16,6 +16,10 @@
           {
             "type": "command",
             "command": "bash scripts/hooks/guard-secrets.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash scripts/hooks/guard-config.sh"
           }
         ]
       }

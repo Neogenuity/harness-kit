@@ -5,18 +5,26 @@
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(git show:*)",
+      "Bash(bash scripts/verify.sh:*)",
       "Bash(bash scripts/check-harness.sh:*)",
       "Bash(bash scripts/sync-agent-skills.sh:*)",
       "Bash(bash scripts/hooks/test-guard-secrets.sh:*)",
+      "Bash(bash scripts/hooks/test-guard-config.sh:*)",
+      "Bash(bash scripts/hooks/test-format-feedback.sh:*)",
       "Bash(bash scripts/hooks/test-advise-once.sh:*)"
     ],
     "deny": [
       "Read(./.env)",
-      "Read(./.env.local)",
-      "Read(./.env.production)",
-      "Read(./.env.staging)",
+      "Read(./.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
       "Read(./auth.json)",
-      "Read(./credentials.json)"
+      "Read(**/auth.json)",
+      "Read(./credentials.json)",
+      "Read(**/credentials.json)",
+      "Read(**/*.pem)",
+      "Read(**/id_rsa)",
+      "Read(**/id_ed25519)"
     ]
   },
   "hooks": {
@@ -48,6 +56,15 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/guard-secrets.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/guard-config.sh"
           }
         ]
       }

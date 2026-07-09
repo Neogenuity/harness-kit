@@ -21,6 +21,20 @@ set -uo pipefail
 . "$(dirname "$0")/lib.sh" 2>/dev/null || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 
+# The patterns live in scripts/harness.conf (SECRET_PATTERNS /
+# SECRET_ALLOW_PATTERNS) so the hook, its tests, and the native provider deny
+# lists share one source — tailor them THERE, not here. The fallbacks below
+# only cover a missing conf.
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=/dev/null
+[ -f "$ROOT/scripts/harness.conf" ] && . "$ROOT/scripts/harness.conf"
+SECRET_ALLOW_PATTERNS="${SECRET_ALLOW_PATTERNS:-.env.example .env.sample .env.dist .env.testing *.example}"
+SECRET_PATTERNS="${SECRET_PATTERNS:-.env .env.* auth.json credentials.json *.pem id_rsa id_ed25519}"
+
+# Globs in the pattern lists must reach `case` verbatim — without noglob the
+# unquoted `for pat in $SECRET_PATTERNS` would expand `*.pem` against the CWD.
+set -f
+
 hook_read_input
 file=$(hook_file_path)
 [ -n "$file" ] || exit 0
@@ -29,16 +43,20 @@ file=$(hook_file_path)
 # `other`. Case-folded. Allow patterns are checked first so `.env.mcp.example`
 # (which also matches `.env.*`) resolves to `allow`.
 classify() {
-    local name
+    local name pat
     name=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
-    case "$name" in
-        # -- TAILOR: allow-listed safe files (no real credentials) ------------
-        .env.example|.env.sample|.env.dist|.env.testing|*.example) echo allow ;;
-        # -- TAILOR: secret-bearing files --------------------------------------
-        .env|.env.*|auth.json|credentials.json|*.pem|id_rsa|id_ed25519) echo secret ;;
-        # ----------------------------------------------------------------------
-        *) echo other ;;
-    esac
+    # $pat is deliberately unquoted: conf entries are globs, and case-glob
+    # matching is the point (noglob above keeps the shell from expanding
+    # them first).
+    for pat in $SECRET_ALLOW_PATTERNS; do
+        # shellcheck disable=SC2254
+        case "$name" in $pat) echo allow; return ;; esac
+    done
+    for pat in $SECRET_PATTERNS; do
+        # shellcheck disable=SC2254
+        case "$name" in $pat) echo secret; return ;; esac
+    done
+    echo other
 }
 
 # The bytes actually read come from the symlink's target, so classify that.

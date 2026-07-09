@@ -18,10 +18,15 @@ jobs:
             [ -x "$f" ] || { echo "not executable: $f"; fails=1; }
           done
           exit $fails
-      - name: Hook regression tests
+      - name: Regression tests
         run: |
-          bash skills/harness-kit/templates/scripts/hooks/test-guard-secrets.sh
-          bash skills/harness-kit/templates/scripts/hooks/test-advise-once.sh
+          fails=0
+          for t in skills/harness-kit/templates/scripts/test-*.sh \
+                   skills/harness-kit/templates/scripts/hooks/test-*.sh; do
+            echo "== $t"
+            bash "$t" || fails=1
+          done
+          exit $fails
       - name: ShellCheck
         run: |
           sudo apt-get update -q && sudo apt-get install -qy shellcheck
