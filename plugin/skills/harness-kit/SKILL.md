@@ -60,11 +60,11 @@ behavior from the repo alone.
      migration, unregistered route). Skippable; the hook ships as a no-op.
 
 3. **Install mechanism** from `templates/scripts/` into `scripts/`:
-   `harness.conf`, `sync-agent-skills.sh`, `check-harness.sh`, `verify.sh`,
-   and `hooks/` (all scripts + tests + README). `chmod +x scripts/hooks/*.sh
-   scripts/*.sh`. Tailor `harness.conf` (providers, plans dir, secret
-   patterns). Append `.harness/` to the repo's `.gitignore` — the hook
-   observability log lives there.
+   `harness.conf`, `sync-agent-skills.sh`, `check-harness.sh`,
+   `test-check-harness.sh`, `verify.sh`, and `hooks/` (all scripts + tests +
+   README). `chmod +x scripts/hooks/*.sh scripts/*.sh`. Tailor `harness.conf`
+   (providers, plans dir, secret patterns). Append `.harness/` to the repo's
+   `.gitignore` — the hook observability log lives there.
 
 4. **Tailor policy** in the marked `TAILOR` blocks:
    - `verify.sh`: write the interviewed quality gates as `gate` (fast:
@@ -130,7 +130,7 @@ behavior from the repo alone.
    step 4, so the checksums pin the tailored state:
    ```bash
    { echo "# harness-kit <kit-version>"; \
-     find scripts/hooks scripts/sync-agent-skills.sh scripts/check-harness.sh scripts/verify.sh -type f ! -name '.harness-manifest' \
+     find scripts/hooks scripts/sync-agent-skills.sh scripts/check-harness.sh scripts/test-check-harness.sh scripts/verify.sh -type f ! -name '.harness-manifest' \
      | sort | xargs shasum -a 256; } > scripts/.harness-manifest
    ```
    (kit version = `version` in the kit's `.claude-plugin/plugin.json`).

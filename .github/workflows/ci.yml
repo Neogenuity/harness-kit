@@ -13,16 +13,16 @@ jobs:
       - name: Hook templates are executable
         run: |
           fails=0
-          for f in skills/harness-kit/templates/scripts/hooks/*.sh \
-                   skills/harness-kit/templates/scripts/*.sh; do
+          for f in plugin/skills/harness-kit/templates/scripts/hooks/*.sh \
+                   plugin/skills/harness-kit/templates/scripts/*.sh; do
             [ -x "$f" ] || { echo "not executable: $f"; fails=1; }
           done
           exit $fails
       - name: Regression tests
         run: |
           fails=0
-          for t in skills/harness-kit/templates/scripts/test-*.sh \
-                   skills/harness-kit/templates/scripts/hooks/test-*.sh; do
+          for t in plugin/skills/harness-kit/templates/scripts/test-*.sh \
+                   plugin/skills/harness-kit/templates/scripts/hooks/test-*.sh; do
             echo "== $t"
             bash "$t" || fails=1
           done
@@ -33,5 +33,5 @@ jobs:
           # info/style notices are acceptable in templates (helpers sit next
           # to commented TAILOR arms); fail on warning and above.
           shellcheck -x --severity=warning \
-                        skills/harness-kit/templates/scripts/*.sh \
-                        skills/harness-kit/templates/scripts/hooks/*.sh
+                        plugin/skills/harness-kit/templates/scripts/*.sh \
+                        plugin/skills/harness-kit/templates/scripts/hooks/*.sh

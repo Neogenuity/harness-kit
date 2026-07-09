@@ -97,6 +97,25 @@ cat > "$W/docs/index.md" <<'EOF'
 EOF
 assert_ok "links in fenced code blocks are ignored" "$W"
 
+# --- check #8b: opencode.json deny list must mirror SECRET_PATTERNS ---
+# jq-gated: the check itself is skipped without jq, so the assertion would
+# be meaningless there.
+if command -v jq >/dev/null 2>&1; then
+    W=$(new_fixture)
+    printf 'SECRET_PATTERNS=".env auth.json"\n' > "$W/scripts/harness.conf"
+    cat > "$W/opencode.json" <<'EOF'
+{ "permission": { "read": { "**/.env": "deny" } } }
+EOF
+    assert_flags "opencode.json missing a secret pattern is flagged" "$W" "auth.json"
+
+    W=$(new_fixture)
+    printf 'SECRET_PATTERNS=".env auth.json"\n' > "$W/scripts/harness.conf"
+    cat > "$W/opencode.json" <<'EOF'
+{ "permission": { "read": { "**/.env": "deny", "**/auth.json": "deny" } } }
+EOF
+    assert_ok "opencode.json mirroring every pattern passes" "$W"
+fi
+
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails check-harness case(s)"
     exit 1
