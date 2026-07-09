@@ -88,6 +88,16 @@ check_doc_links() {
             http://*|https://*|mailto:*|\#*) continue ;;
         esac
         target="${link%%#*}"
+        # Strip an optional link title and unwrap an <angle-bracketed>
+        # destination so the existence test sees the path alone:
+        #   [t](dest "title")  [t](dest 'title')  [t](dest (title))  [t](<dest>)
+        # Per CommonMark a bare destination ends at the first space; an
+        # angle-bracketed one ends at '>' and may itself contain spaces.
+        target="${target#"${target%%[![:space:]]*}"}"   # trim leading space
+        case "$target" in
+            "<"*) target="${target#<}"; target="${target%%>*}" ;;
+            *)    target="${target%% *}" ;;
+        esac
         [ -z "$target" ] && continue
         if [ ! -e "$base/$target" ] && [ ! -e "$ROOT/$target" ]; then
             echo "ERROR: $doc_rel links to '$target' but it does not exist"

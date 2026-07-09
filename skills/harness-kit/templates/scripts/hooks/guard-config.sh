@@ -34,6 +34,7 @@ PROTECTED_PATHS="
 scripts/hooks/*.sh
 scripts/check-harness.sh
 scripts/sync-agent-skills.sh
+scripts/test-*.sh
 scripts/.harness-manifest
 .claude/settings.json
 .cursor/hooks.json
