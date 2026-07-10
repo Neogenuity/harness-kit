@@ -1,0 +1,16 @@
+---
+description: Rules for editing the mechanism templates harness-kit ships into other repos
+globs:
+  - "plugin/skills/harness-kit/templates/**"
+---
+
+# Shipped-template discipline
+
+Follow the conventions documented in `docs/conventions/templates.md`.
+
+Key points:
+- Every new or changed guard hook ships with a `test-<name>.sh` beside it
+- Hooks fail open (exit 0 on missing deps/unknown payloads); denial is exit 2 via `hook_deny`
+- Customization points live in marked TAILOR blocks or `harness.conf` — never in mechanism lines
+- Provider-matrix facts carry a `verified YYYY-MM` stamp naming a primary source
+- Mechanism behavior changes bump `plugin/.claude-plugin/plugin.json` before release
