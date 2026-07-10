@@ -37,6 +37,10 @@ The per-harness copies (`.claude/skills/`, `.cursor/skills/`,
 `bash scripts/sync-agent-skills.sh`; `check-harness.sh` (CI-gated) fails if
 stubs drift from the generator output.
 
+## Plans
+
+- [docs/plans/README.md](docs/plans/README.md) — execution-plan lifecycle (queued → active → completed) and the ordered roadmap to 1.0; plans in `docs/plans/active/` are announced at session start
+
 ## Quality Gates
 
 The ordered gates live in **`scripts/verify.sh`** — the executable definition
