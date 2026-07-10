@@ -205,8 +205,10 @@ fi
 # 9. Mechanism files must match scripts/.harness-manifest (kit version plus
 #    sha256 per file, written at init). An un-pinned edit — agent, human, or
 #    merge — fails CI, so nobody can quietly rewrite a guard. Lines ending in
-#    '# tailored' are deliberate local forks: skipped here, and never
-#    auto-replaced by the kit's update mode.
+#    '# tailored' are deliberate local forks: still checksum-verified here
+#    (integrity), but never auto-replaced by the kit's update mode and exempt
+#    from template-equality checks (ownership) — the marker changes who may
+#    rewrite the file, not whether edits must be pinned.
 sha256_of() {
     if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
     elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
@@ -216,7 +218,6 @@ if [ -f "$ROOT/scripts/.harness-manifest" ] && [ -n "$(sha256_of "$ROOT/scripts/
     while IFS= read -r line; do
         case "$line" in
             \#*|"") continue ;;
-            *"# tailored"*) continue ;;
         esac
         want=${line%% *}
         path=$(printf '%s\n' "$line" | awk '{print $2}')
@@ -228,7 +229,12 @@ if [ -f "$ROOT/scripts/.harness-manifest" ] && [ -n "$(sha256_of "$ROOT/scripts/
         fi
         have=$(sha256_of "$ROOT/$path")
         if [ "$have" != "$want" ]; then
-            echo "ERROR: '$path' does not match scripts/.harness-manifest. If the change is intentional, re-pin its line (shasum -a 256 $path) — append ' # tailored' for a deliberate fork the kit's update mode must never overwrite"
+            case "$line" in
+                *"# tailored"*)
+                    echo "ERROR: '$path' does not match its scripts/.harness-manifest pin — tailored files are still checksum-verified ('# tailored' only exempts them from template replacement). If the change is intentional, re-pin its line (shasum -a 256 $path), keeping the ' # tailored' marker" ;;
+                *)
+                    echo "ERROR: '$path' does not match scripts/.harness-manifest. If the change is intentional, re-pin its line (shasum -a 256 $path) — append ' # tailored' for a deliberate fork the kit's update mode must never overwrite" ;;
+            esac
             ERRORS=$((ERRORS + 1))
         fi
     done < "$ROOT/scripts/.harness-manifest"

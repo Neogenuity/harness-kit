@@ -3,11 +3,13 @@
 # lib.sh. Runnable standalone and in CI.
 #
 # The protocol is the subtlest piece of the harness: on the first stop the
-# warning must be surfaced as a continue-the-turn request (Claude Code
+# warning must be surfaced as a continue-the-turn request (Claude Code/Codex
 # `decision:block`, Cursor `followup_message`); on the second stop the loop
-# guards (`stop_hook_active` / `loop_count`) must make it degrade to plain
-# text so the run is never hard-blocked. Unknown payloads fall back to plain
-# text. Any project stop-hook built on hook_advise_once inherits exactly this
+# guards (`stop_hook_active` / `loop_count`) must make it emit a structured
+# JSON no-op so the run is never hard-blocked — Codex requires JSON on Stop
+# stdout at exit 0 (plain text is a protocol error there), and Claude Code
+# accepts the same object. Unknown payloads fall back to plain text. Any
+# project stop-hook built on hook_advise_once inherits exactly this
 # behavior, so pin it here once.
 set -uo pipefail
 
@@ -58,13 +60,29 @@ run() {
     echo "ok:   $desc"
 }
 
-run "Claude first stop: decision:block JSON"    '{"stop_hook_active": false}' '"decision"[[:space:]]*:[[:space:]]*"block"' ''
-run "Claude first stop: reason carries warning" '{"stop_hook_active": false}' 'TEST WARNING' ''
-run "Claude second stop: plain text, no re-block" '{"stop_hook_active": true}' 'TEST WARNING' '"decision"'
+run "Claude/Codex first stop: decision:block JSON" '{"stop_hook_active": false}' '"decision"[[:space:]]*:[[:space:]]*"block"' ''
+run "Claude/Codex first stop: reason carries warning" '{"stop_hook_active": false}' 'TEST WARNING' ''
+run "Claude/Codex second stop: JSON no-op, no re-block" '{"stop_hook_active": true}' '"continue"[[:space:]]*:[[:space:]]*true' '"decision"|TEST WARNING'
 run "Cursor first stop: followup_message JSON"  '{"loop_count": 0}' '"followup_message"' ''
-run "Cursor second stop: plain text, no followup" '{"loop_count": 1}' 'TEST WARNING' '"followup_message"'
+run "Cursor second stop: JSON no-op, no followup" '{"loop_count": 1}' '\{\}' '"followup_message"|TEST WARNING'
 run "unknown payload: plain-text fallback"      '{}' 'TEST WARNING' '"decision"|"followup_message"'
 run "empty stdin: plain-text fallback"          '' 'TEST WARNING' '"decision"|"followup_message"'
+
+# Second-pass stdout must PARSE as JSON — the Codex Stop contract ("Stop
+# expects JSON on stdout when it exits 0"); a grep alone would miss, say, a
+# stray plain-text line after the object.
+if printf '%s' '{"stop_hook_active": true}' | "$HOOK" 2>/dev/null | jq -e '.continue == true' >/dev/null 2>&1; then
+    echo "ok:   second stop stdout parses as {\"continue\": true}"
+else
+    echo "FAIL: second stop stdout does not parse as {\"continue\": true}"
+    fails=$((fails + 1))
+fi
+if printf '%s' '{"loop_count": 1}' | "$HOOK" 2>/dev/null | jq -e 'type == "object"' >/dev/null 2>&1; then
+    echo "ok:   Cursor second stop stdout parses as a JSON object"
+else
+    echo "FAIL: Cursor second stop stdout does not parse as a JSON object"
+    fails=$((fails + 1))
+fi
 
 # --- observability: an advisory appends one valid JSON line ---
 LOG="$WORK/log.jsonl"

@@ -110,10 +110,12 @@ behavior from the repo alone.
      one `.cursor/rules/<topic>.mdc` per convention doc from
      `templates/providers/cursor/rules/_example.mdc`.
    - Codex: `templates/providers/codex/hooks.json` → `.codex/hooks.json`
-     (hooks are experimental + flag-gated and load only when the project is
-     trusted — see provider matrix; wire them, but treat Codex's native
-     trust/permission layer as the primary guard until they GA);
-     `config.toml` only if MCP servers are needed. Skills come from
+     (hooks are GA and on by default, but project-local configs load only
+     when the project is trusted — see provider matrix). Codex payloads
+     carry no file path: the guards parse apply_patch envelopes and
+     token-scan shell commands via `lib.sh:hook_affected_files` — best
+     effort, so keep Codex's native trust/permission layer as a second
+     guard. `config.toml` only if MCP servers are needed. Skills come from
      `.agents/skills/` — no Codex skill dir.
    - OpenCode: `opencode.json` — its `permission.read` deny block mirrors
      `SECRET_PATTERNS` (keep the two in sync when tailoring; add `"mcp"`
@@ -143,8 +145,11 @@ behavior from the repo alone.
    `bash scripts/check-harness.sh` pass; each `scripts/hooks/test-*.sh`
    passes standalone; feed `guard-secrets.sh` a real payload for the repo's
    own `.env` and `guard-config.sh` one for `scripts/hooks/lib.sh`, confirm
-   exit 2 for both; confirm every AGENTS.md link opens. Report results
-   honestly, including anything left unwired.
+   exit 2 for both; repeat both with Codex-shaped payloads (an apply_patch
+   envelope in `tool_input.command` — crib the builders from
+   `scripts/hooks/test-affected-files.sh`) and confirm exit 2 again;
+   confirm every AGENTS.md link opens. Report results honestly, including
+   anything left unwired.
 
 ## audit
 
@@ -187,9 +192,11 @@ to fix; don't fix unasked.
 2. For each mechanism file: checksum matches manifest → replace with the
    new kit version; differs, or its manifest line is marked ` # tailored` →
    the project owns it; show a diff of old-kit → new-kit and apply only
-   what the user approves. Set `HARNESS_ALLOW_MECHANISM_EDITS=1` for the
-   session if `guard-config.sh` is wired — upgrading the mechanism is the
-   intended use of that escape hatch.
+   what the user approves (the old kit's templates are recoverable from the
+   kit repo's git tag matching the manifest header version — use them as
+   the diff base for tailored files). Set `HARNESS_ALLOW_MECHANISM_EDITS=1`
+   for the session if `guard-config.sh` is wired — upgrading the mechanism
+   is the intended use of that escape hatch.
 3. Never auto-overwrite policy files (`verify.sh`, `format.sh`,
    `guard-secrets.sh`, `guard-project-policy.sh`, `harness.conf`, provider
    configs) — diff only.

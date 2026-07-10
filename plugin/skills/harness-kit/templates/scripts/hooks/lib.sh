@@ -17,12 +17,51 @@ hook_read_input() {
     HOOK_INPUT=$(cat 2>/dev/null || true)
 }
 
-# Extract the target file path from the event across harness layouts:
-# Cursor puts it at top level (`file_path`); Claude Code and Codex nest it
-# as `tool_input.file_path` (Read/Edit/Write) or `tool_input.path` (Grep).
-hook_file_path() {
+# The shell command a tool call will run, if any. Claude Code's Bash tool
+# and Codex's shell/apply_patch tools carry it as `tool_input.command`;
+# tolerate an argv-array form by joining on newlines so the apply_patch
+# envelope headers keep their line anchors.
+hook_command_string() {
     command -v jq >/dev/null 2>&1 || return 0
-    printf '%s' "${HOOK_INPUT:-}" | jq -r '.file_path // .tool_input.file_path // .tool_input.path // empty' 2>/dev/null
+    printf '%s' "${HOOK_INPUT:-}" | jq -r '
+        .tool_input.command // empty
+        | if type == "array" then map(tostring) | join("\n") else tostring end
+    ' 2>/dev/null
+}
+
+# Every file path a tool call touches, newline-separated, across harness
+# layouts: Cursor puts one at top level (`file_path`); Claude Code nests one
+# as `tool_input.file_path` (Read/Edit/Write) or `tool_input.path` (Grep).
+# Codex sends NO file-path field — file edits arrive as an apply_patch
+# invocation inside `tool_input.command` — so parse the patch envelope's
+# file headers (Update/Add/Delete File, Move to; a multi-file patch yields
+# multiple lines). jq -r turns the payload's \n escapes into real newlines
+# whatever the shell quoting (<<'EOF', <<EOF, or a single-argument string),
+# so the headers always sit at line start.
+#
+# Callers looping over the result MUST use process substitution
+# (`while read … done < <(printf '%s\n' "$files")`), never a pipeline —
+# hook_deny's exit 2 inside a pipeline subshell would not end the hook.
+hook_affected_files() {
+    command -v jq >/dev/null 2>&1 || return 0
+    local direct cmd
+    direct=$(printf '%s' "${HOOK_INPUT:-}" \
+        | jq -r '.file_path // .tool_input.file_path // .tool_input.path // empty' 2>/dev/null)
+    if [ -n "$direct" ]; then
+        printf '%s\n' "$direct"
+        return 0
+    fi
+    cmd=$(hook_command_string)
+    case "$cmd" in *apply_patch*) ;; *) return 0 ;; esac
+    printf '%s\n' "$cmd" | awk '
+        /^\*\*\* (Update|Add|Delete) File: / { sub(/^\*\*\* (Update|Add|Delete) File: /, ""); print; next }
+        /^\*\*\* Move to: /                  { sub(/^\*\*\* Move to: /, ""); print }
+    ' | awk '!seen[$0]++'
+}
+
+# First affected file — the common single-file case and the deny-log label.
+hook_file_path() {
+    hook_affected_files | head -n 1
 }
 
 # Append one JSON line describing a guard event to the harness log
@@ -83,13 +122,18 @@ hook_feedback() {
 
 # Advisory stop-hook protocol: surface a warning to the agent exactly once.
 #
-# Plain stdout from a stop hook is not fed back to the model in either
-# harness, so on the FIRST stop this asks the harness to continue the turn —
-# Claude Code and Codex via `{"decision":"block","reason":...}`, Cursor via
+# Plain stdout from a stop hook is not fed back to the model in any harness,
+# so on the FIRST stop this asks the harness to continue the turn — Claude
+# Code and Codex via `{"decision":"block","reason":...}`, Cursor via
 # `{"followup_message":...}`. The loop guards carried on stdin
-# (`stop_hook_active` for Claude Code/Codex, `loop_count` for Cursor) make the
-# SECOND stop print plain text and succeed, so the run is never hard-blocked.
-# Unknown harnesses and empty stdin get the plain-text fallback.
+# (`stop_hook_active` for Claude Code/Codex, `loop_count` for Cursor) make
+# the SECOND stop emit a structured no-op instead, so the run is never
+# hard-blocked: `{"continue": true}` on the stop_hook_active layout — Codex
+# requires JSON on stdout when a Stop hook exits 0 (plain text is a protocol
+# error there) and the same object is valid Claude Code hook output; the two
+# are indistinguishable on stdin — and `{}` on the Cursor layout (recent
+# Cursor builds reject plain-text hook stdout). Unknown harnesses and empty
+# stdin get the plain-text fallback.
 #
 # Usage: hook_advise_once "$warnings"   (call last; always exits 0)
 hook_advise_once() {
@@ -98,7 +142,7 @@ hook_advise_once() {
     if command -v jq >/dev/null 2>&1 && [ -n "${HOOK_INPUT:-}" ]; then
         if printf '%s' "$HOOK_INPUT" | jq -e 'has("stop_hook_active")' >/dev/null 2>&1; then
             if printf '%s' "$HOOK_INPUT" | jq -e '.stop_hook_active == true' >/dev/null 2>&1; then
-                printf '%s\n' "$warnings"
+                printf '{"continue": true}\n'
             else
                 printf '%s' "$warnings" | jq -Rs '{decision: "block", reason: .}'
             fi
@@ -106,7 +150,7 @@ hook_advise_once() {
         fi
         if printf '%s' "$HOOK_INPUT" | jq -e 'has("loop_count")' >/dev/null 2>&1; then
             if printf '%s' "$HOOK_INPUT" | jq -e '.loop_count > 0' >/dev/null 2>&1; then
-                printf '%s\n' "$warnings"
+                printf '{}\n'
             else
                 printf '%s' "$warnings" | jq -Rs '{followup_message: .}'
             fi
