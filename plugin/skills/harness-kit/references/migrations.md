@@ -34,18 +34,23 @@ the TS plugin shim):
    per the provider matrix conventions (stdin JSON, exit 2 = deny).
 2. Delete the shim (`.opencode/plugins/` for OpenCode).
 3. Re-verify payload shapes by piping the provider's real payloads through
-   the scripts; extend `lib.sh:hook_file_path` if a new layout appears.
+   the scripts; extend `lib.sh:hook_affected_files` if a new layout appears.
 
-**Codex hooks graduate from experimental to GA**: drop the
-`[features] codex_hooks = true` requirement note from the matrix, re-verify
-event names and exit-code semantics against
-<https://developers.openai.com/codex/hooks>, and update the "verified" stamp.
+**Codex hooks graduate from experimental to GA** (happened mid-2026: hooks
+are enabled by default, `hooks` is the canonical feature key with
+`codex_hooks` a deprecated alias, and the docs moved to
+<https://learn.chatgpt.com/docs/hooks>): on installs older than kit 0.4.0,
+remove any `[features] codex_hooks = true` line from `.codex/config.toml`
+and take the kit update — 0.4.0 also taught the guards Codex's real payload
+shape (no file-path field; apply_patch envelopes in `tool_input.command`)
+and the Stop hook's JSON-on-exit-0 contract. Re-verify event names and
+exit-code semantics against the docs before updating the "verified" stamps.
 
 **A new harness appears**: add its dirs to the matrix first (instructions /
 skills / subagents / hooks / permissions / MCP), then: `PROVIDERS` gets its
 skills dir only if it doesn't read `.agents/skills/`; hooks wire to the
-existing portable scripts; teach `lib.sh:hook_file_path` its payload layout
-if novel; add its native secret-deny config mirroring
+existing portable scripts; teach `lib.sh:hook_affected_files` its payload
+layout if novel; add its native secret-deny config mirroring
 `harness.conf:SECRET_PATTERNS`.
 
 ## The end state

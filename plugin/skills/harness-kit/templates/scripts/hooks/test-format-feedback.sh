@@ -56,7 +56,12 @@ run() {
     echo "ok:   $desc"
 }
 
-run "Claude/Codex layout: stderr + exit 2"  '{"tool_input":{"file_path":"x.py"}}' 2 err
+run "Claude nested layout: stderr + exit 2" '{"tool_input":{"file_path":"x.py"}}' 2 err
+run "Codex command layout: stderr + exit 2" "$(jq -cn --arg c "apply_patch <<'EOF'
+*** Begin Patch
+*** Update File: x.py
+*** End Patch
+EOF" '{turn_id: "t1", tool_name: "apply_patch", tool_use_id: "c1", tool_input: {command: $c}}')" 2 err
 run "Cursor layout: stdout + exit 0"        '{"file_path":"x.py"}'                0 out
 run "unknown payload: stdout fallback"      '{}'                                  0 out
 run "empty stdin: stdout fallback"          ''                                    0 out
@@ -70,6 +75,17 @@ if [ "$fmt_rc" != "0" ] || [ -n "$fmt_out" ]; then
     fails=$((fails + 1))
 else
     echo "ok:   format.sh with no matching arm stays silent"
+fi
+
+# ... and when a Codex patch names a file that doesn't exist (fail open).
+fmt_out=$(jq -cn --arg c "$(printf "apply_patch <<'EOF'\n*** Begin Patch\n*** Update File: %s\n*** End Patch\nEOF" "$WORK/nothing.xyz")" \
+    '{tool_input: {command: $c}}' | "$HOOKS_DIR/format.sh" 2>&1)
+fmt_rc=$?
+if [ "$fmt_rc" != "0" ] || [ -n "$fmt_out" ]; then
+    echo "FAIL: format.sh with a Codex patch on a missing file — expected silent exit 0, got exit $fmt_rc: $fmt_out"
+    fails=$((fails + 1))
+else
+    echo "ok:   format.sh with a Codex patch on a missing file stays silent"
 fi
 
 if [ "$fails" -gt 0 ]; then

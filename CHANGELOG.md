@@ -3,6 +3,41 @@
 All notable changes to harness-kit. Versions refer to
 `plugin/.claude-plugin/plugin.json`.
 
+## 0.4.0 — 2026-07-10
+
+- **Codex protocol correctness (from adversarial review, validated against
+  the current docs at learn.chatgpt.com):** Codex hook payloads carry no
+  `tool_input.file_path` — file edits arrive as apply_patch invocations in
+  `tool_input.command` — so the guards and `format.sh` were silent no-ops
+  on Codex. New `lib.sh:hook_affected_files` / `hook_command_string`
+  normalize all three provider layouts (direct fields, plus apply_patch
+  envelope headers including multi-file patches and renames);
+  `guard-config.sh`, `guard-secrets.sh`, and `format.sh` now iterate every
+  affected file. `guard-secrets.sh` adds a best-effort token scan of shell
+  commands (the only live secret layer on Codex) with apply_patch bodies
+  stripped to avoid false denies, and now also denies patch writes to
+  secret files. Fixtures are schema-derived; pinned by the new
+  `test-affected-files.sh` plus Codex cases in every guard test.
+- **Stop-hook protocol:** Codex requires JSON on Stop stdout at exit 0;
+  `hook_advise_once`'s second pass now emits `{"continue": true}` (valid in
+  Claude Code too — the layouts are indistinguishable) and `{}` on the
+  Cursor layout instead of plain text.
+- **Manifest integrity:** `check-harness.sh` check #9 now checksum-verifies
+  ` # tailored` lines too — the marker only exempts a file from template
+  replacement (update mode) and template-equality checks, never from
+  integrity verification. Re-pin tailored lines after editing, keeping the
+  marker.
+- **Docs:** provider matrix re-verified 2026-07-10 — Codex hooks are GA and
+  enabled by default (`hooks` feature key; `codex_hooks` deprecated alias;
+  `commandWindows` exists), payload/Stop facts corrected, sources updated
+  to learn.chatgpt.com (developers.openai.com/codex/* now redirects there).
+- **CI:** test matrix now includes macOS (exercises the BSD awk/`shasum`/
+  `readlink -f` branches).
+- Update-mode note: `lib.sh`, both guards, `format.sh`, and
+  `check-harness.sh` are mechanism (replaced on checksum match). A tailored
+  `format.sh` fork needs the multi-file iteration applied manually — the
+  TAILOR arms now live inside a `process_one()` function.
+
 ## 0.3.0 — 2026-07-09
 
 - **Packaging:** the distributable plugin moved from the repo root into

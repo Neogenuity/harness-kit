@@ -5,12 +5,16 @@
 # configs. An agent that can edit the guard can silence it; "fix the code,
 # not the lint config" must be mechanical, not aspirational.
 #
-# Scope: defense-in-depth, not a boundary — shell edits (`sed -i` via Bash)
-# are not intercepted; scripts/check-harness.sh's manifest verification is
-# the enforcing layer in CI. Intentional harness maintenance is the escape
-# hatch: run the session with HARNESS_ALLOW_MECHANISM_EDITS=1 (or edit by
-# hand), then re-pin scripts/.harness-manifest. Fails open on unknown
-# payloads.
+# Provider-agnostic via lib.sh:hook_affected_files — Cursor/Claude Code file
+# paths and Codex apply_patch envelopes (every file in a multi-file patch is
+# checked). General shell commands are deliberately NOT scanned: read vs
+# write is indistinguishable from command text (a scan would deny
+# `git checkout scripts/hooks/lib.sh` and every mention of a protected
+# path), so shell edits (`sed -i` via Bash) are not intercepted;
+# scripts/check-harness.sh's manifest verification is the enforcing layer in
+# CI. Intentional harness maintenance is the escape hatch: run the session
+# with HARNESS_ALLOW_MECHANISM_EDITS=1 (or edit by hand), then re-pin
+# scripts/.harness-manifest. Fails open on unknown payloads.
 set -uo pipefail
 
 . "$(dirname "$0")/lib.sh" 2>/dev/null || exit 0
@@ -19,11 +23,10 @@ command -v jq >/dev/null 2>&1 || exit 0
 [ "${HARNESS_ALLOW_MECHANISM_EDITS:-0}" = "1" ] && exit 0
 
 hook_read_input
-file=$(hook_file_path)
-[ -n "$file" ] || exit 0
+files=$(hook_affected_files)
+[ -n "$files" ] || exit 0
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-rel="${file#"$ROOT"/}"
 
 # -- TAILOR: paths agents may not edit -----------------------------------------
 # Repo-relative globs. Patterns without a slash also match by basename (so
@@ -50,21 +53,36 @@ opencode.json
 # PROTECTED_PATHS would glob against the CWD.
 set -f
 
-base=$(basename "$rel")
 # $pat is deliberately unquoted in the case patterns below: the protected
-# list is globs, and case-glob matching is the point.
-for pat in $PROTECTED_PATHS; do
-    hit=0
-    # shellcheck disable=SC2254
-    case "$rel" in $pat) hit=1 ;; esac
-    # shellcheck disable=SC2254
-    case "$pat" in
-        */*) ;;
-        *) case "$base" in $pat) hit=1 ;; esac ;;
-    esac
-    if [ "$hit" = "1" ]; then
-        hook_deny "Blocked by scripts/hooks/guard-config.sh: '$rel' is harness mechanism or a protected config. If a check is failing, fix the code it complains about — do not edit the check. Intentional harness maintenance: re-run with HARNESS_ALLOW_MECHANISM_EDITS=1, then re-pin scripts/.harness-manifest (see check-harness.sh)."
-    fi
-done
+# list is globs, and case-glob matching is the point. Apply_patch paths are
+# repo-relative already; absolute paths get the ROOT prefix stripped, and a
+# leading ./ is stripped too (the envelope text is model-written, so
+# `./scripts/…` occurs) — all three forms match the same globs.
+check_file() {
+    local file="$1" rel base pat hit
+    rel="${file#"$ROOT"/}"
+    rel="${rel#./}"
+    base=$(basename "$rel")
+    for pat in $PROTECTED_PATHS; do
+        hit=0
+        # shellcheck disable=SC2254
+        case "$rel" in $pat) hit=1 ;; esac
+        # shellcheck disable=SC2254
+        case "$pat" in
+            */*) ;;
+            *) case "$base" in $pat) hit=1 ;; esac ;;
+        esac
+        if [ "$hit" = "1" ]; then
+            hook_deny "Blocked by scripts/hooks/guard-config.sh: '$rel' is harness mechanism or a protected config. If a check is failing, fix the code it complains about — do not edit the check. Intentional harness maintenance: re-run with HARNESS_ALLOW_MECHANISM_EDITS=1, then re-pin scripts/.harness-manifest (see check-harness.sh)."
+        fi
+    done
+    return 0
+}
+
+# Process substitution, not a pipeline — hook_deny must exit the hook, and
+# `exit 2` inside a pipeline subshell would be swallowed (see lib.sh).
+while IFS= read -r f; do
+    [ -n "$f" ] && check_file "$f"
+done < <(printf '%s\n' "$files")
 
 exit 0

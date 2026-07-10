@@ -19,9 +19,11 @@ the stop-hook warns when a template change touches no test.
   `exit 0` — never break a contributor's agent turn.
 - Denial is `hook_deny` (exit 2) with a reason that names the guard script
   and the escape hatch.
-- Read event fields through `lib.sh` helpers (`hook_file_path`, …), never
-  with a layout assumed from one harness. Cursor puts `file_path` at the top
-  level; Claude Code and Codex nest it under `tool_input`.
+- Read event fields through `lib.sh` helpers (`hook_affected_files`,
+  `hook_command_string`, …), never with a layout assumed from one harness.
+  Cursor puts `file_path` at the top level; Claude Code nests it under
+  `tool_input`; Codex sends no file path at all — affected files hide in
+  the `tool_input.command` apply_patch envelope.
 
 ## Policy is TAILOR blocks; mechanism is everything else
 

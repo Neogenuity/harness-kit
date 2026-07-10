@@ -127,6 +127,47 @@ EOF
     assert_flags "wired .claude/ without settings.json is flagged" "$W" ".claude/settings.json is missing"
 fi
 
+# --- check #9: manifest checksum verification, including tailored lines ---
+# Gated like the check itself: skipped when no sha tool exists. The fixture
+# mechanism file is executable (check #5) and not named test-* (check #6).
+if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; then
+    sha() {
+        if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+        else sha256sum "$1" | awk '{print $1}'; fi
+    }
+    ZEROS=$(printf '0%.0s' $(seq 1 64))
+
+    W=$(new_fixture)
+    printf 'echo ok\n' > "$W/scripts/mech.sh"; chmod +x "$W/scripts/mech.sh"
+    printf '# harness-kit 9.9.9\n%s  scripts/mech.sh\n' "$(sha "$W/scripts/mech.sh")" > "$W/scripts/.harness-manifest"
+    assert_ok "manifest: matching checksum passes" "$W"
+
+    W=$(new_fixture)
+    printf 'echo ok\n' > "$W/scripts/mech.sh"; chmod +x "$W/scripts/mech.sh"
+    printf '# harness-kit 9.9.9\n%s  scripts/mech.sh\n' "$ZEROS" > "$W/scripts/.harness-manifest"
+    assert_flags "manifest: checksum mismatch is flagged" "$W" "does not match"
+
+    # The integrity/ownership split: '# tailored' exempts a file from
+    # template replacement, NOT from checksum verification.
+    W=$(new_fixture)
+    printf 'echo ok\n' > "$W/scripts/mech.sh"; chmod +x "$W/scripts/mech.sh"
+    printf '# harness-kit 9.9.9\n%s  scripts/mech.sh # tailored\n' "$ZEROS" > "$W/scripts/.harness-manifest"
+    assert_flags "manifest: tailored mismatch is still flagged" "$W" "tailored files are still checksum-verified"
+
+    W=$(new_fixture)
+    printf 'echo ok\n' > "$W/scripts/mech.sh"; chmod +x "$W/scripts/mech.sh"
+    printf '# harness-kit 9.9.9\n%s  scripts/mech.sh # tailored\n' "$(sha "$W/scripts/mech.sh")" > "$W/scripts/.harness-manifest"
+    assert_ok "manifest: tailored line with current checksum passes" "$W"
+
+    W=$(new_fixture)
+    printf '# harness-kit 9.9.9\n%s  scripts/gone.sh\n' "$ZEROS" > "$W/scripts/.harness-manifest"
+    assert_flags "manifest: missing pinned file is flagged" "$W" "does not exist"
+
+    W=$(new_fixture)
+    printf '# harness-kit 9.9.9\n%s  scripts/gone.sh # tailored\n' "$ZEROS" > "$W/scripts/.harness-manifest"
+    assert_flags "manifest: missing tailored file is flagged too" "$W" "does not exist"
+fi
+
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails check-harness case(s)"
     exit 1

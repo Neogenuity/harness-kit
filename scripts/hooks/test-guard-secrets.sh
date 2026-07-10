@@ -71,6 +71,51 @@ run 0 "ordinary source file allowed" "$(payload "$WORK/config.php")"
 run 0 "Grep on directory allowed"    "$(grep_payload "$WORK")"
 run 0 "empty payload fails open"     '{}'
 
+# --- Codex layout: shell commands (best-effort token scan) ---
+# On Codex every file read is a shell command, so the token scan is the only
+# live secret layer there. Builders mirror test-affected-files.sh — one
+# place per file to fix if a captured real payload differs.
+codex_shell() {
+    jq -cn --arg c "$1" \
+        '{turn_id: "t1", tool_name: "shell", tool_use_id: "c1", tool_input: {command: $c}}'
+}
+codex_patch() {
+    jq -cn --arg c "$(printf "apply_patch <<'EOF'\n*** Begin Patch\n%s\n*** End Patch\nEOF" "$1")" \
+        '{turn_id: "t1", tool_name: "apply_patch", tool_use_id: "c1", tool_input: {command: $c}}'
+}
+
+run 2 "Codex shell: cat .env denied"             "$(codex_shell "cat $WORK/.env")"
+run 2 "Codex shell: compound command denied"     "$(codex_shell "ls -la && cat $WORK/auth.json")"
+run 2 "Codex shell: key file behind a flag denied" "$(codex_shell "openssl rsa -in $WORK/id_rsa -check")"
+run 2 "Codex shell: symlink token resolved and denied" "$(codex_shell "cat $WORK/notes.md")"
+run 2 "Codex shell: argv-array command denied"   "$(jq -cn --arg c "cat $WORK/.env" '{tool_input: {command: ["bash", "-lc", $c]}}')"
+run 0 "Codex shell: .env.example allowed"        "$(codex_shell "cat $WORK/.env.example")"
+run 0 "Codex shell: innocent command allowed"    "$(codex_shell "git status && ls src/")"
+
+# --- Codex layout: apply_patch envelopes (write-side denial) ---
+run 2 "Codex patch: Update File .env denied"     "$(codex_patch "*** Update File: $WORK/.env
+@@
++SECRET=2")"
+run 2 "Codex patch: unquoted heredoc denied"     "$(jq -cn --arg c "$(printf 'apply_patch <<EOF\n*** Begin Patch\n*** Update File: %s\n*** End Patch\nEOF' "$WORK/.env")" '{tool_input: {command: $c}}')"
+run 2 "Codex patch: direct-argument form denied" "$(jq -cn --arg c "$(printf "apply_patch '*** Begin Patch\n*** Update File: %s\n*** End Patch'" "$WORK/.env")" '{tool_input: {command: $c}}')"
+run 2 "Codex patch: multi-file, secret second"   "$(codex_patch "*** Update File: $WORK/config.php
+@@
++x
+*** Update File: $WORK/.env
+@@
++y")"
+run 2 "Codex patch: rename onto .env denied"     "$(codex_patch "*** Update File: $WORK/config.php
+*** Move to: $WORK/.env")"
+run 0 "Codex patch: body mentioning .env allowed (envelope stripped)" "$(codex_patch "*** Update File: $WORK/notes-about-env.md
+@@
++See .env for configuration")"
+# Direct-argument form puts '*** Begin Patch' mid-line after the quote —
+# the strip must still engage or the body's .env token would false-deny.
+run 0 "Codex patch: direct-arg body mentioning .env allowed" "$(jq -cn --arg c "$(printf "apply_patch '*** Begin Patch\n*** Update File: %s\n@@\n+See .env for configuration\n*** End Patch'" "$WORK/notes-about-env.md")" '{tool_input: {command: $c}}')"
+run 0 "Codex patch: ordinary file allowed"       "$(codex_patch "*** Update File: $WORK/config.php
+@@
++x")"
+
 # --- harness.conf is the authoritative pattern source ---
 # A tailored conf fully replaces the defaults: its own globs deny/allow, and
 # patterns absent from it (like .env) no longer match.

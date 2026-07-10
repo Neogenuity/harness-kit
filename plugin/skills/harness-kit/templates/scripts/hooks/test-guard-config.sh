@@ -48,10 +48,46 @@ run 2 "opencode.json edit denied"        "$(payload "$WORK/opencode.json")"
 run 2 "relative path denied"             "$(payload "scripts/hooks/guard-secrets.sh")"
 run 2 "Cursor layout denied"             "$(cursor_payload "$WORK/scripts/sync-agent-skills.sh")"
 
+# --- Codex layout: apply_patch envelopes (paths are repo-relative) ---
+# Builders mirror test-affected-files.sh — one place per file to fix if a
+# captured real payload differs.
+codex_patch() {
+    jq -cn --arg c "$(printf "apply_patch <<'EOF'\n*** Begin Patch\n%s\n*** End Patch\nEOF" "$1")" \
+        '{turn_id: "t1", tool_name: "apply_patch", tool_use_id: "c1", tool_input: {command: $c}}'
+}
+
+run 2 "Codex patch: hook edit denied"            "$(codex_patch '*** Update File: scripts/hooks/lib.sh
+@@
++x')"
+run 2 "Codex patch: added protected file denied" "$(codex_patch '*** Add File: scripts/hooks/evil.sh
++#!/usr/bin/env bash')"
+run 2 "Codex patch: rename onto mechanism denied" "$(codex_patch '*** Update File: src/x.sh
+*** Move to: scripts/check-harness.sh')"
+run 2 "Codex patch: multi-file, manifest second" "$(codex_patch '*** Update File: src/app.php
+@@
++x
+*** Update File: scripts/.harness-manifest
+@@
++y')"
+run 2 "Codex patch: dot-slash prefixed path denied" "$(codex_patch '*** Update File: ./scripts/hooks/lib.sh
+@@
++x')"
+run 0 "Codex patch: ordinary file allowed"       "$(codex_patch '*** Update File: src/app.php
+@@
++x')"
+# General shell commands are deliberately NOT scanned (read vs write is
+# indistinguishable from command text); check-harness.sh's manifest
+# verification is the enforcing layer for shell edits.
+run 0 "Codex shell: sed on mechanism not scanned (documented limit)" "$(jq -cn '{tool_input: {command: "sed -i s/a/b/ scripts/hooks/lib.sh"}}')"
+run 0 "Codex patch: escape hatch allows mechanism edit" "$(codex_patch '*** Update File: scripts/hooks/lib.sh
+@@
++x')" "HARNESS_ALLOW_MECHANISM_EDITS=1"
+
 # --- allow: ordinary files, escape hatch, fail-open ---
 run 0 "ordinary source file allowed"     "$(payload "$WORK/src/app.php")"
 run 0 "sibling name not protected"       "$(payload "$WORK/src/check-harness.sh.md")"
 run 0 "escape hatch allows mechanism edit" "$(payload "$WORK/scripts/hooks/lib.sh")" "HARNESS_ALLOW_MECHANISM_EDITS=1"
+run 0 "bare command payload fails open"  "$(jq -cn '{tool_input: {command: "ls"}}')"
 run 0 "empty payload fails open"         '{}'
 
 if [ "$fails" -gt 0 ]; then

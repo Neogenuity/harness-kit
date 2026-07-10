@@ -7,7 +7,8 @@ line. Verify against current harness docs when wiring a provider you haven't
 used recently — hook event names in particular are still evolving. Facts
 below carry their own validated dates where they were individually checked;
 the Sources section at the bottom lists the primary docs to re-verify
-against. (Full matrix last validated: 2026-07.)
+against. (Full matrix last validated: 2026-07; Codex facts re-verified
+2026-07-10 after the docs moved hosts — see Sources.)
 
 | Capability | Claude Code | Cursor | Codex | OpenCode | `.agents` standard |
 | --- | --- | --- | --- | --- | --- |
@@ -41,12 +42,25 @@ Policy stays in the portable scripts; the shim is one-time wiring.
 
 ## Payload differences the scripts already absorb
 
-- **File path**: Cursor sends top-level `file_path`; Claude Code and Codex
-  nest it as `tool_input.file_path` (Read/Edit/Write) or `tool_input.path`
-  (Grep). `lib.sh:hook_file_path` tries all three.
+- **File path**: Cursor sends top-level `file_path`; Claude Code nests it
+  as `tool_input.file_path` (Read/Edit/Write) or `tool_input.path` (Grep).
+  Codex sends NO file-path field (verified 2026-07-10): its hook payloads
+  carry `turn_id`/`tool_name`/`tool_use_id`/`tool_input`, and file edits
+  arrive as an apply_patch invocation in `tool_input.command` with
+  `tool_name: "apply_patch"`. `lib.sh:hook_affected_files` absorbs all of
+  it — direct fields first, then the apply_patch envelope headers
+  (`*** Update/Add/Delete File:`, `*** Move to:`; a multi-file patch yields
+  every path). `guard-secrets.sh` additionally token-scans plain shell
+  commands, best-effort — on Codex every file read is a shell command.
 - **Stop-loop guard**: Claude Code and Codex send `stop_hook_active` (bool);
-  Cursor sends `loop_count` (int). `lib.sh:hook_advise_once` handles both
-  and falls back to plain text for anything else.
+  Cursor sends `loop_count` (int). Codex requires JSON on Stop stdout when
+  the hook exits 0 — plain text is a protocol error there (schema fields
+  `decision`/`reason`/`continue`/`stopReason`; verified 2026-07-10) — so
+  `lib.sh:hook_advise_once` emits `{"decision":"block",...}` on the first
+  stop and a structured no-op on the second: `{"continue": true}` for the
+  `stop_hook_active` layout (Claude Code and Codex are indistinguishable on
+  stdin, and both accept that object) and `{}` for Cursor's `loop_count`
+  layout. Plain text remains only as the unknown-layout fallback.
 - **Deny semantics**: exit code 2 denies in Claude Code, Cursor, and Codex;
   JSON `{"decision":"block","reason":...}` (Claude Code, Codex) /
   `{"followup_message":...}` (Cursor) are only needed for the stop-hook
@@ -63,9 +77,16 @@ Policy stays in the portable scripts; the shim is one-time wiring.
   "can provide feedback before Codex continues" the same way. This is the
   channel `hook_feedback` (format.sh lint loop) uses.
 - **Cursor stdout caveat**: recent Cursor builds have been reported to
-  reject plain-text stdout from hooks with JSON parse errors. Re-test the
-  plain-stdout paths in `lib.sh` against a current Cursor build; emit JSON
-  from Cursor-wired hooks if the report holds.
+  reject plain-text stdout from hooks with JSON parse errors. The stop-hook
+  second pass now emits `{}` on the Cursor layout; the remaining plain-text
+  paths (unknown-layout fallbacks, `hook_feedback`'s Cursor arm) still need
+  re-testing against a current Cursor build.
+- **Interception is a guardrail, not a boundary**: Codex's docs state that
+  PreToolUse "is still a guardrail rather than a complete enforcement
+  boundary because Codex can often perform equivalent work through another
+  supported tool path" (verified 2026-07-10). The kit treats every pre-tool
+  guard that way: native permission/trust layers and the CI manifest check
+  are the enforcing layers.
 
 ## Per-provider notes
 
@@ -78,19 +99,25 @@ Policy stays in the portable scripts; the shim is one-time wiring.
 - **Cursor rules** (`.mdc`) want summarized key points inline, not just a
   pointer — keep the summary short and cite the canonical doc path;
   `check-harness.sh` verifies every cited path exists.
-- **Codex** hooks are **experimental** (shipped v0.114, 2026-03; disabled by
-  default behind `[features] codex_hooks = true` in config.toml; not
-  available on Windows — verified 2026-07; an earlier revision of this
-  matrix wrongly called them GA). Events include SessionStart, PreToolUse,
+- **Codex** hooks are **GA and enabled by default** (verified 2026-07-10;
+  disable with `[features] hooks = false` — `hooks` is the canonical
+  feature key and `codex_hooks` survives only as a deprecated alias; an
+  earlier revision of this matrix called them experimental/flag-gated,
+  which was true until mid-2026). Events include SessionStart, PreToolUse,
   PermissionRequest, PostToolUse, Pre/PostCompact, UserPromptSubmit,
-  SubagentStop, Stop; exit 2 blocks and its stderr reaches the model.
-  Project-local `.codex/` hooks and agents load only when the project is
-  trusted. Agent definitions are TOML (`name`, `description`,
-  `developer_instructions` required) — a markdown thin pointer won't load;
-  write a small TOML whose `developer_instructions` says "Read
-  docs/agents/<name>.md and follow it." Project skills are discovered via
-  `.agents/skills/`, so the `.agents` stubs cover Codex — don't generate
-  `.codex/skills/`.
+  SubagentStop, Stop; exit 2 blocks and its stderr reaches the model. Hook
+  configs support a `commandWindows`/`command_windows` override — the kit's
+  bash hooks still assume Git Bash or WSL on Windows. Stop hooks must print
+  JSON when exiting 0 (see the payload bullets above). Hook payloads carry
+  no file path — the guards parse apply_patch envelopes out of
+  `tool_input.command` (`lib.sh:hook_affected_files`) and secret protection
+  degrades to a best-effort shell-command token scan. Project-local
+  `.codex/` hooks and agents load only when the project is trusted. Agent
+  definitions are TOML (`name`, `description`, `developer_instructions`
+  required) — a markdown thin pointer won't load; write a small TOML whose
+  `developer_instructions` says "Read docs/agents/<name>.md and follow it."
+  Project skills are discovered via `.agents/skills/`, so the `.agents`
+  stubs cover Codex — don't generate `.codex/skills/`.
 - **OpenCode** reads skills from `.opencode/skills/`, `.claude/skills/`,
   *and* `.agents/skills/` — the kit's stubs are identical in all three, so
   duplicate loading is benign, but verify OpenCode isn't warning on
@@ -119,8 +146,9 @@ Primary docs to re-validate each section against (all last consulted
   <https://github.com/anthropics/claude-code/issues/34235>
 - Cursor hooks (event list — note there is no pre-edit event):
   <https://cursor.com/docs/hooks>
-- Codex hooks (experimental flag, events, exit codes):
-  <https://developers.openai.com/codex/hooks>
+- Codex hooks (payload fields, Stop JSON contract, exit codes):
+  <https://learn.chatgpt.com/docs/hooks>
+  (developers.openai.com/codex/hooks now 308-redirects here)
 - OpenCode permissions (`permission.read` pattern rules):
   <https://opencode.ai/docs/permissions/>
 - OpenCode plugins (the hook shim's API):
