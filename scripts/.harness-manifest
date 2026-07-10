@@ -13,4 +13,5 @@ a33584cf8f5eb2d8ca801c39dd3bfd33e61705aa38a54124ab87143c5183f173  scripts/hooks/
 64ffc3d31131869be2c06865d86492ccd6abac7533f39c0a512914a0c53a9d58  scripts/hooks/test-guard-secrets.sh
 fc63677ef0c575e3d56e1a98bad991a160d5a8e9f3a2b6adb03b2ba5459ec8ed  scripts/sync-agent-skills.sh
 b930414fa8687b1e23e547875b1a02b07999a91aa81a3353b3675ca4f41367a2  scripts/test-check-harness.sh
+e25aa1a1483fc03e4f5ca88a34e720470ec9fa2b1ba133cb34153541eca2f26d  scripts/test-template-sync.sh # tailored
 dd4cf602ac08b4f2a86e4f2ff88590294922f1323a0a57d19da530f125b34879  scripts/verify.sh # tailored

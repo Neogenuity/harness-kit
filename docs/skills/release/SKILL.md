@@ -33,7 +33,9 @@ templates being shipped, and an annotated tag pushed.
    **update** mode: replace manifest-matching files in `scripts/`, diff
    tailored ones), then re-pin `scripts/.harness-manifest` with the new
    version header and checksums (command in the SKILL's init step 8; set
-   `HARNESS_ALLOW_MECHANISM_EDITS=1` for the session).
+   `HARNESS_ALLOW_MECHANISM_EDITS=1` for the session). This step is
+   CI-enforced: `scripts/test-template-sync.sh` fails when a non-tailored
+   installed file differs from its template.
 5. `bash scripts/verify.sh` again — the manifest gate must pass post-re-pin.
 6. Commit `release: v<version>`, tag `v<version>` (annotated), push with
    `--follow-tags`.

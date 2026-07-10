@@ -55,7 +55,11 @@ lifecycle a user's repo does:
    bumped — the same "advise, never block" philosophy the kit ships.
 3. Roll the change into the root installation via the kit's **update** mode:
    files whose checksum still matches `scripts/.harness-manifest` are
-   replaced; tailored files get a diff, never an overwrite.
+   replaced; tailored files get a diff, never an overwrite. Forgetting this
+   step fails CI: `scripts/test-template-sync.sh` (root-only, run by
+   `check-harness.sh`) requires every non-tailored installed file to be
+   byte-identical to its template — see
+   [ADR 006](decisions/006-dogfood-copies-are-enforced-duplicates.md).
 4. `scripts/verify.sh` (shellcheck → manifest JSON → template regression
    tests → `check-harness.sh`) gates the release; CI runs the same gates.
 
