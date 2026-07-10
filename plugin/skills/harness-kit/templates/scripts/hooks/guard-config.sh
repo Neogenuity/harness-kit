@@ -40,6 +40,7 @@ scripts/.harness-manifest
 .cursor/hooks.json
 .codex/hooks.json
 .opencode/plugins/*
+opencode.json
 .github/workflows/harness-check.yml
 "
 # PROTECTED_PATHS="$PROTECTED_PATHS .eslintrc* eslint.config.* biome.json ruff.toml pint.json .php-cs-fixer.php phpstan.neon"

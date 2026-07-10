@@ -44,6 +44,7 @@ run 2 "check-harness.sh edit denied"     "$(payload "$WORK/scripts/check-harness
 run 2 "manifest edit denied"             "$(payload "$WORK/scripts/.harness-manifest")"
 run 2 "regression test edit denied"      "$(payload "$WORK/scripts/test-check-harness.sh")"
 run 2 "hook wiring edit denied"          "$(payload "$WORK/.claude/settings.json")"
+run 2 "opencode.json edit denied"        "$(payload "$WORK/opencode.json")"
 run 2 "relative path denied"             "$(payload "scripts/hooks/guard-secrets.sh")"
 run 2 "Cursor layout denied"             "$(cursor_payload "$WORK/scripts/sync-agent-skills.sh")"
 

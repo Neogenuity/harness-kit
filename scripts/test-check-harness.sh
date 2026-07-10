@@ -114,6 +114,17 @@ EOF
 { "permission": { "read": { "**/.env": "deny", "**/auth.json": "deny" } } }
 EOF
     assert_ok "opencode.json mirroring every pattern passes" "$W"
+
+    # --- deleting a wired provider's native deny file is an error, not a skip ---
+    W=$(new_fixture)
+    printf 'SECRET_PATTERNS=".env"\n' > "$W/scripts/harness.conf"
+    mkdir -p "$W/.opencode/skills"
+    assert_flags "wired .opencode/ without opencode.json is flagged" "$W" "opencode.json is missing"
+
+    W=$(new_fixture)
+    printf 'SECRET_PATTERNS=".env"\n' > "$W/scripts/harness.conf"
+    mkdir -p "$W/.claude/skills"
+    assert_flags "wired .claude/ without settings.json is flagged" "$W" ".claude/settings.json is missing"
 fi
 
 if [ "$fails" -gt 0 ]; then

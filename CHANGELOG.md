@@ -16,6 +16,17 @@ All notable changes to harness-kit. Versions refer to
 - **Docs:** README rewritten around the one-line value proposition;
   architecture overview and five decision records added; MIT license,
   CONTRIBUTING, and `llms.txt` added.
+- **Mechanism hardening (from adversarial review):** `check-harness.sh`
+  check #6 now also runs top-level mechanism tests (`scripts/test-*.sh`);
+  new check #8b verifies OpenCode's `opencode.json permission.read` against
+  `SECRET_PATTERNS`; checks #8/#8b now error (instead of silently skipping)
+  when a wired `.claude/` or `.opencode/` is missing its native deny-list
+  file; `guard-config.sh` protects `opencode.json`; the Claude deny-list
+  template covers root-level `*.pem`/`id_rsa`/`id_ed25519`; every
+  `SECRET_PATTERNS` entry now has a `test-guard-secrets.sh` case; the
+  version-bump stop-hook compares version values against HEAD. Update-mode
+  note: `check-harness.sh` and the test scripts are mechanism (replaced on
+  checksum match); `settings.json`/`opencode.json` are policy (diffed).
 
 ## 0.2.0 — 2026-07-08
 

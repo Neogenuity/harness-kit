@@ -159,36 +159,47 @@ fi
 #    the two layers drifting apart is a silent hole. Matching is substring-
 #    based (a deny entry mentioning the pattern counts) — this detects drift,
 #    it does not prove equivalence. Skipped when jq or the conf vars are
-#    absent (pre-0.2.0 installs).
-if command -v jq >/dev/null 2>&1 && [ -n "${SECRET_PATTERNS:-}" ] \
-    && [ -f "$ROOT/.claude/settings.json" ]; then
-    deny_list=$(jq -r '.permissions.deny[]? // empty' "$ROOT/.claude/settings.json" 2>/dev/null)
-    set -f
-    for pat in $SECRET_PATTERNS; do
-        if ! printf '%s\n' "$deny_list" | grep -qF "$pat"; then
-            echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching Read(...) entry in .claude/settings.json permissions.deny — add one; the native deny list must mirror the guard"
-            ERRORS=$((ERRORS + 1))
-        fi
-    done
-    set +f
+#    absent (pre-0.2.0 installs) — but a wired .claude/ with the settings
+#    file deleted is an ERROR, not a skip: removing the file would silently
+#    remove the backstop along with the check that notices.
+if command -v jq >/dev/null 2>&1 && [ -n "${SECRET_PATTERNS:-}" ]; then
+    if [ -f "$ROOT/.claude/settings.json" ]; then
+        deny_list=$(jq -r '.permissions.deny[]? // empty' "$ROOT/.claude/settings.json" 2>/dev/null)
+        set -f
+        for pat in $SECRET_PATTERNS; do
+            if ! printf '%s\n' "$deny_list" | grep -qF "$pat"; then
+                echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching Read(...) entry in .claude/settings.json permissions.deny — add one; the native deny list must mirror the guard"
+                ERRORS=$((ERRORS + 1))
+            fi
+        done
+        set +f
+    elif [ -d "$ROOT/.claude" ]; then
+        echo "ERROR: .claude/ is wired but .claude/settings.json is missing — it carries the native secret deny list (guard-secrets.sh's backstop); restore it or remove the provider dir"
+        ERRORS=$((ERRORS + 1))
+    fi
 fi
 
 # 8b. Same drift check for OpenCode's native deny list (opencode.json
 #     permission.read). guard-secrets.sh only fires where hooks run; this
 #     native list is the backstop for OpenCode, so it must mirror the same
-#     patterns. Substring-based, like check #8; skipped when jq or the file
-#     is absent.
-if command -v jq >/dev/null 2>&1 && [ -n "${SECRET_PATTERNS:-}" ] \
-    && [ -f "$ROOT/opencode.json" ]; then
-    oc_deny=$(jq -r '.permission.read // {} | to_entries[]? | select(.value == "deny") | .key' "$ROOT/opencode.json" 2>/dev/null)
-    set -f
-    for pat in $SECRET_PATTERNS; do
-        if ! printf '%s\n' "$oc_deny" | grep -qF "$pat"; then
-            echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching \"deny\" entry in opencode.json permission.read — add one; the native deny list must mirror the guard"
-            ERRORS=$((ERRORS + 1))
-        fi
-    done
-    set +f
+#     patterns. Substring-based, like check #8; skipped when jq or the conf
+#     vars are absent — but a wired .opencode/ with opencode.json deleted is
+#     an ERROR, not a skip (same reasoning as #8).
+if command -v jq >/dev/null 2>&1 && [ -n "${SECRET_PATTERNS:-}" ]; then
+    if [ -f "$ROOT/opencode.json" ]; then
+        oc_deny=$(jq -r '.permission.read // {} | to_entries[]? | select(.value == "deny") | .key' "$ROOT/opencode.json" 2>/dev/null)
+        set -f
+        for pat in $SECRET_PATTERNS; do
+            if ! printf '%s\n' "$oc_deny" | grep -qF "$pat"; then
+                echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching \"deny\" entry in opencode.json permission.read — add one; the native deny list must mirror the guard"
+                ERRORS=$((ERRORS + 1))
+            fi
+        done
+        set +f
+    elif [ -d "$ROOT/.opencode" ]; then
+        echo "ERROR: .opencode/ is wired but opencode.json is missing — it carries OpenCode's native secret deny list (guard-secrets.sh's backstop); restore it or remove the provider dir"
+        ERRORS=$((ERRORS + 1))
+    fi
 fi
 
 # 9. Mechanism files must match scripts/.harness-manifest (kit version plus

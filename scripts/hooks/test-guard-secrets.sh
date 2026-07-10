@@ -53,6 +53,7 @@ run 2 "AUTH.JSON (upper) denied"     "$(payload "$WORK/AUTH.JSON")"
 run 2 "credentials.json denied"      "$(payload "$WORK/credentials.json")"
 run 2 "server.pem denied"            "$(payload "$WORK/server.pem")"
 run 2 "id_rsa denied"                "$(payload "$WORK/id_rsa")"
+run 2 "id_ed25519 denied"            "$(payload "$WORK/id_ed25519")"
 run 2 "Cursor layout .env denied"    "$(cursor_payload "$WORK/.env")"
 run 2 "Grep path at .env denied"     "$(grep_payload "$WORK/.env")"
 
