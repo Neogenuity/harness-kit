@@ -55,11 +55,13 @@ set -f
 
 # $pat is deliberately unquoted in the case patterns below: the protected
 # list is globs, and case-glob matching is the point. Apply_patch paths are
-# repo-relative already; absolute paths get the ROOT prefix stripped so both
-# match the same globs.
+# repo-relative already; absolute paths get the ROOT prefix stripped, and a
+# leading ./ is stripped too (the envelope text is model-written, so
+# `./scripts/…` occurs) — all three forms match the same globs.
 check_file() {
     local file="$1" rel base pat hit
     rel="${file#"$ROOT"/}"
+    rel="${rel#./}"
     base=$(basename "$rel")
     for pat in $PROTECTED_PATHS; do
         hit=0

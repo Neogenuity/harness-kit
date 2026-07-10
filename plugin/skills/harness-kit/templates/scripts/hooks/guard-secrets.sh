@@ -95,10 +95,13 @@ done < <(printf '%s\n' "$files")
 # Best-effort token scan of the shell command itself (see Scope above).
 # apply_patch envelopes are stripped first: their file headers were already
 # checked by the loop above, and patch *content* merely mentioning `.env`
-# (docs, comments, this very hook's source) is not a read.
+# (docs, comments, this very hook's source) is not a read. Begin Patch is
+# matched anywhere in the line — the direct-argument form
+# (`apply_patch '*** Begin Patch…`) puts it mid-line after the quote, and
+# over-stripping only narrows a best-effort scan, the right side to err on.
 if [ -n "$cmd" ]; then
     stripped=$(printf '%s\n' "$cmd" \
-        | awk '/^\*\*\* Begin Patch/{skip=1} !skip{print} /^\*\*\* End Patch/{skip=0}')
+        | awk '/\*\*\* Begin Patch/{skip=1} !skip{print} /^\*\*\* End Patch/{skip=0}')
     while IFS= read -r tok; do
         [ -n "$tok" ] && check_path "$tok"
     done < <(printf '%s\n' "$stripped" | tr -s "[:space:];|&<>()=\"'\`" '\n')

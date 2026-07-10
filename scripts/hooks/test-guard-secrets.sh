@@ -109,6 +109,9 @@ run 2 "Codex patch: rename onto .env denied"     "$(codex_patch "*** Update File
 run 0 "Codex patch: body mentioning .env allowed (envelope stripped)" "$(codex_patch "*** Update File: $WORK/notes-about-env.md
 @@
 +See .env for configuration")"
+# Direct-argument form puts '*** Begin Patch' mid-line after the quote —
+# the strip must still engage or the body's .env token would false-deny.
+run 0 "Codex patch: direct-arg body mentioning .env allowed" "$(jq -cn --arg c "$(printf "apply_patch '*** Begin Patch\n*** Update File: %s\n@@\n+See .env for configuration\n*** End Patch'" "$WORK/notes-about-env.md")" '{tool_input: {command: $c}}')"
 run 0 "Codex patch: ordinary file allowed"       "$(codex_patch "*** Update File: $WORK/config.php
 @@
 +x")"

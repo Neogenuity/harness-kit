@@ -69,6 +69,9 @@ run 2 "Codex patch: multi-file, manifest second" "$(codex_patch '*** Update File
 *** Update File: scripts/.harness-manifest
 @@
 +y')"
+run 2 "Codex patch: dot-slash prefixed path denied" "$(codex_patch '*** Update File: ./scripts/hooks/lib.sh
+@@
++x')"
 run 0 "Codex patch: ordinary file allowed"       "$(codex_patch '*** Update File: src/app.php
 @@
 +x')"
