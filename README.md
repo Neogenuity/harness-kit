@@ -72,26 +72,59 @@ a Sources section to re-check against):
 
 ## Install
 
-**As a Claude Code plugin** (recommended — versioned, updatable):
+The kit itself is one Agent Skill (`plugin/skills/harness-kit/`) — install
+it into whichever agent will *run* the scaffolding. What it installs into
+your repo is vendored and provider-agnostic either way: a harness
+scaffolded from Claude Code works identically for Codex, Cursor, and
+OpenCode sessions in that repo, and vice versa.
+
+**Claude Code, as a plugin** (recommended — versioned, updatable via
+`/plugin marketplace update`):
 
 ```
 /plugin marketplace add riotCode/harness-kit
 /plugin install harness-kit@harness-kit
 ```
 
-**As a personal skill** (no plugin infrastructure):
+Private marketplace repos work: installs and manual updates reuse your git
+credentials (SSH key loaded in `ssh-agent`, or HTTPS via `gh auth login` /
+credential helper); background auto-update additionally needs a
+`GITHUB_TOKEN`/`GH_TOKEN` in the environment (verified 2026-07,
+[plugin-marketplaces docs](https://code.claude.com/docs/en/plugin-marketplaces)).
+
+**Claude Code, as a personal skill** (no plugin infrastructure):
 
 ```bash
-cp -R plugin/skills/harness-kit ~/.claude/skills/harness-kit
+git clone git@github.com:riotCode/harness-kit.git
+cp -R harness-kit/plugin/skills/harness-kit ~/.claude/skills/harness-kit
 ```
+
+**Codex** discovers personal skills in `~/.agents/skills` (verified
+2026-07, [build-skills docs](https://learn.chatgpt.com/docs/build-skills)):
+
+```bash
+git clone git@github.com:riotCode/harness-kit.git
+cp -R harness-kit/plugin/skills/harness-kit ~/.agents/skills/harness-kit
+```
+
+Copied installs update by `git pull` + re-copy. To offer the kit inside a
+single repo instead, vendor the same directory at
+`.agents/skills/harness-kit` — Codex and OpenCode read repo-level skills
+from `.agents/skills/`.
+
+One soft dependency: the installed hooks use `jq` to parse event payloads
+and **fail open without it** — keep `jq` on PATH wherever agents run, or
+the guards guard nothing.
 
 ## Use
 
 In any repo: *"set up the agent harness"* (init), *"audit the agent
 harness"* (audit), *"add a harness skill for X"*, or *"upgrade the harness
-machinery"* (update). The skill intentionally interviews before writing:
-quality gates, conventions worth documenting, first skills, and the one
-domain invariant worth an advisory stop-hook.
+machinery"* (update). On Codex, `$harness-kit` mentions the skill
+explicitly (or pick it from `/skills`) when implicit matching doesn't
+trigger. The skill intentionally interviews before writing: quality gates,
+conventions worth documenting, first skills, and the one domain invariant
+worth an advisory stop-hook.
 
 ## Layout
 
@@ -105,14 +138,18 @@ scripts/, .claude/ .cursor/ ...   (see "This repo runs on itself")
 
 ## Status
 
-v0.3.0, extracted and generalized from a production Laravel modular
+v0.4.0, extracted and generalized from a production Laravel modular
 monolith where the pattern is exercised daily across multiple harnesses.
 Pre-launch checklist:
 
 - [x] MIT license
 - [x] Self-application (this repo runs its own harness, CI-gated)
-- [ ] Re-verify the provider matrix against current harness docs (hook
-      event names are still evolving; last validated 2026-07)
+- [x] Re-verify the provider matrix against current harness docs
+      (re-validated 2026-07-10; hook event names are still evolving — check
+      the per-fact stamps before wiring a provider you haven't used lately)
+- [x] Tag releases (`v0.1.0`–`v0.4.0`, retroactive on their release
+      commits; update mode recovers old templates by the tag matching the
+      manifest header)
 - [ ] Demo recording of `init` on a fresh repo
 - [ ] Move to the `neogenuity` org and update install commands
 

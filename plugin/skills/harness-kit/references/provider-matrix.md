@@ -117,7 +117,11 @@ Policy stays in the portable scripts; the shim is one-time wiring.
   required) — a markdown thin pointer won't load; write a small TOML whose
   `developer_instructions` says "Read docs/agents/<name>.md and follow it."
   Project skills are discovered via `.agents/skills/`, so the `.agents`
-  stubs cover Codex — don't generate `.codex/skills/`.
+  stubs cover Codex — don't generate `.codex/skills/`. Personal
+  (user-level) skills load from `~/.agents/skills` (verified 2026-07-10) —
+  that's where to copy this kit's own skill directory to run it *from*
+  Codex; invoke with a `$<name>` mention or `/skills` when implicit
+  matching doesn't trigger.
 - **OpenCode** reads skills from `.opencode/skills/`, `.claude/skills/`,
   *and* `.agents/skills/` — the kit's stubs are identical in all three, so
   duplicate loading is benign, but verify OpenCode isn't warning on
@@ -149,6 +153,8 @@ Primary docs to re-validate each section against (all last consulted
 - Codex hooks (payload fields, Stop JSON contract, exit codes):
   <https://learn.chatgpt.com/docs/hooks>
   (developers.openai.com/codex/hooks now 308-redirects here)
+- Codex skills (discovery dirs incl. user-level `~/.agents/skills`,
+  invocation): <https://learn.chatgpt.com/docs/build-skills>
 - OpenCode permissions (`permission.read` pattern rules):
   <https://opencode.ai/docs/permissions/>
 - OpenCode plugins (the hook shim's API):
