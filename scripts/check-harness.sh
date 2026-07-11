@@ -284,37 +284,37 @@ fi
 #    (integrity), but never auto-replaced by the kit's update mode and exempt
 #    from template-equality checks (ownership) — the marker changes who may
 #    rewrite the file, not whether edits must be pinned.
-#    A *missing or emptied* manifest in an already-adopted repo (scripts/hooks/
-#    present) is itself an ERROR, not a skip: shell edits (rm, sed -i, `: >`) are
-#    unscanned by the guards by design, so this manifest is the enforcing layer
-#    for them — silently accepting its deletion (or truncation to a header-only
-#    file, which sha256_of still hashes to a real digest) would collapse that
-#    layer. A brand-new repo that has not run init yet (no scripts/hooks/) still
-#    skips.
+#    Because shell edits (rm, sed -i, `: >`) are unscanned by the guards by
+#    design, this manifest is the enforcing layer for them — so it is defended on
+#    three fronts, all against an adopted repo (scripts/hooks/ present): (9b) a
+#    missing / emptied / all-malformed manifest is an ERROR, not a silent skip;
+#    (9a) a nonempty malformed line does not count as a pin; and (9c) every
+#    mechanism file on disk must be pinned, so *partial* pin deletion (un-pinning
+#    one guard while leaving others) is caught. A brand-new repo that has not run
+#    init yet (no scripts/hooks/) still skips.
 sha256_of() {
     if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
     elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
     fi
 }
-# Count real (non-comment, non-blank) pinned entries — sha-tool-independent, so a
-# jq/sha-less host still catches an emptied manifest. Zero entries in an adopted
-# repo is the collapse case; an empty file passes the [ -n "$(sha256_of …)" ]
-# guard below (sha256 of "" is a valid digest) and would otherwise verify nothing.
-manifest_pins=0
-[ -f "$ROOT/scripts/.harness-manifest" ] \
-    && manifest_pins=$(grep -cvE '^[[:space:]]*#|^[[:space:]]*$' "$ROOT/scripts/.harness-manifest" 2>/dev/null)
-if [ -d "$ROOT/scripts/hooks" ] && [ "${manifest_pins:-0}" -eq 0 ]; then
-    echo "ERROR: harness is adopted (scripts/hooks/ present) but scripts/.harness-manifest is missing or has no pinned entries — it is the integrity pin for the mechanism (the enforcing layer for shell edits the guards can't scan); a deleted or emptied manifest lets guards be rewritten undetected. Restore it (re-pin per the kit's init step 8)"
-    ERRORS=$((ERRORS + 1))
-fi
-if [ -f "$ROOT/scripts/.harness-manifest" ] && [ -n "$(sha256_of "$ROOT/scripts/.harness-manifest")" ]; then
+MANIFEST="$ROOT/scripts/.harness-manifest"
+
+# 9a. Verify each pinned file, and REJECT malformed entries. A well-formed line is
+#     "<64-hex sha256>  <path>"; a nonempty garbage line (e.g. `x`) must not count
+#     as a pin — otherwise it would satisfy the adopted-repo guard (9b) while
+#     enforcing nothing. valid_pins counts only well-formed entries.
+valid_pins=0
+if [ -f "$MANIFEST" ] && [ -n "$(sha256_of "$MANIFEST")" ]; then
     while IFS= read -r line; do
-        case "$line" in
-            \#*|"") continue ;;
-        esac
+        case "$line" in \#*|"") continue ;; esac
         want=${line%% *}
         path=$(printf '%s\n' "$line" | awk '{print $2}')
-        [ -n "$path" ] || continue
+        if ! printf '%s' "$want" | grep -qE '^[0-9a-fA-F]{64}$' || [ -z "$path" ]; then
+            echo "ERROR: scripts/.harness-manifest has a malformed entry (expected '<sha256>  <path>'): '$line'"
+            ERRORS=$((ERRORS + 1))
+            continue
+        fi
+        valid_pins=$((valid_pins + 1))
         if [ ! -f "$ROOT/$path" ]; then
             echo "ERROR: scripts/.harness-manifest lists '$path' but it does not exist — restore the file or remove the manifest line"
             ERRORS=$((ERRORS + 1))
@@ -330,7 +330,41 @@ if [ -f "$ROOT/scripts/.harness-manifest" ] && [ -n "$(sha256_of "$ROOT/scripts/
             esac
             ERRORS=$((ERRORS + 1))
         fi
-    done < "$ROOT/scripts/.harness-manifest"
+    done < "$MANIFEST"
+fi
+
+# 9b. An adopted repo (scripts/hooks/ present) must have a manifest carrying at
+#     least one VALID pin. Catches a missing, emptied/header-only, or all-malformed
+#     manifest — each collapses the enforcing layer for shell edits. Pre-adoption
+#     repos (no scripts/hooks/) still skip.
+if [ -d "$ROOT/scripts/hooks" ] && [ "$valid_pins" -eq 0 ]; then
+    echo "ERROR: harness is adopted (scripts/hooks/ present) but scripts/.harness-manifest is missing or has no valid pinned entries — it is the integrity pin for the mechanism (the enforcing layer for shell edits the guards can't scan); a deleted, emptied, or malformed manifest lets guards be rewritten undetected. Restore it (re-pin per the kit's init step 8)"
+    ERRORS=$((ERRORS + 1))
+fi
+
+# 9c. Manifest COMPLETENESS: every mechanism file present on disk must be pinned.
+#     The expected set is derived from the FILESYSTEM, not the manifest (which is
+#     what an attacker edits) — a file must be on disk to run, so if it is on disk
+#     it must be pinned. This closes *partial* pin deletion: removing the manifest
+#     line for a still-present guard (leaving other pins, so 9b passes) would
+#     otherwise silently exempt that guard from checksum verification. The set
+#     mirrors install-lib.sh's _HARNESS_MECHANISM_TOPLEVEL + the hooks/ tree.
+#     Gated on scripts/hooks/ present (adopted): to dodge it an attacker would
+#     have to delete the hooks tree — i.e. the guards themselves — which defeats
+#     the point. (Also keeps pre-adoption / minimal fixtures out of scope.)
+if [ -f "$MANIFEST" ] && [ -d "$ROOT/scripts/hooks" ]; then
+    pinned_paths=$(awk '$1 ~ /^[0-9a-fA-F]{64}$/ {print $2}' "$MANIFEST")
+    for mech in "$ROOT"/scripts/hooks/* \
+                "$ROOT"/scripts/harness.conf "$ROOT"/scripts/check-harness.sh \
+                "$ROOT"/scripts/sync-agent-skills.sh "$ROOT"/scripts/install-lib.sh \
+                "$ROOT"/scripts/verify.sh "$ROOT"/scripts/test-*.sh; do
+        [ -f "$mech" ] || continue
+        rel="scripts/${mech#"$ROOT"/scripts/}"
+        printf '%s\n' "$pinned_paths" | grep -qxF "$rel" || {
+            echo "ERROR: mechanism file '$rel' is present but not pinned in scripts/.harness-manifest — every mechanism file on disk must be integrity-pinned; an unpinned file is silently exempt from checksum verification. Re-pin it (init step 8)"
+            ERRORS=$((ERRORS + 1))
+        }
+    done
 fi
 
 # 10. Doctor: conditions that silently weaken the harness. Warnings only —

@@ -31,18 +31,31 @@ mechanism it exercises are closed.
   ` # tailored`, since its patterns are repo-specific), so an un-re-pinned edit
   fails CI like every other policy file. **Migration:** `update` gains a
   `harness.conf` line in the manifest; re-pin after tailoring `SECRET_PATTERNS`.
-- **A missing manifest is now an ERROR once the harness is adopted** (verified
-  finding). `check-harness.sh` check #9 silently skipped its whole checksum
-  block when `scripts/.harness-manifest` was absent — so deleting the manifest
-  (the enforcing layer for shell edits the guards can't scan) collapsed
-  integrity checking with exit 0. It now ERRORs when `scripts/hooks/` is present
-  but the manifest is gone, while a genuinely pre-adoption repo still passes.
+- **Manifest integrity hardened on three fronts** (verified findings, incl. a
+  multi-model review round). `check-harness.sh` check #9 previously only verified
+  the files the manifest *did* pin, so an adopted repo's manifest could be
+  gutted by shell edit to disarm a guard while CI stayed green. Now, when
+  `scripts/hooks/` is present: (a) a missing / emptied / all-malformed manifest
+  is an ERROR, not a silent skip; (b) a nonempty malformed line no longer counts
+  as a pin; and (c) **completeness** — every mechanism file on disk must be
+  pinned (the expected set is derived from the filesystem, not the manifest), so
+  *partial* pin deletion (un-pinning one guard while leaving others) is caught.
+  A genuinely pre-adoption repo still passes.
+- **Update mechanics corrected** (review round). `harness_update_apply` now (i)
+  treats policy files (`verify.sh`, `harness.conf`, `format.sh`, `guard-secrets.sh`,
+  `guard-project-policy.sh`) as diff-only even when pristine and unmarked — never
+  auto-overwriting them (SKILL update step 3) — and (ii) installs mechanism files
+  the new kit ships that an older install's manifest can't list, so a `0.6`→`0.7`
+  upgrade actually picks up `install-lib.sh`/`test-install.sh`. `harness_repin_manifest`
+  carries forward tailored pins the shipped producer doesn't emit (a repo's own
+  local gates), so a re-pin never silently drops a project-added integrity pin.
 - **`install-lib.sh` added to `guard-config.sh`'s protected paths** (mechanism,
   with a `test-guard-config.sh` case) and **check #6 skips only `test-install.sh`
-  when nested** (via `HARNESS_NESTED_FIXTURE`, set by `test-install.sh`) so the
-  fixture suite can run `check-harness.sh` inside a throwaway install without
-  recursing — every other regression test, the guard behavioral checks included,
-  still runs, so no single env var can switch off the regression layer.
+  and `test-check-harness.sh` when nested** (via `HARNESS_NESTED_FIXTURE`, set by
+  `test-install.sh`) so the fixture suite can run `check-harness.sh` inside a
+  throwaway install without recursing — every other regression test, the guard
+  behavioral checks included, still runs, so no single env var can switch off the
+  regression layer.
 
 ## 0.6.0 — 2026-07-11
 

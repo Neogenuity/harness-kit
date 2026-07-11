@@ -192,6 +192,50 @@ else
 fi
 rm -rf "$F"
 
+# --- completeness: partial pin deletion of a still-present guard is caught ------
+# Removing only one guard's manifest line (leaving other pins, so the emptied-
+# manifest guard doesn't fire) must still ERROR — every mechanism file on disk
+# must be pinned, or an attacker could un-pin then rewrite a single guard.
+F=$(make_fixture)
+grep -v 'scripts/hooks/guard-secrets.sh' "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
+mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
+out=$(bash "$F/scripts/check-harness.sh" 2>&1); rc=$?
+if [ "$rc" != "0" ] && printf '%s' "$out" | grep -qF "guard-secrets.sh' is present but not pinned"; then
+    pass "completeness: a present-but-unpinned mechanism file is flagged"
+else
+    fail "completeness: partial pin deletion was not caught (rc=$rc)" "$out"
+fi
+rm -rf "$F"
+
+# --- policy files are diff-only in update, even pristine + unmarked ------------
+# guard-secrets.sh is a policy file (SKILL update step 3): a kit change to it must
+# be diffed, never auto-applied, regardless of the '# tailored' marker.
+F=$(make_fixture)
+NEWKIT=$(mktemp -d); cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/hooks/guard-secrets.sh"
+harness_update_apply "$NEWKIT/scripts" "$F" >/dev/null
+if ! grep -q "KIT CHANGE" "$F/scripts/hooks/guard-secrets.sh"; then
+    pass "policy diff-only: update does not auto-replace a pristine guard-secrets.sh"
+else
+    fail "policy diff-only: guard-secrets.sh was auto-replaced by update"
+fi
+rm -rf "$F" "$NEWKIT"
+
+# --- update installs newly-shipped mechanism files (v0.6 -> v0.7 migration) ----
+# An old install's manifest can't list a file the previous kit didn't ship;
+# update must still add it so the re-pin covers it and check #6/#9 run/verify it.
+F=$(make_fixture)
+rm "$F/scripts/install-lib.sh"
+grep -v 'scripts/install-lib.sh' "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
+mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
+harness_update_apply "$SCRIPTS_DIR" "$F" >/dev/null
+if [ -f "$F/scripts/install-lib.sh" ]; then
+    pass "migration: update re-adds a newly-shipped mechanism file absent from the target"
+else
+    fail "migration: update did not add the missing mechanism file"
+fi
+rm -rf "$F"
+
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails install-mechanism case(s)"
     exit 1
