@@ -3,6 +3,32 @@
 All notable changes to harness-kit. Versions refer to
 `plugin/.claude-plugin/plugin.json`.
 
+## 0.4.1 — 2026-07-10
+
+- **Codex apply_patch guard bypass (found by real-payload capture):** a live
+  Codex 0.144.1 payload — reconciled against the generated hook schemas
+  (`openai/codex: codex-rs/hooks/schema/generated`) — showed that a file edit
+  arrives as the **bare** apply_patch envelope (`*** Begin Patch` … `*** End
+  Patch`) directly in `tool_input.command`, with the tool identity carried in
+  `tool_name`; the literal `apply_patch` is **not** in the command. But
+  `lib.sh:hook_affected_files` gated on `case "$cmd" in *apply_patch*)`, so it
+  extracted nothing from a real Codex edit — making `guard-config.sh`,
+  `format.sh`, and `guard-secrets.sh`'s write-side denial silent no-ops on
+  Codex. Impact: an agent on Codex could edit protected harness mechanism
+  (e.g. `scripts/hooks/lib.sh`) or write a secret file via apply_patch
+  **undenied**. Fix: the gate now also recognizes the bare envelope marker
+  (`*** Begin Patch`); the shell-wrapper form still works. One line in
+  `lib.sh`.
+- **Why CI stayed green:** every Codex apply_patch fixture used the
+  `apply_patch <<'EOF'` wrapper form (which contains the literal), so the
+  wrong envelope shape was never exercised. Bare-envelope regression cases are
+  added to `test-affected-files.sh`, `test-guard-config.sh`, and
+  `test-guard-secrets.sh`; the affected-files/guard fixture comments now cite
+  the captured payload as the source of truth.
+- Update-mode note: `lib.sh` and the three `test-*.sh` files are mechanism
+  (replaced on checksum match). Take the kit update and re-pin
+  `scripts/.harness-manifest`; behavior-only change, no config migration.
+
 ## 0.4.0 — 2026-07-10
 
 - **Codex protocol correctness (from adversarial review, validated against

@@ -35,9 +35,13 @@ hook_command_string() {
 # Codex sends NO file-path field — file edits arrive as an apply_patch
 # invocation inside `tool_input.command` — so parse the patch envelope's
 # file headers (Update/Add/Delete File, Move to; a multi-file patch yields
-# multiple lines). jq -r turns the payload's \n escapes into real newlines
-# whatever the shell quoting (<<'EOF', <<EOF, or a single-argument string),
-# so the headers always sit at line start.
+# multiple lines). A real Codex payload carries the BARE patch envelope
+# (`*** Begin Patch` … `*** End Patch`) directly in the command — the tool
+# identity is in `tool_name`, so the literal "apply_patch" is often absent
+# (verified against a real Codex payload, 2026-07); the shell-wrapper form
+# (`apply_patch <<'EOF' …`) also occurs. jq -r turns the payload's \n
+# escapes into real newlines whatever the shell quoting (<<'EOF', <<EOF, or
+# a single-argument string), so the headers always sit at line start.
 #
 # Callers looping over the result MUST use process substitution
 # (`while read … done < <(printf '%s\n' "$files")`), never a pipeline —
@@ -52,7 +56,10 @@ hook_affected_files() {
         return 0
     fi
     cmd=$(hook_command_string)
-    case "$cmd" in *apply_patch*) ;; *) return 0 ;; esac
+    # Gate on the bare envelope marker as well as the "apply_patch" wrapper
+    # literal — a real Codex apply_patch command is the bare patch body and
+    # need not contain "apply_patch" (see the header note above).
+    case "$cmd" in *apply_patch*|*'*** Begin Patch'*) ;; *) return 0 ;; esac
     printf '%s\n' "$cmd" | awk '
         /^\*\*\* (Update|Add|Delete) File: / { sub(/^\*\*\* (Update|Add|Delete) File: /, ""); print; next }
         /^\*\*\* Move to: /                  { sub(/^\*\*\* Move to: /, ""); print }

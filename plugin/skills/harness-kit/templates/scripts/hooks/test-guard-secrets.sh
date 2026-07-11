@@ -83,6 +83,12 @@ codex_patch() {
     jq -cn --arg c "$(printf "apply_patch <<'EOF'\n*** Begin Patch\n%s\n*** End Patch\nEOF" "$1")" \
         '{turn_id: "t1", tool_name: "apply_patch", tool_use_id: "c1", tool_input: {command: $c}}'
 }
+# Real Codex form: the BARE envelope, no "apply_patch" wrapper literal in the
+# command (tool_name carries the identity) — the shape a live capture showed.
+codex_patch_bare() {
+    jq -cn --arg c "$(printf '*** Begin Patch\n%s\n*** End Patch' "$1")" \
+        '{turn_id: "t1", tool_name: "apply_patch", tool_use_id: "c1", tool_input: {command: $c}}'
+}
 
 run 2 "Codex shell: cat .env denied"             "$(codex_shell "cat $WORK/.env")"
 run 2 "Codex shell: compound command denied"     "$(codex_shell "ls -la && cat $WORK/auth.json")"
@@ -115,6 +121,17 @@ run 0 "Codex patch: direct-arg body mentioning .env allowed" "$(jq -cn --arg c "
 run 0 "Codex patch: ordinary file allowed"       "$(codex_patch "*** Update File: $WORK/config.php
 @@
 +x")"
+# Real Codex form (bare envelope, no "apply_patch" literal): the write-side
+# denial rides on hook_affected_files, so the bare shape must engage too.
+run 2 "Codex bare patch: Update File .env denied" "$(codex_patch_bare "*** Update File: $WORK/.env
+@@
++SECRET=2")"
+run 0 "Codex bare patch: ordinary file allowed"   "$(codex_patch_bare "*** Update File: $WORK/config.php
+@@
++x")"
+run 0 "Codex bare patch: body mentioning .env allowed (envelope stripped)" "$(codex_patch_bare "*** Update File: $WORK/notes-about-env.md
+@@
++See .env for configuration")"
 
 # --- harness.conf is the authoritative pattern source ---
 # A tailored conf fully replaces the defaults: its own globs deny/allow, and

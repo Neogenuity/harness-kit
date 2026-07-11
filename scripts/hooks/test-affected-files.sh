@@ -3,12 +3,17 @@
 # the payload-normalization layer every guard rides on. Runnable standalone
 # and in CI.
 #
-# The Codex cases are built from the documented hook schema
-# (https://learn.chatgpt.com/docs/hooks): payloads carry turn_id/tool_name/
-# tool_use_id/tool_input, file edits arrive as an apply_patch invocation in
-# tool_input.command, and there is NO file_path field. The docs show no
-# verbatim payload example, so if a captured real payload ever differs, fix
-# the builders below — the guard tests reuse the same shapes.
+# The Codex cases match a real captured Codex payload (2026-07) reconciled
+# against the generated hook schemas
+# (openai/codex: codex-rs/hooks/schema/generated) and
+# https://learn.chatgpt.com/docs/hooks: payloads carry turn_id/tool_name/
+# tool_use_id/tool_input, there is NO file_path field, and a file edit
+# arrives as the BARE apply_patch envelope (`*** Begin Patch` … `*** End
+# Patch`) directly in tool_input.command — the literal "apply_patch" is NOT
+# present in the real command (tool_name carries the identity). The
+# shell-wrapper form (`apply_patch <<'EOF' …`) is also exercised. If a
+# future captured payload differs, fix the builders below — the guard tests
+# reuse the same shapes.
 set -uo pipefail
 
 command -v jq >/dev/null 2>&1 || { echo "SKIP: jq not available"; exit 0; }
@@ -58,6 +63,10 @@ codex_cmd() { # <tool_name> <command-string> -> payload JSON
 patch_cmd() { # <patch-body> -> quoted-heredoc apply_patch shell command
     printf "apply_patch <<'EOF'\n*** Begin Patch\n%s\n*** End Patch\nEOF" "$1"
 }
+bare_patch() { # <patch-body> -> BARE envelope, the real Codex form: the
+               # command has no "apply_patch" literal (tool_name carries it).
+    printf '*** Begin Patch\n%s\n*** End Patch' "$1"
+}
 
 # --- direct file-path layouts (Cursor / Claude Code) ---
 run "Cursor top-level file_path"    '{"file_path":"a.py"}'                    "a.py"
@@ -76,6 +85,30 @@ run "Codex patch: unquoted heredoc" \
 run "Codex patch: direct-argument form" \
     "$(codex_cmd apply_patch "$(printf "apply_patch '*** Begin Patch\n*** Update File: a.py\n@@\n+x\n*** End Patch'")")" \
     "a.py"
+
+# --- real Codex form: BARE patch envelope in tool_input.command (no
+#     "apply_patch" wrapper literal). This is what a live Codex payload sends;
+#     it is the case that pins the gate against keying on the "apply_patch"
+#     substring, which a real command does not contain. ---
+run "Codex bare patch: single file" \
+    "$(codex_cmd apply_patch "$(bare_patch '*** Update File: notes.txt
+@@
++touched = true')")" \
+    "notes.txt"
+run "Codex bare patch: multi-file + rename" \
+    "$(codex_cmd apply_patch "$(bare_patch '*** Update File: a.py
+@@
++x
+*** Add File: b.py
++y
+*** Delete File: c.py
+*** Update File: old.py
+*** Move to: new.py')")" \
+    "a.py
+b.py
+c.py
+old.py
+new.py"
 
 # --- multi-file patch: every header, in order; rename yields both paths ---
 run "Codex patch: multi-file + rename" \
