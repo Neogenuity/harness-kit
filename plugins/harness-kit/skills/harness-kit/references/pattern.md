@@ -60,6 +60,17 @@ whatever ships next — without maintaining N parallel configurations.
    the signal for what to engineer away permanently — tighten a pattern, add
    a lint rule, write the convention doc.
 
+**Hooks are feedback; the sandbox is enforcement.** Pre-tool interception is a
+*guardrail, not a boundary* — an agent can usually reach the same effect
+through another supported tool path, so the provider matrix labels interception
+exactly that way. The kit leans on hooks for fast, in-turn *feedback* (deny a
+secret read, feed a lint finding back, advise once) and on the harness's native
+permission/trust layers plus the CI manifest check as the layers that actually
+hold. *Enforcement* proper — OS-level sandboxing, network-egress control,
+filesystem scoping — is a platform capability the kit's job is to **configure**,
+not reimplement; that surface is scoped in the execution-governance plan
+(`docs/plans/execution-governance.md`).
+
 ## Anatomy of an installed harness
 
 ```
@@ -123,6 +134,12 @@ Agent Skills standard) are the deliberate exception: the generator mirrors
 them verbatim next to each stub so harnesses that resolve resources relative
 to the skill directory keep working, and `--check` pins the mirrors
 recursively — full copies, but mechanically incapable of drifting.
+
+This is also how **dynamic workflows** ride along: a workflow markdown file
+distributed *inside* a skill's folder (its `references/` or the skill dir) is
+mirrored to every provider stub by the same mechanism, so a skill can carry its
+own step-by-step playbooks — invoked mid-task — with no extra wiring and no
+drift.
 
 ## Upgrade model
 

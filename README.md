@@ -155,7 +155,7 @@ scripts/, .claude/ .cursor/ ...   (see "This repo runs on itself")
 
 ## Status
 
-v0.5.0, extracted and generalized from a production Laravel modular
+v0.6.0, extracted and generalized from a production Laravel modular
 monolith where the pattern is exercised daily across multiple harnesses.
 Pre-launch checklist:
 
@@ -164,7 +164,7 @@ Pre-launch checklist:
 - [x] Re-verify the provider matrix against current harness docs
       (re-validated 2026-07-10; hook event names are still evolving — check
       the per-fact stamps before wiring a provider you haven't used lately)
-- [x] Tag releases (`v0.1.0`–`v0.4.0`, retroactive on their release
+- [x] Tag releases (`v0.1.0`–`v0.5.0`, retroactive on their release
       commits; update mode recovers old templates by the tag matching the
       manifest header)
 - [ ] Demo recording of `init` on a fresh repo

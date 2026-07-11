@@ -56,18 +56,20 @@ not-yet-existing paths are legal — queued plans name future files by design.
 
 ## Roadmap (set 2026-07-10, re-sorted 2026-07-11)
 
-Shipped: **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin
-distribution ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
+Shipped: **v0.6.0** — plans machinery the docs already promised + Copilot/Gemini
+rows + strict Agent Skills validation + matrix stamping
+([completed/v0.6.0-plans-machinery-and-provider-breadth.md](completed/v0.6.0-plans-machinery-and-provider-breadth.md));
+**v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
+([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [plans-machinery-and-provider-breadth.md](plans-machinery-and-provider-breadth.md) | Plans machinery the docs already promise; Copilot + Gemini rows; strict Agent Skills validation; matrix stamping (next up) |
-| 2 | [install-update-verification.md](install-update-verification.md) | Deterministic fixture tests of `init`/`audit`/`update` — prove the core product boundary |
-| 3 | [behavioral-evals.md](behavioral-evals.md) | Golden tasks, multi-trial pass@k/pass^k runner, baselines — measure the harness itself |
-| 4 | [execution-governance.md](execution-governance.md) | Baseline: MCP trust inventory, untrusted-repo/prompt-injection guidance, CI hardening (advanced sandbox profiles trail #6) |
-| 5 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
-| 6 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
-| 7 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
+| 1 | [install-update-verification.md](install-update-verification.md) | Deterministic fixture tests of `init`/`audit`/`update` — prove the core product boundary |
+| 2 | [behavioral-evals.md](behavioral-evals.md) | Golden tasks, multi-trial pass@k/pass^k runner, baselines — measure the harness itself |
+| 3 | [execution-governance.md](execution-governance.md) | Baseline: MCP trust inventory, untrusted-repo/prompt-injection guidance, CI hardening (advanced sandbox profiles trail #5) |
+| 4 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
+| 5 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
+| 6 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
 
 **Ordering rationale.** Claim-to-implementation gaps go first — plans
 machinery closes the space between what the docs promise and what ships, then

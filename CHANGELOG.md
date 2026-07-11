@@ -3,6 +3,43 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.6.0 — 2026-07-11
+
+- **Plans machinery now ships.** The kit's docs promised a `docs/plans/`
+  directory (`harness.conf` sets `PLANS_DIR`, `session-context.sh` announces
+  it, `AGENTS.md` links its README) but no template shipped and `init` never
+  authored one — a fresh harness referenced a directory that didn't exist. New
+  templates `docs/plans/README.md` (lifecycle: queued → `active/` →
+  `completed/`, theme-naming, the markdown-link honesty rule) and
+  `docs/plans/_template.md` (the nine plan sections); `init` step 5 authors the
+  README and creates `PLANS_DIR`, and `audit` flags a configured `PLANS_DIR`
+  whose directory is missing. A throwaway
+  [fixture recipe](plugins/harness-kit/skills/harness-kit/references/fixture-recipe.md)
+  documents how to smoke-test `init` end-to-end.
+- **GitHub Copilot + Gemini CLI added to the provider matrix** (both verified
+  2026-07-11): Copilot reads `AGENTS.md` natively including nested files (plus
+  `.github/copilot-instructions.md`); Gemini CLI reads it via a
+  `.gemini/settings.json` `context.fileName` snippet. Both are
+  instructions-only (no hook/skill/agent surface), so `init` step 6 gains two
+  near-free wire steps.
+- **Stricter harness checks** (mechanism — `check-harness.sh` +
+  `test-check-harness.sh`, manifest re-pinned):
+  - Canonical skills are now validated against the **Agent Skills spec** as
+    ERRORs, not doctor hints: closing `---` delimiter, non-empty `name`/
+    `description`, `name` equal to its parent directory, `name` charset with no
+    leading/trailing or consecutive hyphens, and the 64/1024-char limits
+    (previously warnings). Prefers `skills-ref validate` when on PATH, with a
+    dependency-free bash fallback.
+  - New doctor WARNs: an `active/` plan missing a `Next action` or unchanged
+    for 30+ days (git-dated; a no-op in shallow CI), and a provider-matrix
+    `verified <date>` stamp older than 90 days or a matrix with no stamp at all
+    (`PROVIDER_MATRIX_DOC`, `HARNESS_PLAN_STALE_DAYS`,
+    `HARNESS_MATRIX_STALE_DAYS` are configurable in `harness.conf`).
+- **Docs:** provider-matrix capability rows now carry `verified` stamps;
+  `pattern.md` notes dynamic workflows riding skill-resource mirroring and
+  positions hooks as *feedback* vs. OS sandboxing as *enforcement* (pointing at
+  the execution-governance plan).
+
 ## 0.5.0 — 2026-07-10
 
 - **Repackaged `plugin/` → `plugins/harness-kit/` + a Codex distribution

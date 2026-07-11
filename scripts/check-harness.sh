@@ -18,13 +18,38 @@ CANONICAL_SKILLS="${CANONICAL_SKILLS:-docs/skills}"
 
 echo "Checking agent harness..."
 
-# 1. Canonical skills must have name/description frontmatter (agents use the
-#    description as the trigger signal — a skill without it never auto-activates).
+# 1. Canonical skills must satisfy the Agent Skills spec, not merely carry the
+#    keys (agentskills.io/specification). The description is the activation
+#    trigger, and a name that breaks the spec (wrong case, wrong parent dir,
+#    consecutive hyphens, over-length) can silently fail to load in a strict
+#    provider while passing a lax one — so these are ERRORs, checked here
+#    rather than left as doctor hints. Prefer `skills-ref validate` when it is
+#    on PATH (authoritative); otherwise fall back to dependency-free bash
+#    checks, because the kit ships into repos that won't have it. Set
+#    SKILLS_REF_BIN to a non-existent name to force the fallback (the tests do).
+SKILLS_REF_BIN="${SKILLS_REF_BIN:-skills-ref}"
 for skill in "$ROOT/$CANONICAL_SKILLS"/*/SKILL.md; do
     [ -f "$skill" ] || continue
     skill_rel=${skill#"$ROOT"/}
-    if ! head -1 "$skill" | grep -q '^---$'; then
+    skill_dir=$(basename "$(dirname "$skill")")
+
+    # Authoritative validator when available — then skip the bash fallback.
+    if command -v "$SKILLS_REF_BIN" >/dev/null 2>&1; then
+        if ! sr_out=$("$SKILLS_REF_BIN" validate "$(dirname "$skill")" 2>&1); then
+            echo "ERROR: $skill_rel failed '$SKILLS_REF_BIN validate': $sr_out"
+            ERRORS=$((ERRORS + 1))
+        fi
+        continue
+    fi
+
+    # -- dependency-free fallback --
+    if ! head -1 "$skill" | grep -q '^---[[:space:]]*$'; then
         echo "ERROR: $skill_rel has no YAML frontmatter (name/description required)"
+        ERRORS=$((ERRORS + 1))
+        continue
+    fi
+    if ! awk 'NR==1{next} /^---[[:space:]]*$/{found=1; exit} END{exit !found}' "$skill"; then
+        echo "ERROR: $skill_rel frontmatter has no closing '---' delimiter"
         ERRORS=$((ERRORS + 1))
         continue
     fi
@@ -34,6 +59,44 @@ for skill in "$ROOT/$CANONICAL_SKILLS"/*/SKILL.md; do
             ERRORS=$((ERRORS + 1))
         fi
     done
+    name_val=$(grep -m1 -E '^name:' "$skill" \
+        | sed -E "s/^name:[[:space:]]*//; s/[[:space:]]+$//; s/^\"(.*)\"$/\1/; s/^'(.*)'$/\1/")
+    if [ -z "$name_val" ]; then
+        echo "ERROR: $skill_rel frontmatter 'name:' value is empty (Agent Skills spec: 1-64 chars)"
+        ERRORS=$((ERRORS + 1))
+    else
+        if [ "$name_val" != "$skill_dir" ]; then
+            echo "ERROR: $skill_rel frontmatter name '$name_val' must equal its parent directory '$skill_dir' (Agent Skills spec)"
+            ERRORS=$((ERRORS + 1))
+        fi
+        case "$name_val" in
+            *[!a-z0-9-]*) echo "ERROR: $skill_rel frontmatter name '$name_val' has illegal characters (Agent Skills spec: lowercase a-z, 0-9, hyphens only)"; ERRORS=$((ERRORS + 1)) ;;
+        esac
+        case "$name_val" in
+            -*|*-) echo "ERROR: $skill_rel frontmatter name '$name_val' must not start or end with a hyphen (Agent Skills spec)"; ERRORS=$((ERRORS + 1)) ;;
+        esac
+        case "$name_val" in
+            *--*) echo "ERROR: $skill_rel frontmatter name '$name_val' must not contain consecutive hyphens (Agent Skills spec)"; ERRORS=$((ERRORS + 1)) ;;
+        esac
+        if [ "${#name_val}" -gt 64 ]; then
+            echo "ERROR: $skill_rel frontmatter name exceeds 64 characters (Agent Skills spec limit)"
+            ERRORS=$((ERRORS + 1))
+        fi
+    fi
+    desc_len=$(awk '
+        NR==1 && /^---[[:space:]]*$/ { fm=1; next }
+        fm && /^---[[:space:]]*$/    { exit }
+        fm && /^description:/ { d=1; sub(/^description:[[:space:]]*([>|][-+]?)?[[:space:]]*/, ""); len+=length($0); next }
+        d && /^[A-Za-z_-]+:/  { d=0 }
+        d { gsub(/^[[:space:]]+/, ""); len+=length($0) }
+        END { print len+0 }' "$skill")
+    if [ "$desc_len" -eq 0 ]; then
+        echo "ERROR: $skill_rel frontmatter 'description:' is empty (Agent Skills spec: 1-1024 chars; it is the activation trigger)"
+        ERRORS=$((ERRORS + 1))
+    elif [ "$desc_len" -gt 1024 ]; then
+        echo "ERROR: $skill_rel frontmatter description is $desc_len characters (Agent Skills spec limit 1024)"
+        ERRORS=$((ERRORS + 1))
+    fi
 done
 
 # 2. Provider skill copies must be pointer stubs, not full copies. The
@@ -255,24 +318,65 @@ for skill in "$ROOT/$CANONICAL_SKILLS"/*/SKILL.md; do
     skill_lines=$(wc -l < "$skill" | tr -d '[:space:]')
     [ "$skill_lines" -gt 500 ] \
         && echo "WARNING: $skill_rel is $skill_lines lines (target <=500) — move detail into the skill's references/ (progressive disclosure)"
-    name_val=$(grep -m1 -E '^name:' "$skill" | sed -E 's/^name:[[:space:]]*//' || true)
-    if [ -n "$name_val" ]; then
-        case "$name_val" in
-            *[!a-z0-9-]*) echo "WARNING: $skill_rel frontmatter name '$name_val' is not kebab-case (Agent Skills spec: lowercase a-z, 0-9, hyphens)" ;;
-        esac
-        [ "${#name_val}" -gt 64 ] \
-            && echo "WARNING: $skill_rel frontmatter name exceeds 64 characters (Agent Skills spec limit)"
-    fi
-    desc_len=$(awk '
-        NR==1 && $0=="---" { fm=1; next }
-        fm && $0=="---"    { exit }
-        fm && /^description:/ { d=1; sub(/^description:[[:space:]]*[>|]?-?[[:space:]]*/, ""); len+=length($0); next }
-        d && /^[A-Za-z_-]+:/  { d=0 }
-        d { gsub(/^[[:space:]]+/, ""); len+=length($0) }
-        END { print len+0 }' "$skill")
-    [ "$desc_len" -gt 1024 ] \
-        && echo "WARNING: $skill_rel frontmatter description is $desc_len characters (Agent Skills spec limit 1024) — routers truncate; tighten the trigger"
 done
+# (Skill name/description spec conformance — kebab-case, length, non-empty,
+#  name==dir — is now enforced as ERRORs in check 1, not warned here.)
+
+# 10b. Doctor: active plans that have gone stale. A plan in PLANS_DIR that has
+#      lost its 'Next action', or hasn't been touched in a month, is usually
+#      abandoned — yet the session banner keeps announcing it. Age uses git
+#      commit time (file mtime is checkout time), so it needs a real history:
+#      it is a no-op in the shallow checkout the shipped CI uses
+#      (actions/checkout defaults to fetch-depth 1) and skips gracefully with
+#      no git at all — effective in local doctor runs.
+PLANS_DIR="${PLANS_DIR:-docs/plans/active}"
+PLAN_STALE_DAYS="${HARNESS_PLAN_STALE_DAYS:-30}"
+if [ -d "$ROOT/$PLANS_DIR" ]; then
+    _now=$(date +%s)
+    for plan in "$ROOT/$PLANS_DIR"/*.md; do
+        [ -f "$plan" ] || continue
+        case "$(basename "$plan")" in README.md) continue ;; esac
+        plan_rel=${plan#"$ROOT"/}
+        grep -qE '^#+[[:space:]]+Next action' "$plan" \
+            || echo "WARNING: $plan_rel (active plan) has no 'Next action' section — a resuming session can't tell what to do next"
+        if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+            _ct=$(git -C "$ROOT" log -1 --format=%ct -- "$plan_rel" 2>/dev/null)
+            if [ -n "$_ct" ]; then
+                _age=$(( (_now - _ct) / 86400 ))
+                [ "$_age" -ge "$PLAN_STALE_DAYS" ] \
+                    && echo "WARNING: $plan_rel (active plan) last changed $_age days ago (>= $PLAN_STALE_DAYS) — update it or move it to completed/"
+            fi
+        fi
+    done
+fi
+
+# 10c. Doctor: keep a verification-stamped reference (e.g. a provider/capability
+#      matrix) fresh. Watches PROVIDER_MATRIX_DOC (default
+#      references/provider-matrix.md; absent in most repos, so a no-op there).
+#      Stamps are self-dating text ("verified YYYY-MM" or "YYYY-MM-DD"), so —
+#      unlike the plan check — this needs no git history and works in shallow
+#      CI. WARNs on a stamp older than the configured age, and on a doc that has
+#      tables but carries no stamp at all.
+MATRIX_DOC="${PROVIDER_MATRIX_DOC:-references/provider-matrix.md}"
+MATRIX_STALE_DAYS="${HARNESS_MATRIX_STALE_DAYS:-90}"
+if [ -f "$ROOT/$MATRIX_DOC" ]; then
+    _thresh=$(date -d "-${MATRIX_STALE_DAYS} days" +%F 2>/dev/null \
+        || date -v-"${MATRIX_STALE_DAYS}"d +%F 2>/dev/null || true)
+    _stamps=$(grep -oE 'verified [0-9]{4}-[0-9]{2}(-[0-9]{2})?' "$ROOT/$MATRIX_DOC" \
+        | sed -E 's/^verified //' | sort -u)
+    if [ -z "$_stamps" ] && grep -qE '^\|.*\|' "$ROOT/$MATRIX_DOC"; then
+        echo "WARNING: $MATRIX_DOC has tables but no 'verified <date>' stamps — its facts carry no freshness marker"
+    fi
+    if [ -n "$_thresh" ]; then
+        while IFS= read -r _s; do
+            [ -n "$_s" ] || continue
+            case "$_s" in ????-??) _cmp="${_s}-01" ;; *) _cmp="$_s" ;; esac
+            if [[ "$_cmp" < "$_thresh" ]]; then
+                echo "WARNING: $MATRIX_DOC has a 'verified $_s' stamp older than $MATRIX_STALE_DAYS days — re-verify those facts against their primary docs and restamp"
+            fi
+        done <<< "$_stamps"
+    fi
+fi
 
 # -- TAILOR: project-specific freshness checks below ---------------------------
 # Add checks that keep YOUR docs honest against YOUR code layout, e.g.:

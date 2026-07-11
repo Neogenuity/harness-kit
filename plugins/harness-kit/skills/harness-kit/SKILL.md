@@ -99,6 +99,12 @@ behavior from the repo alone.
      `templates/docs/agents/_example.md`, and add thin stubs in
      `.claude/agents/` (and `.cursor/agents/`) per the template's wiring
      comment.
+   - `docs/plans/README.md` from `templates/docs/plans/README.md` (AGENTS.md
+     links it, so `check-harness.sh` needs it to exist), and create the
+     `PLANS_DIR` (`docs/plans/active/` by default) with a `.gitkeep` so
+     `session-context.sh` has a directory to announce. Copy
+     `templates/docs/plans/_template.md` alongside it; seed real plans only
+     when there's long-horizon work to track (an empty queue is fine).
 
 6. **Wire providers** (for each provider chosen in the interview):
    - Claude Code: `templates/providers/claude/settings.json` →
@@ -122,6 +128,13 @@ behavior from the repo alone.
      servers only if needed); optionally a TS plugin shim in
      `.opencode/plugins/` that shells out to the portable hooks (see provider
      matrix) — otherwise guards degrade to these native permissions + CI.
+   - GitHub Copilot coding agent: nothing to wire — it reads `AGENTS.md`
+     natively, including nested files (verified 2026-07-11). Optionally add a
+     thin `.github/copilot-instructions.md` pointing at `AGENTS.md` for the
+     completions surface. No skill/hook/agent dirs (see provider matrix).
+   - Gemini CLI: write `.gemini/settings.json` with
+     `{ "context": { "fileName": ["AGENTS.md", "GEMINI.md"] } }` so it loads the
+     shared `AGENTS.md` (default reads `GEMINI.md` only; verified 2026-07-11).
    - Run `bash scripts/sync-agent-skills.sh` to generate all skill stubs.
 
 7. **CI gate**: install `templates/ci/github-actions-harness-check.yml` as
@@ -149,7 +162,8 @@ behavior from the repo alone.
    envelope in `tool_input.command` — crib the builders from
    `scripts/hooks/test-affected-files.sh`) and confirm exit 2 again;
    confirm every AGENTS.md link opens. Report results honestly, including
-   anything left unwired.
+   anything left unwired. To rehearse the whole flow on a disposable repo
+   first, follow [references/fixture-recipe.md](references/fixture-recipe.md).
 
 ## audit
 
@@ -157,8 +171,12 @@ Grade an existing repo against the pattern. Check, in order: canonical
 `docs/` presence (or content trapped in provider dirs / duplicated);
 AGENTS.md as TOC with live links; skills canonical + stubs generated
 everywhere `harness.conf` claims; hooks portable, executable, tested; native
-permission deny list mirroring the secret guard; CI running the drift gate;
-manifest present and passing its checksum verification. Then run `scripts/check-harness.sh` and the hook tests if
+permission deny list mirroring the secret guard; the configured `PLANS_DIR`
+(`harness.conf`) resolving to a real directory (a dangling one makes
+`session-context.sh` silently announce nothing) and `docs/plans/README.md`
+present (AGENTS.md links it, so a missing README is a dead link); CI running
+the drift gate; manifest present and passing its checksum
+verification. Then run `scripts/check-harness.sh` and the hook tests if
 they exist. If `.harness/log.jsonl` exists, summarize it: deny / advise /
 lint-findings counts by hook and by file — a repeatedly-denied path or a
 warning surfaced every session is the next mistake to engineer away
