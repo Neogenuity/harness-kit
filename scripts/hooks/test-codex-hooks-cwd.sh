@@ -4,9 +4,9 @@
 # root, so a Codex session whose CWD is a repository subdirectory still finds
 # the hook. Codex runs hooks with the session CWD, so a relative
 # `bash scripts/hooks/X.sh` exits 127 from a subdir — reproduced in the PR #6
-# review. The shipped wiring uses `bash "$(git rev-parse --show-toplevel)/
-# scripts/hooks/X.sh"`, the pattern the hooks docs recommend
-# (https://learn.chatgpt.com/docs/hooks, verified 2026-07-11).
+# review. The shipped wiring resolves from the Git root and fails open when
+# there is no Git worktree, per the hooks docs
+# (https://learn.chatgpt.com/docs/hooks, verified 2026-07-10).
 #
 # Runs byte-identically in both contexts by locating the wiring wherever it
 # lives: installed as scripts/hooks/test-*.sh (wiring at <root>/.codex/
@@ -26,6 +26,7 @@ done
 [ -n "$WIRING" ] || { echo "SKIP: no Codex hooks.json found near $HOOKS_DIR"; exit 0; }
 
 fails=0
+checked=0
 
 # Throwaway repo whose scripts/hooks/ holds the real hook scripts, so a
 # Git-root-resolved command can locate and execute them from a nested CWD.
@@ -38,6 +39,7 @@ cp "$HOOKS_DIR"/*.sh "$WORK/scripts/hooks/"
 # nested CWD without a 127 "command/script not found".
 while IFS= read -r cmd; do
     [ -n "$cmd" ] || continue
+    checked=$((checked + 1))
     case "$cmd" in
         *'git rev-parse --show-toplevel'*) ;;
         *) echo "FAIL: command is not Git-root-resolved: $cmd"; fails=$((fails + 1)); continue ;;
@@ -52,8 +54,30 @@ while IFS= read -r cmd; do
     fi
 done < <(jq -r '.hooks | to_entries[] | .value[] | .hooks[] | .command' "$WIRING")
 
+# A vacuous pass is a failure: if the jq query yields nothing (a reshaped or
+# malformed hooks.json), the loop never runs and the test would otherwise
+# print PASSED having verified nothing.
+[ "$checked" -gt 0 ] || { echo "FAIL: jq extracted no hook commands from $WIRING"; fails=$((fails + 1)); }
+
+# Fail-open outside a Git worktree: root discovery fails, so the command must
+# exit 0 rather than run bash on an empty root (which would 127). Pins the
+# PR #6 Codex-review fix; a plain `bash "$(git rev-parse …)/…"` would 127 here.
+if [ "$checked" -gt 0 ]; then
+    NOGIT=$(mktemp -d)
+    firstcmd=$(jq -r '.hooks | to_entries[] | .value[] | .hooks[] | .command' "$WIRING" | head -n 1)
+    ( cd "$NOGIT" && printf '' | eval "$firstcmd" ) >/dev/null 2>&1
+    rc=$?
+    rm -rf "$NOGIT"
+    if [ "$rc" = "0" ]; then
+        echo "ok:   fails open (exit 0) outside a Git worktree"
+    else
+        echo "FAIL: outside a Git worktree expected fail-open exit 0, got $rc"
+        fails=$((fails + 1))
+    fi
+fi
+
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails Codex hook-command case(s)"
     exit 1
 fi
-echo "PASSED: all Codex hook commands resolve from the Git root"
+echo "PASSED: all Codex hook commands resolve from the Git root ($checked commands)"

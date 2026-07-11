@@ -18,7 +18,7 @@ against. (Full matrix last validated: 2026-07; Codex facts re-verified
 | Hooks | `.claude/settings.json` → `hooks` | `.cursor/hooks.json` | `.codex/hooks.json` (or `config.toml` `[hooks]`; trust-gated) | `.opencode/plugins/*.ts` shim (JS/TS only) | — |
 | Permissions | `.claude/settings.json` → `permissions` | (harness UI) | (trust model + `PermissionRequest` hook) | `opencode.json` `permission.read` denies (mirror `harness.conf` `SECRET_PATTERNS`) | — |
 | MCP servers | `.mcp.json` (project) | `.cursor/mcp.json` | `.codex/config.toml` `[mcp_servers.*]` | `opencode.json` `"mcp"` | `~/.agents/mcp-settings.json` (proposed, user-level) |
-| Distribution | `.claude-plugin/marketplace.json` → `plugins/harness-kit/.claude-plugin/plugin.json`; `/plugin marketplace add <owner>/harness-kit` (verified 2026-07-11) | — (no plugin channel) | `.agents/plugins/marketplace.json` → `plugins/harness-kit/.codex-plugin/plugin.json`; `codex plugin marketplace add <path>` (verified 2026-07-11) | — (no plugin channel) | `.agents/plugins/marketplace.json` (Codex's channel rides the `.agents` tree) |
+| Distribution | `.claude-plugin/marketplace.json` → `plugins/harness-kit/.claude-plugin/plugin.json`; `/plugin marketplace add <owner>/harness-kit` (verified 2026-07-10) | — (no plugin channel) | `.agents/plugins/marketplace.json` → `plugins/harness-kit/.codex-plugin/plugin.json`; `codex plugin marketplace add <path>` (verified 2026-07-10) | — (no plugin channel) | `.agents/plugins/marketplace.json` (Codex's channel rides the `.agents` tree) |
 
 **Distribution** is the versioned, updatable install path (vs. the manual
 clone-and-copy of `skills/harness-kit`). The two providers do **not** share a
@@ -30,7 +30,7 @@ entry additionally requires `policy.installation`
 `interface.displayName`. `.codex-plugin/plugin.json` requires
 `name`/`version`/`description` and takes `skills: "./skills/"`. `VERSION` is
 the neutral single source both plugin manifests must equal — `check-packaging.sh`
-enforces the whole invariant (schema verified 2026-07-11, see Sources; ADR 007).
+enforces the whole invariant (schema verified 2026-07-10, see Sources; ADR 007).
 
 ## Hook event mapping
 

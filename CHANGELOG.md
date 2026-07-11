@@ -3,7 +3,7 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
-## 0.5.0 — 2026-07-11
+## 0.5.0 — 2026-07-10
 
 - **Repackaged `plugin/` → `plugins/harness-kit/` + a Codex distribution
   channel.** The same source tree now installs as a versioned, updatable
@@ -13,7 +13,7 @@ All notable changes to harness-kit. The version is defined in
   `plugins/harness-kit/.codex-plugin/plugin.json` and the root
   `.agents/plugins/marketplace.json` (Codex's nested-source marketplace shape,
   with `policy`/`category`; distinct from Claude Code's flat-string source —
-  schemas verified 2026-07-11 against learn.chatgpt.com/docs/build-plugins).
+  schemas verified 2026-07-10 against learn.chatgpt.com/docs/build-plugins).
   See [ADR 007](docs/architecture/decisions/007-dual-provider-packaging.md).
 - **`plugins/harness-kit/VERSION` is now the single version source**, mirrored
   into both `plugin.json` files. New `scripts/check-packaging.sh` (the

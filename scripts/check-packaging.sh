@@ -41,7 +41,7 @@ done
 ver=$(tr -d '[:space:]' < "$VERSION_FILE")
 
 # 2. VERSION is semver-shaped
-printf '%s' "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$' \
+printf '%s' "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$' \
     || fail "VERSION '$ver' is not semver-shaped"
 
 # 3. version equality: VERSION == both plugin.json versions
@@ -98,6 +98,8 @@ case "$auth" in
 esac
 [ -n "$(jq -r '.plugins[0].category // empty' "$AGENTS_MKT")" ] \
     || fail "$AGENTS_MKT plugins[0].category is missing"
+[ -n "$(jq -r '.interface.displayName // empty' "$AGENTS_MKT")" ] \
+    || fail "$AGENTS_MKT interface.displayName is missing"
 
 # 8. each marketplace entry resolves to a plugin manifest carrying VERSION
 cres=$(jq -r '.version // empty' "$csrc/.claude-plugin/plugin.json" 2>/dev/null)

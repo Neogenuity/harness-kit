@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/hooks/session-context.sh\""
+            "command": "bash -c 'root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; exec bash \"$root/scripts/hooks/session-context.sh\"'"
           }
         ]
       }
@@ -15,11 +15,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/hooks/guard-secrets.sh\""
+            "command": "bash -c 'root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; exec bash \"$root/scripts/hooks/guard-secrets.sh\"'"
           },
           {
             "type": "command",
-            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/hooks/guard-config.sh\""
+            "command": "bash -c 'root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; exec bash \"$root/scripts/hooks/guard-config.sh\"'"
           }
         ]
       }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/hooks/format.sh\""
+            "command": "bash -c 'root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; exec bash \"$root/scripts/hooks/format.sh\"'"
           }
         ]
       }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/hooks/guard-project-policy.sh\""
+            "command": "bash -c 'root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; exec bash \"$root/scripts/hooks/guard-project-policy.sh\"'"
           }
         ]
       }

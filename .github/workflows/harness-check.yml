@@ -14,3 +14,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate agent harness
         run: bash scripts/check-harness.sh
+      - name: Validate dual-provider packaging
+        run: bash scripts/check-packaging.sh

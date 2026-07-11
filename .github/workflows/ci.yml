@@ -43,7 +43,10 @@ jobs:
             fi
           fi
           # info/style notices are acceptable in templates (helpers sit next
-          # to commented TAILOR arms); fail on warning and above.
+          # to commented TAILOR arms); fail on warning and above. Lint the
+          # shipped templates AND the root-only tailored scripts (verify.sh,
+          # check-packaging.sh, …), which have no template twin.
           shellcheck -x --severity=warning \
                         plugins/harness-kit/skills/harness-kit/templates/scripts/*.sh \
-                        plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/*.sh
+                        plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/*.sh \
+                        scripts/*.sh scripts/hooks/*.sh

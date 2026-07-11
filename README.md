@@ -100,7 +100,7 @@ cp -R harness-kit/plugins/harness-kit/skills/harness-kit ~/.claude/skills/harnes
 ```
 
 **Codex, as a plugin** (recommended — versioned, updatable via the
-`.agents/plugins/` marketplace channel, verified 2026-07-11,
+`.agents/plugins/` marketplace channel, verified 2026-07-10,
 [build-plugins docs](https://learn.chatgpt.com/docs/build-plugins)):
 
 ```bash
@@ -110,9 +110,10 @@ codex plugin add harness-kit@harness-kit        # installs the plugin
 ```
 
 Then start a new Codex session and confirm the skill is available
-(`codex plugin list`). Codex reads both `.agents/plugins/marketplace.json`
-and the legacy-compatible `.claude-plugin/marketplace.json`, so `harness-kit`
-should appear exactly once.
+(`codex plugin list`). `codex plugin marketplace add` registers the catalog
+from `.agents/plugins/marketplace.json`, and `harness-kit` lists exactly once
+— verified against Codex 0.144.1; the sibling `.claude-plugin/marketplace.json`
+does not produce a duplicate registration.
 
 **Codex, as a personal skill** (no plugin infrastructure) — Codex discovers
 personal skills in `~/.agents/skills` (verified 2026-07,
