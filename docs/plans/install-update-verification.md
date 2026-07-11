@@ -10,7 +10,10 @@ clean fixture repo, confirm a partial harness's hand-written files survive
 untouched, run a no-op update, roll a mechanism upgrade forward, and confirm a
 `# tailored` file survives an update untouched — each asserted against expected
 filesystem state, no model in the loop. The model-graded quality of authoring
-and merges is delegated to the behavioral-evals plan, not claimed here.
+and merges is delegated to the behavioral-evals plan, not claimed here. This
+plan also closes two *verified* integrity blind spots in the same manifest
+mechanism these tests exercise — an unpinned `harness.conf` and a
+silently-skipped missing manifest (see Value, scope 6–7).
 
 ## Value
 
@@ -40,6 +43,35 @@ drawn explicitly in Scope). Where a judgment step has a deterministic *floor*
 (init must never overwrite a pre-existing hand-written file; `check-harness.sh`
 must flag seeded drift), that floor is asserted here; the model-graded quality
 above it is not.
+
+**Two verified integrity findings (2026-07-11) land here.** A second external
+review (gpt-5.6-sol), each finding independently reproduced in-repo before
+acting, found two blind spots in exactly the manifest mechanism this plan
+exists to lock down:
+
+- `scripts/harness.conf` — the single source for `SECRET_PATTERNS` (plus
+  `PROVIDERS` / `PLANS_DIR` / `HARNESS_LOG`), sourced as shell by four scripts
+  (`guard-secrets.sh`, `check-harness.sh`, `session-context.sh`,
+  `sync-agent-skills.sh`) — is enumerated by neither the manifest producer
+  (SKILL.md step 8) nor `guard-config.sh`'s `PROTECTED_PATHS`. Reproduced: a
+  narrowed `SECRET_PATTERNS=".env"` disarms the secret guard for
+  `id_rsa` / `*.pem` / `.env.*` while `check-harness.sh` stays green (each
+  remaining pattern still has a native-deny entry, so check #8 sees no drift).
+  An *empty* value re-arms the defaults via the `${SECRET_PATTERNS:-…}`
+  fallback, so the working exploit is narrowing, not blanking.
+- `check-harness.sh`'s checksum block is gated on `[ -f .harness-manifest ]`
+  with no `else` — a *deleted* manifest is silently accepted (exit 0, no
+  mention). Reproduced. Because shell edits (`rm`, `sed -i`) are deliberately
+  unscanned by the guards, CI manifest verification is the *documented*
+  enforcing layer for them (see `guard-config.sh` header) — so a manifest that
+  can simply be removed collapses that layer entirely.
+
+The two are linked: pinning `harness.conf` only bites if a missing manifest is
+itself caught. Both are manifest-coverage / drift-detection gaps — the plan's
+own subject matter (scope 1 and 4) — so they fold in as scope 6–7 rather than
+into a new plan, and the small hardening lands ahead of the fixture-suite
+extraction (it doesn't depend on `install-lib.sh`, and one is a live
+secret-guard weakness).
 
 ## Scope
 
@@ -102,6 +134,36 @@ above it is not.
    manifest-producer file list per scope item 1 so `install-lib.sh` and
    `test-install.sh` are enumerated, and ensure `test-install.sh` runs in the
    `harness-check`/`verify.sh` gate.
+6. **Close the `harness.conf` integrity blind spot** (verified finding 1;
+   mechanism change, parallels item 1/5's manifest-coverage work). Add
+   `scripts/harness.conf` to the *same* manifest-producer enumeration (SKILL.md
+   step 8) and to this repo's own `.harness-manifest`, so an un-re-pinned edit
+   to the secret-policy source fails `check-harness.sh` — the identical
+   treatment every other policy file (`verify.sh`, `format.sh`,
+   `guard-secrets.sh`) already gets. The manifest pin is the load-bearing fix:
+   shell edits are unscanned by design, so CI verification (not the pre-edit
+   hook) is the enforcing layer for them. Additionally evaluate adding
+   `scripts/harness.conf` to `guard-config.sh`'s `PROTECTED_PATHS` for a live
+   pre-edit block matching `guard-secrets.sh` (which reads these very patterns),
+   weighed against the friction it adds — every legitimate secret-pattern edit
+   would then need `HARNESS_ALLOW_MECHANISM_EDITS=1`. *Acceptance: a fixture's
+   generated manifest lists `scripts/harness.conf`; mutating it without
+   re-pinning fails `check-harness.sh`; if the `PROTECTED_PATHS` option is
+   taken, `test-guard-config.sh` gains a denied-`harness.conf`-edit case (both
+   direct and Codex apply_patch layouts).*
+7. **Make a missing manifest an ERROR post-adoption** (verified finding 2;
+   mechanism change, extends item 4's drift detection). `check-harness.sh`
+   silently skips its entire checksum block when `scripts/.harness-manifest` is
+   absent — the same silent-hole shape checks #8/#8b already fix for a
+   wired-but-missing `settings.json` / `opencode.json`. Apply that pattern:
+   when the harness is clearly adopted (e.g. `scripts/hooks/` present) but
+   `.harness-manifest` is missing, ERROR rather than skip; keep the
+   pre-adoption skip so a brand-new repo that hasn't run init yet still passes.
+   This protects the very layer scope 6 relies on. *Acceptance:
+   `test-install.sh` / `test-check-harness.sh` seeds an adopted fixture,
+   deletes its manifest, and asserts `check-harness.sh` exits non-zero naming
+   the missing manifest, while a genuinely pre-adoption fixture (no manifest,
+   no adopted mechanism) still passes.*
 
 ## Out of scope
 
@@ -120,14 +182,33 @@ plan turns that manual recipe into an automated suite.
 
 `bash scripts/verify.sh` green including `test-install.sh`; the five
 deterministic cases and the drift-detection case pass standalone; the
-generated fixture manifest enumerates `install-lib.sh` and `test-install.sh`
-(mutating either without re-pinning fails `check-harness.sh`); a deliberately
-mis-pinned manifest line makes the mechanism-upgrade case fail loudly (proving
-it asserts real state); no fixture residue outside the scratch dir; this repo's
-manifest re-pinned.
+generated fixture manifest enumerates `install-lib.sh`, `test-install.sh`, and
+`scripts/harness.conf` (mutating any without re-pinning fails
+`check-harness.sh`); a deliberately mis-pinned manifest line makes the
+mechanism-upgrade case fail loudly (proving it asserts real state); a fixture
+whose `.harness-manifest` is deleted post-adoption makes `check-harness.sh`
+exit non-zero naming the missing manifest, while a pre-adoption fixture with no
+manifest still passes; the narrowed-`SECRET_PATTERNS` regression (guard
+disarmed with CI green) no longer reproduces once `harness.conf` is pinned; no
+fixture residue outside the scratch dir; this repo's manifest re-pinned
+(now including `scripts/harness.conf`).
 
 ## Progress
 
+- 2026-07-11 — Folded in two *verified* self-protection findings from a second
+  external review (gpt-5.6-sol), each independently reproduced in-repo before
+  acting (scope 6–7): (1) `scripts/harness.conf` is pinned by neither the
+  manifest producer nor `guard-config.sh`, so a narrowed `SECRET_PATTERNS`
+  disarms the secret guard with `check-harness.sh` still green — reproduced
+  reading `id_rsa` / `*.pem` after setting `SECRET_PATTERNS=".env"`; an empty
+  value re-arms defaults via the `:-` fallback, so the exploit is narrowing;
+  (2) `check-harness.sh` silently accepts a *deleted* `.harness-manifest` (the
+  `[ -f ]` gate has no `else`) — reproduced (exit 0, no mention). Both land here
+  rather than in execution-governance because they are manifest-coverage /
+  drift-detection gaps this plan already owns (scope 1, 4). The manifest pin is
+  the load-bearing fix (shell edits are unscanned by design, so CI is the
+  enforcing layer); finding 2 protects that layer, so the two are sequenced
+  together and ahead of the fixture-suite extraction.
 - 2026-07-11 — Scoped from the 2026-07-11 standards-coverage audit, which
   found the install/upgrade workflow (the kit's core product boundary)
   untested and named it the largest unplanned reliability gap. Framed around
@@ -137,6 +218,21 @@ manifest re-pinned.
 
 ## Decisions
 
+- 2026-07-11 — Home + sequencing for the two verified integrity findings: fold
+  into this plan, not execution-governance, because both are manifest blind
+  spots and this plan exists to prove the manifest mechanism has none;
+  governance owns *external* containment (MCP trust, untrusted-repo, CI
+  supply-chain), a different layer. Land the two small hardening changes (+
+  their regression cases) *ahead of* the fixture-suite extraction — they don't
+  depend on `install-lib.sh`, and finding 1 is a live secret-guard weakness.
+- 2026-07-11 — Pin-first, protect-maybe for `harness.conf`: enumerating it in
+  the manifest is the committed minimum — it makes the file consistent with
+  every other policy file (`verify.sh` / `format.sh` are pinned, not
+  `PROTECTED_PATHS`) and closes the CI-enforcement hole that actually matters,
+  since shell edits are unscanned by design. The `PROTECTED_PATHS` live block is
+  left as an implementation-time call: it matches the treatment `guard-secrets.sh`
+  itself gets (defensible, since `harness.conf` feeds it) but adds
+  `HARNESS_ALLOW_MECHANISM_EDITS=1` friction to a file init tells users to tailor.
 - 2026-07-11 — Deterministic mechanism here, model judgment in evals: split
   the untested workflow at the model boundary. Extracting only the filesystem-
   mechanical subset (not a full `init` rewrite) keeps authoring flexible while
@@ -145,6 +241,10 @@ manifest re-pinned.
 
 ## Next action
 
-After plans-machinery ships: extract the deterministic install/update
-mechanics into `install-lib.sh` and stand up the throwaway-fixture helper,
-then write the clean-init case first.
+Land the two self-protection hardening fixes first — small, verified, and
+independent of the fixture harness: enumerate `scripts/harness.conf` in the
+manifest producer (SKILL.md step 8) + re-pin this repo's manifest, and make
+`check-harness.sh` ERROR on a missing manifest post-adoption, each with its
+regression case. Then extract the deterministic install/update mechanics into
+`install-lib.sh`, stand up the throwaway-fixture helper, and write the
+clean-init case.

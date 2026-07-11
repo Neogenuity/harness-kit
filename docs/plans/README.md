@@ -64,7 +64,7 @@ rows + strict Agent Skills validation + matrix stamping
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [install-update-verification.md](install-update-verification.md) | Deterministic fixture tests of `init`/`audit`/`update` — prove the core product boundary |
+| 1 | [install-update-verification.md](install-update-verification.md) | Deterministic fixture tests of `init`/`audit`/`update` — prove the core product boundary; + close two verified integrity blind spots (unpinned `harness.conf`, silently-skipped missing manifest) |
 | 2 | [behavioral-evals.md](behavioral-evals.md) | Golden tasks, multi-trial pass@k/pass^k runner, baselines — measure the harness itself |
 | 3 | [execution-governance.md](execution-governance.md) | Baseline: MCP trust inventory, untrusted-repo/prompt-injection guidance, CI hardening (advanced sandbox profiles trail #5) |
 | 4 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
@@ -89,7 +89,10 @@ outcomes worth measuring.
 
 The 2026-07-11 re-sort (new verification plan; governance baseline pulled
 forward) followed a standards-coverage audit against current Anthropic and
-OpenAI practice — see each plan's Progress log.
+OpenAI practice — see each plan's Progress log. A follow-up review the same day
+added two *verified* self-protection findings (an unpinned `harness.conf`, a
+silently-skipped missing manifest); both were reproduced in-repo and folded
+into the already-#1 verification plan without changing the order.
 
 Re-sorting is expected. Every harness component encodes an assumption about
 what models can't do on their own, and those assumptions get stress-tested
