@@ -57,9 +57,10 @@ philosophy).
 ## Dependencies
 
 Behavioral-evals (results to trend), reviewer-loop (findings lines + the
-trailer convention), execution-governance (export pointers). This is
-deliberately last: outcome telemetry is only worth building once gates,
-reviews, and evals emit outcomes.
+trailer convention), execution-governance's advanced audit-log-export item
+(the OTel/monitoring export pointers — its later half, which trails
+runtime-legibility). This is deliberately last: outcome telemetry is only
+worth building once gates, reviews, and evals emit outcomes.
 
 ## Verification
 

@@ -78,16 +78,50 @@ setting (<https://geminicli.com/docs/cli/gemini-md/>, validated 2026-07-10).
 6. **Fixture recipe**: a documented throwaway-fixture recipe (scratch git
    repo with a minimal manifest and one source file) in the kit's
    references, used by this plan's init verification and reused by later
-   plans (evals, governance). Automated fresh-repo init tests in CI stay
-   out of scope (deferred at the repackage release). *Acceptance:
-   following the recipe verbatim yields a repo where init completes and
-   `session-context.sh` announces a seeded plan.*
+   plans (install/update-verification, evals, governance). Automated
+   fresh-repo *init* tests in CI stay out of scope here — the
+   install/update-verification plan turns this recipe into an automated
+   deterministic suite. *Acceptance: following the recipe verbatim yields a
+   repo where init completes and `session-context.sh` announces a seeded
+   plan.*
+7. **Strict Agent Skills validation** (mechanism change — template + tests +
+   manifest re-pin). `check-harness.sh` today checks only that `name:` and
+   `description:` keys are *present* (check 1) and warns on kebab-case /
+   length (doctor). The Agent Skills spec
+   (<https://agentskills.io/specification>, validated 2026-07-11) makes
+   several of these hard requirements, so a malformed canonical skill can
+   pass this kit's CI yet fail to load in a provider. Promote to ERRORs, on
+   the canonical `docs/skills/**` skills: (a) a **closing** `---` frontmatter
+   delimiter exists (check 1 only tests the opening one); (b) `name` and
+   `description` values are **non-empty**; (c) `name` **equals its parent
+   directory**; (d) `name` has no leading/trailing or **consecutive** hyphens
+   and only `[a-z0-9-]`; (e) `name` ≤ 64 chars and `description` ≤ 1024 chars
+   (currently doctor warnings). Prefer `skills-ref validate` when it is on
+   `PATH`, with the dependency-free bash checks above as the always-available
+   fallback (the kit ships into repos that won't have it). *Acceptance:
+   `test-check-harness.sh` gains a fixture skill per failure class (bad dir
+   match, consecutive hyphens, empty description, missing closing delimiter);
+   manifest re-pinned.*
+8. **Provider-matrix freshness** (grouping with item 3b's staleness doctor
+   check + a docs pass). ADR 004 tracks the capability table's unstamped
+   facts as debt; a coverage audit (2026-07-11) flagged that provider facts
+   move fast enough that this should be nearer-term. (a) Stamp the
+   capability-table data rows (currently unstamped except the Distribution
+   row, which already carries 2026-07-10 stamps) with per-fact verified-dates
+   at edit time, re-verifying each against its primary doc. (b) Extend the doctor
+   staleness check (item 3b) to WARN when a `references/provider-matrix.md`
+   fact carries a `verified <date>` stamp older than a configurable age, and
+   when a matrix table row carries none — same shallow-CI age caveat as the
+   plans check. *Acceptance: matrix capability rows carry fresh stamps;
+   `test-check-harness.sh` covers the stale-stamp and missing-stamp cases.*
 
 ## Out of scope
 
 Eval machinery (behavioral-evals plan); reviewer persona (reviewer-loop
 plan); any sandbox/profile *implementation* (execution-governance plan —
-only the positioning paragraph lands here).
+only the positioning paragraph lands here); automated install/update
+filesystem tests (install/update-verification plan — this plan ships only
+the manual fixture recipe those tests build on).
 
 ## Dependencies
 
@@ -98,10 +132,22 @@ The repackage release (v0.5.0) merged — template paths move to
 
 `bash scripts/verify.sh` green; init dry-run on the scope-item-6 fixture
 produces `docs/plans/` and announces it at session start; new check cases
-pass standalone; matrix rows stamped.
+pass standalone (plan staleness, strict-skill-validation failure classes,
+matrix stale/missing-stamp); capability-table rows stamped; Copilot + Gemini
+rows stamped.
 
 ## Progress
 
+- 2026-07-11 — Two scope items added from the 2026-07-11 standards-coverage
+  audit: (7) strict Agent Skills spec validation in `check-harness.sh`
+  (name==dir, non-empty values, closing delimiter, consecutive-hyphen and
+  length checks promoted from doctor warnings to ERRORs, `skills-ref` when
+  available), and (8) capability-table stamping plus a matrix-stamp
+  extension to the staleness doctor check. Both are `check-harness.sh`
+  mechanism changes grouped here so one manifest re-pin covers them. The
+  audit's install/upgrade-testing finding was split into its own
+  install/update-verification plan (this plan ships the fixture recipe it
+  builds on).
 - 2026-07-10 — Hardened after two-agent review: TAILOR-comment claim
   corrected (only one commented example exists; the staleness check is
   new), path-check semantics pinned to markdown links only, staleness age
@@ -113,10 +159,16 @@ pass standalone; matrix rows stamped.
 
 ## Decisions
 
+- 2026-07-11 — Group the two audit-driven `check-harness.sh` additions
+  (strict Agent Skills validation, matrix stamping) into this release rather
+  than spawning a plan each: both are the same template+test+manifest-re-pin
+  shape, so one manifest re-pin and one test pass cover them, and both are
+  claim-to-implementation gaps this plan already exists to close.
 - 2026-07-10 — Plans-before-evals: cheaper, closes a shipped-claim gap, and
   the roadmap itself dogfoods the format.
 
 ## Next action
 
-After the repackage ships: draft `templates/docs/plans/_template.md` from
-this repo's live plan format.
+Draft `templates/docs/plans/_template.md` from this repo's live plan format
+(the repackage precondition merged as `e56f299`), then the strict-skill and
+matrix-stamp `check-harness.sh` additions.
