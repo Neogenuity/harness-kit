@@ -83,6 +83,12 @@ codex_patch() {
     jq -cn --arg c "$(printf "apply_patch <<'EOF'\n*** Begin Patch\n%s\n*** End Patch\nEOF" "$1")" \
         '{turn_id: "t1", tool_name: "apply_patch", tool_use_id: "c1", tool_input: {command: $c}}'
 }
+# Real Codex form: the BARE envelope, no "apply_patch" wrapper literal in the
+# command (tool_name carries the identity) — the shape a live capture showed.
+codex_patch_bare() {
+    jq -cn --arg c "$(printf '*** Begin Patch\n%s\n*** End Patch' "$1")" \
+        '{turn_id: "t1", tool_name: "apply_patch", tool_use_id: "c1", tool_input: {command: $c}}'
+}
 
 run 2 "Codex shell: cat .env denied"             "$(codex_shell "cat $WORK/.env")"
 run 2 "Codex shell: compound command denied"     "$(codex_shell "ls -la && cat $WORK/auth.json")"
@@ -115,6 +121,23 @@ run 0 "Codex patch: direct-arg body mentioning .env allowed" "$(jq -cn --arg c "
 run 0 "Codex patch: ordinary file allowed"       "$(codex_patch "*** Update File: $WORK/config.php
 @@
 +x")"
+# Real Codex form (bare envelope, no "apply_patch" literal): the write-side
+# denial rides on hook_affected_files, so the bare shape must engage too.
+run 2 "Codex bare patch: Update File .env denied" "$(codex_patch_bare "*** Update File: $WORK/.env
+@@
++SECRET=2")"
+run 0 "Codex bare patch: ordinary file allowed"   "$(codex_patch_bare "*** Update File: $WORK/config.php
+@@
++x")"
+run 0 "Codex bare patch: body mentioning .env allowed (envelope stripped)" "$(codex_patch_bare "*** Update File: $WORK/notes-about-env.md
+@@
++See .env for configuration")"
+# A plain shell command that merely CONTAINS patch text (tool_name shell, no
+# "apply_patch" literal — a heredoc writing a .patch file) must not fail-close
+# even when the patch body's Update-File header names a secret (PR #6 review):
+# the file-header layer only fires for real apply_patch events, and the token
+# scan strips the envelope before scanning.
+run 0 "Codex shell: patch text mentioning .env in a heredoc not denied" "$(jq -cn --arg c "$(printf 'cat > demo.patch <<PATCH\n*** Begin Patch\n*** Update File: %s\n@@\n+SECRET=2\n*** End Patch\nPATCH' "$WORK/.env")" '{turn_id: "t1", tool_name: "shell", tool_use_id: "c1", tool_input: {command: $c}}')"
 
 # --- harness.conf is the authoritative pattern source ---
 # A tailored conf fully replaces the defaults: its own globs deny/allow, and

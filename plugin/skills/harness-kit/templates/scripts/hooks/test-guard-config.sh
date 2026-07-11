@@ -55,6 +55,14 @@ codex_patch() {
     jq -cn --arg c "$(printf "apply_patch <<'EOF'\n*** Begin Patch\n%s\n*** End Patch\nEOF" "$1")" \
         '{turn_id: "t1", tool_name: "apply_patch", tool_use_id: "c1", tool_input: {command: $c}}'
 }
+# Real Codex form: the BARE envelope, no "apply_patch" wrapper literal in the
+# command (tool_name carries the identity). A live capture showed this is the
+# actual shape; the wrapper-only fixtures above let a gate keyed on the
+# "apply_patch" substring slip a mechanism edit through undenied.
+codex_patch_bare() {
+    jq -cn --arg c "$(printf '*** Begin Patch\n%s\n*** End Patch' "$1")" \
+        '{turn_id: "t1", tool_name: "apply_patch", tool_use_id: "c1", tool_input: {command: $c}}'
+}
 
 run 2 "Codex patch: hook edit denied"            "$(codex_patch '*** Update File: scripts/hooks/lib.sh
 @@
@@ -75,10 +83,27 @@ run 2 "Codex patch: dot-slash prefixed path denied" "$(codex_patch '*** Update F
 run 0 "Codex patch: ordinary file allowed"       "$(codex_patch '*** Update File: src/app.php
 @@
 +x')"
+# Real Codex form (bare envelope, no "apply_patch" literal) — the security
+# regression: this exact shape sailed through the guard before the lib.sh gate
+# was taught to recognize the bare envelope.
+run 2 "Codex bare patch: hook edit denied"       "$(codex_patch_bare '*** Update File: scripts/hooks/lib.sh
+@@
++x')"
+run 2 "Codex bare patch: manifest edit denied"   "$(codex_patch_bare '*** Update File: scripts/.harness-manifest
+@@
++x')"
+run 0 "Codex bare patch: ordinary file allowed"  "$(codex_patch_bare '*** Update File: src/app.php
+@@
++x')"
 # General shell commands are deliberately NOT scanned (read vs write is
 # indistinguishable from command text); check-harness.sh's manifest
 # verification is the enforcing layer for shell edits.
 run 0 "Codex shell: sed on mechanism not scanned (documented limit)" "$(jq -cn '{tool_input: {command: "sed -i s/a/b/ scripts/hooks/lib.sh"}}')"
+# A plain shell command that merely CONTAINS patch text (tool_name shell, no
+# "apply_patch" literal — a heredoc writing a .patch file) is not a patch
+# application and must not fail-close the guard (PR #6 review): the bare
+# envelope is only parsed when tool_name is apply_patch.
+run 0 "Codex shell: patch text in a heredoc not treated as a mechanism edit" "$(jq -cn --arg c "$(printf 'cat > demo.patch <<PATCH\n*** Begin Patch\n*** Update File: scripts/hooks/lib.sh\n@@\n+evil\n*** End Patch\nPATCH')" '{turn_id: "t1", tool_name: "shell", tool_use_id: "c1", tool_input: {command: $c}}')"
 run 0 "Codex patch: escape hatch allows mechanism edit" "$(codex_patch '*** Update File: scripts/hooks/lib.sh
 @@
 +x')" "HARNESS_ALLOW_MECHANISM_EDITS=1"

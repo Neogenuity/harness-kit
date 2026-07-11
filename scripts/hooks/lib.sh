@@ -35,16 +35,20 @@ hook_command_string() {
 # Codex sends NO file-path field — file edits arrive as an apply_patch
 # invocation inside `tool_input.command` — so parse the patch envelope's
 # file headers (Update/Add/Delete File, Move to; a multi-file patch yields
-# multiple lines). jq -r turns the payload's \n escapes into real newlines
-# whatever the shell quoting (<<'EOF', <<EOF, or a single-argument string),
-# so the headers always sit at line start.
+# multiple lines). A real Codex payload carries the BARE patch envelope
+# (`*** Begin Patch` … `*** End Patch`) directly in the command — the tool
+# identity is in `tool_name`, so the literal "apply_patch" is often absent
+# (verified against a real Codex payload, 2026-07); the shell-wrapper form
+# (`apply_patch <<'EOF' …`) also occurs. jq -r turns the payload's \n
+# escapes into real newlines whatever the shell quoting (<<'EOF', <<EOF, or
+# a single-argument string), so the headers always sit at line start.
 #
 # Callers looping over the result MUST use process substitution
 # (`while read … done < <(printf '%s\n' "$files")`), never a pipeline —
 # hook_deny's exit 2 inside a pipeline subshell would not end the hook.
 hook_affected_files() {
     command -v jq >/dev/null 2>&1 || return 0
-    local direct cmd
+    local direct cmd tool
     direct=$(printf '%s' "${HOOK_INPUT:-}" \
         | jq -r '.file_path // .tool_input.file_path // .tool_input.path // empty' 2>/dev/null)
     if [ -n "$direct" ]; then
@@ -52,7 +56,19 @@ hook_affected_files() {
         return 0
     fi
     cmd=$(hook_command_string)
-    case "$cmd" in *apply_patch*) ;; *) return 0 ;; esac
+    # Decide whether this command IS a patch application, keyed on the tool
+    # identity — never on command text alone. Codex's dedicated apply_patch
+    # tool sends the BARE envelope with no "apply_patch" literal, so trust its
+    # tool_name; and any tool that invokes the apply_patch CLI literally
+    # (`apply_patch <<'EOF' …`, including under a Bash/shell tool) is a real
+    # application too. A plain shell command that merely CONTAINS patch text
+    # (a heredoc writing a .patch file, an echo of a diff) is NOT one —
+    # parsing it would fabricate affected-file paths and fail-close a guard,
+    # so skip it.
+    tool=$(printf '%s' "${HOOK_INPUT:-}" | jq -r '.tool_name // empty' 2>/dev/null)
+    if [ "$tool" != "apply_patch" ]; then
+        case "$cmd" in *apply_patch*) ;; *) return 0 ;; esac
+    fi
     printf '%s\n' "$cmd" | awk '
         /^\*\*\* (Update|Add|Delete) File: / { sub(/^\*\*\* (Update|Add|Delete) File: /, ""); print; next }
         /^\*\*\* Move to: /                  { sub(/^\*\*\* Move to: /, ""); print }
