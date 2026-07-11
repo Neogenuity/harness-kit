@@ -51,8 +51,7 @@ gate      "shellcheck" bash -c 'shellcheck -x --severity=warning \
     plugins/harness-kit/skills/harness-kit/templates/scripts/*.sh \
     plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/*.sh \
     scripts/*.sh scripts/hooks/*.sh'
-full_gate "manifests" bash -c 'jq empty .claude-plugin/marketplace.json \
-    plugins/harness-kit/.claude-plugin/plugin.json'
+full_gate "manifests" bash scripts/check-packaging.sh
 full_gate "template-tests" bash -c 'for t in \
     plugins/harness-kit/skills/harness-kit/templates/scripts/test-*.sh \
     plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/test-*.sh; do \

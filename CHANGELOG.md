@@ -1,7 +1,42 @@
 # Changelog
 
-All notable changes to harness-kit. Versions refer to
-`plugin/.claude-plugin/plugin.json`.
+All notable changes to harness-kit. The version is defined in
+`plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
+
+## 0.5.0 — 2026-07-11
+
+- **Repackaged `plugin/` → `plugins/harness-kit/` + a Codex distribution
+  channel.** The same source tree now installs as a versioned, updatable
+  plugin in **both** Claude Code (`/plugin marketplace add`) and Codex
+  (`codex plugin marketplace add`) — the manual clone-and-copy of
+  `skills/harness-kit` still works but is no longer the only path. New files:
+  `plugins/harness-kit/.codex-plugin/plugin.json` and the root
+  `.agents/plugins/marketplace.json` (Codex's nested-source marketplace shape,
+  with `policy`/`category`; distinct from Claude Code's flat-string source —
+  schemas verified 2026-07-11 against learn.chatgpt.com/docs/build-plugins).
+  See [ADR 007](docs/architecture/decisions/007-dual-provider-packaging.md).
+- **`plugins/harness-kit/VERSION` is now the single version source**, mirrored
+  into both `plugin.json` files. New `scripts/check-packaging.sh` (the
+  `verify.sh` manifests gate) asserts the whole cross-file invariant — four
+  valid manifests, semver `VERSION` equal to both plugin versions, name
+  agreement, `./`-relative contained source paths, the Codex `skills` dir, and
+  in-enum `policy`/`category`.
+- **Codex hook commands now resolve from the Git root** (from PR #6 review): a
+  Codex session whose CWD is a repo subdirectory previously exited 127 because
+  `bash scripts/hooks/X.sh` is CWD-relative. All five commands in the Codex
+  `hooks.json` now use `bash "$(git rev-parse --show-toplevel)/scripts/hooks/X.sh"`
+  (the pattern the hooks docs recommend); a new `test-codex-hooks-cwd.sh`
+  regression test runs every command from a nested CWD in CI.
+- **Docs:** provider matrix gains a stamped **Distribution** row; new
+  migrations playbook for a provider shipping a plugin/marketplace channel;
+  README gains a "Codex, as a plugin" install section; the release skill now
+  bumps `VERSION` + both plugin.jsons together. Corrected a stale `pattern.md`
+  line that claimed `# tailored` manifest lines skip integrity checking (they
+  are still checksum-verified; the marker only exempts template *replacement*).
+- Update-mode note: this is a path/packaging change. Existing installs keep
+  working; to move to the plugin channel, install via your provider's
+  marketplace instead of the copy path. `lib.sh` and the guard/test scripts
+  are unchanged from 0.4.1 apart from the new Codex-hooks-CWD test.
 
 ## 0.4.1 — 2026-07-10
 

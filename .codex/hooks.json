@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/hooks/session-context.sh"
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/hooks/session-context.sh\""
           }
         ]
       }
@@ -15,11 +15,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/hooks/guard-secrets.sh"
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/hooks/guard-secrets.sh\""
           },
           {
             "type": "command",
-            "command": "bash scripts/hooks/guard-config.sh"
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/hooks/guard-config.sh\""
           }
         ]
       }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/hooks/format.sh"
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/hooks/format.sh\""
           }
         ]
       }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/hooks/guard-project-policy.sh"
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/hooks/guard-project-policy.sh\""
           }
         ]
       }

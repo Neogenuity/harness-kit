@@ -99,8 +99,24 @@ git clone git@github.com:riotCode/harness-kit.git
 cp -R harness-kit/plugins/harness-kit/skills/harness-kit ~/.claude/skills/harness-kit
 ```
 
-**Codex** discovers personal skills in `~/.agents/skills` (verified
-2026-07, [build-skills docs](https://learn.chatgpt.com/docs/build-skills)):
+**Codex, as a plugin** (recommended — versioned, updatable via the
+`.agents/plugins/` marketplace channel, verified 2026-07-11,
+[build-plugins docs](https://learn.chatgpt.com/docs/build-plugins)):
+
+```bash
+git clone git@github.com:riotCode/harness-kit.git
+codex plugin marketplace add ./harness-kit      # registers the catalog
+codex plugin add harness-kit@harness-kit        # installs the plugin
+```
+
+Then start a new Codex session and confirm the skill is available
+(`codex plugin list`). Codex reads both `.agents/plugins/marketplace.json`
+and the legacy-compatible `.claude-plugin/marketplace.json`, so `harness-kit`
+should appear exactly once.
+
+**Codex, as a personal skill** (no plugin infrastructure) — Codex discovers
+personal skills in `~/.agents/skills` (verified 2026-07,
+[build-skills docs](https://learn.chatgpt.com/docs/build-skills)):
 
 ```bash
 git clone git@github.com:riotCode/harness-kit.git

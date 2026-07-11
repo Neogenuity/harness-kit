@@ -53,6 +53,30 @@ existing portable scripts; teach `lib.sh:hook_affected_files` its payload
 layout if novel; add its native secret-deny config mirroring
 `harness.conf:SECRET_PATTERNS`.
 
+**A provider ships a plugin/marketplace distribution channel** (Codex gaining
+`codex plugin marketplace add` was the first — kit 0.5.0): the distributed
+plugin already lives at `plugins/harness-kit/`, so add the provider's manifest
+beside the existing one — zero content duplication.
+
+1. Re-verify the provider's plugin + marketplace schema against its primary
+   docs and stamp the matrix **Distribution** row (ADR 004 discipline). The
+   two providers rarely share a shape — Claude Code's marketplace
+   `plugins[].source` is a flat `"./…"` string; Codex's is a nested object
+   with required `policy`/`category` — so the two marketplace files are not
+   copy-paste twins.
+2. Add `plugins/harness-kit/.<provider>-plugin/plugin.json`
+   (name/version/description + the provider's skills-path key), version equal
+   to `VERSION`.
+3. Add or extend the root marketplace file in the provider's convention
+   (Codex: `.agents/plugins/marketplace.json`), its source pointing at
+   `./plugins/harness-kit`.
+4. Extend `check-packaging.sh` to validate the new manifest and marketplace
+   entry — schema, name agreement, version == `VERSION`, a contained
+   `./`-relative source path.
+5. `bash scripts/verify.sh` green. Releases bump `VERSION` and every
+   `plugin.json` version together (the packaging gate enforces equality); see
+   ADR 007.
+
 ## The end state
 
 When every supported harness reads `.agents/skills/` natively, flip the
