@@ -54,27 +54,40 @@ Repo references that must stay honest belong in markdown links (the CI link
 check walks every doc under `docs/`); prose and backtick mentions of
 not-yet-existing paths are legal — queued plans name future files by design.
 
-## Roadmap (set 2026-07-10)
+## Roadmap (set 2026-07-10, re-sorted 2026-07-11)
+
+Shipped: **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin
+distribution ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [active/v0.5.0-repackage-and-codex-distribution.md](active/v0.5.0-repackage-and-codex-distribution.md) | Repackage to `plugins/harness-kit/`; Codex plugin distribution (next up) |
-| 2 | [plans-machinery-and-provider-breadth.md](plans-machinery-and-provider-breadth.md) | Ship the plans machinery the docs already promise; Copilot + Gemini CLI rows |
-| 3 | [behavioral-evals.md](behavioral-evals.md) | Golden tasks, eval runner, baselines — measure the harness itself |
-| 4 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
-| 5 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
-| 6 | [execution-governance.md](execution-governance.md) | Sandbox/network/approval profiles, MCP trust inventory |
+| 1 | [plans-machinery-and-provider-breadth.md](plans-machinery-and-provider-breadth.md) | Plans machinery the docs already promise; Copilot + Gemini rows; strict Agent Skills validation; matrix stamping (next up) |
+| 2 | [install-update-verification.md](install-update-verification.md) | Deterministic fixture tests of `init`/`audit`/`update` — prove the core product boundary |
+| 3 | [behavioral-evals.md](behavioral-evals.md) | Golden tasks, multi-trial pass@k/pass^k runner, baselines — measure the harness itself |
+| 4 | [execution-governance.md](execution-governance.md) | Baseline: MCP trust inventory, untrusted-repo/prompt-injection guidance, CI hardening (advanced sandbox profiles trail #6) |
+| 5 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
+| 6 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
 | 7 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
 
-**Ordering rationale.** Scoped-and-locked work and claim-to-implementation
-gaps go first (the repackage, then plans machinery): cheapest, and they
-close the space between what the docs promise and what ships. Measurement
-(behavioral evals) lands before every component that must prove its value —
-the reviewer loop is validated by the seeded-defect eval the evals plan
-makes possible. Runtime legibility and execution governance carry the
-highest per-project tailoring cost, so they come after the cheap wins.
-Outcome telemetry is last because outcome metrics are only worth collecting
-once gates, reviews, and evals emit outcomes worth measuring.
+**Ordering rationale.** Claim-to-implementation gaps go first — plans
+machinery closes the space between what the docs promise and what ships, then
+install/update-verification puts the core product boundary (the `init`/`update`
+workflow) under an automated deterministic test, the largest previously
+unowned reliability gap. Measurement (behavioral evals) lands before every
+component that must prove its value — the reviewer loop is validated by the
+seeded-defect eval the evals plan makes possible. Execution governance's
+*baseline* (guidance docs, MCP inventory, CI hardening — near-zero tailoring
+cost) moves ahead of the reviewer and runtime work per current
+combined-controls guidance, which treats containment as non-optional rather
+than finishing work; its *advanced* per-provider sandbox profiles keep the
+high tailoring cost that argues for a later slot and trail runtime-legibility
+(shared `.devcontainer/` surface). Outcome telemetry is last because outcome
+metrics are only worth collecting once gates, reviews, and evals emit
+outcomes worth measuring.
+
+The 2026-07-11 re-sort (new verification plan; governance baseline pulled
+forward) followed a standards-coverage audit against current Anthropic and
+OpenAI practice — see each plan's Progress log.
 
 Re-sorting is expected. Every harness component encodes an assumption about
 what models can't do on their own, and those assumptions get stress-tested
