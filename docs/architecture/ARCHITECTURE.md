@@ -6,8 +6,8 @@ the main thing to understand:
 1. **A plugin marketplace** — `.claude-plugin/marketplace.json` at the root
    lets `/plugin marketplace add <owner>/harness-kit` work directly against
    this repo.
-2. **The distributed plugin** — everything under `plugin/`. When a user
-   installs the plugin, Claude Code copies the `plugin/` directory (the
+2. **The distributed plugin** — everything under `plugins/harness-kit/`. When a user
+   installs the plugin, Claude Code copies the `plugins/harness-kit/` directory (the
    marketplace entry's `source`) into its cache — *only* that directory.
    This is why the plugin lives in a subdirectory: nothing at the repo root
    ships.
@@ -17,7 +17,7 @@ the main thing to understand:
 
 ```mermaid
 flowchart LR
-    subgraph plugin/ [plugin/ — what ships]
+    subgraph plugin [plugins/harness-kit/ — what ships]
         T[templates/scripts<br/>mechanism + policy templates]
         S[SKILL.md<br/>init / audit / add-* / update]
         R[references/<br/>pattern, provider matrix, migrations]
@@ -40,7 +40,7 @@ The kit distinguishes **mechanism** (copied verbatim, upgraded via manifest),
 **policy** (templates with `TAILOR` blocks, filled at init, never
 auto-overwritten), and **content** (authored per-project). The canonical
 description lives in the shipped pattern doc —
-[plugin/skills/harness-kit/references/pattern.md](../../plugin/skills/harness-kit/references/pattern.md)
+[plugins/harness-kit/skills/harness-kit/references/pattern.md](../../plugins/harness-kit/skills/harness-kit/references/pattern.md)
 — which is the single source of truth for the pattern itself; this file only
 describes how *this repo* embodies it.
 
@@ -49,7 +49,7 @@ describes how *this repo* embodies it.
 The root harness is a real installation, so kit development follows the same
 lifecycle a user's repo does:
 
-1. Improve a template under `plugin/skills/harness-kit/templates/`.
+1. Improve a template under `plugins/harness-kit/skills/harness-kit/templates/`.
 2. An advisory stop-hook (`scripts/hooks/guard-project-policy.sh`) warns if
    the change carries no regression test or the plugin version was never
    bumped — the same "advise, never block" philosophy the kit ships.

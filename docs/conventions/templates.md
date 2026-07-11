@@ -1,6 +1,6 @@
 # Editing the shipped templates
 
-Rules for changing anything under `plugin/skills/harness-kit/templates/` —
+Rules for changing anything under `plugins/harness-kit/skills/harness-kit/templates/` —
 the code this kit installs into other people's repositories. Reviewers
 correct these most often; the advisory stop-hook and CI enforce the
 mechanical ones.
@@ -61,7 +61,7 @@ dependencies, and jq's absence must degrade, not crash.
 
 ## Version discipline
 
-A behavior change in shipped mechanism bumps `plugin/.claude-plugin/plugin.json`
+A behavior change in shipped mechanism bumps `plugins/harness-kit/.claude-plugin/plugin.json`
 before release ([docs/skills/release/SKILL.md](../skills/release/SKILL.md)) —
 installed repos pin mechanism by checksum, and update mode uses the version
 to know what changed.

@@ -24,11 +24,11 @@ templates being shipped, and an annotated tag pushed.
 1. `bash scripts/verify.sh` — all gates green before anything else.
 2. Decide the version (semver: mechanism behavior or template layout changes
    are at least minor while pre-1.0). Set it in
-   `plugin/.claude-plugin/plugin.json`.
+   `plugins/harness-kit/.claude-plugin/plugin.json`.
 3. Add the `CHANGELOG.md` entry: user-facing changes first, mechanism
    changes with their migration note (does update mode replace the file, or
    diff it?).
-4. If `plugin/skills/harness-kit/templates/scripts/` changed since the last
+4. If `plugins/harness-kit/skills/harness-kit/templates/scripts/` changed since the last
    release, roll the changes into this repo's own installation (the kit's
    **update** mode: replace manifest-matching files in `scripts/`, diff
    tailored ones), then re-pin `scripts/.harness-manifest` with the new
@@ -44,7 +44,7 @@ templates being shipped, and an annotated tag pushed.
 
 - `bash scripts/verify.sh` passes on the release commit.
 - `git show v<version>` shows the tag on the release commit.
-- `plugin/.claude-plugin/plugin.json` version, the manifest header, and the
+- `plugins/harness-kit/.claude-plugin/plugin.json` version, the manifest header, and the
   CHANGELOG heading all state the same version.
 
 ## Common Mistakes
@@ -52,6 +52,6 @@ templates being shipped, and an annotated tag pushed.
 - Re-pinning the manifest *before* rolling template changes into `scripts/`
   — the pin then blesses the stale copy and CI goes green on a lie.
 - Bumping the marketplace description instead of the plugin version — the
-  version lives only in `plugin/.claude-plugin/plugin.json`.
+  version lives only in `plugins/harness-kit/.claude-plugin/plugin.json`.
 - Forgetting `--follow-tags`, so the marketplace serves the new version but
   the tag never reaches the remote.

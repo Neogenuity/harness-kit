@@ -1,7 +1,7 @@
 ---
 description: Rules for editing the mechanism templates harness-kit ships into other repos
 globs:
-  - "plugin/skills/harness-kit/templates/**"
+  - "plugins/harness-kit/skills/harness-kit/templates/**"
 ---
 
 # Shipped-template discipline
@@ -13,4 +13,4 @@ Key points:
 - Hooks fail open (exit 0 on missing deps/unknown payloads); denial is exit 2 via `hook_deny`
 - Customization points live in marked TAILOR blocks or `harness.conf` — never in mechanism lines
 - Provider-matrix facts carry a `verified YYYY-MM` stamp naming a primary source
-- Mechanism behavior changes bump `plugin/.claude-plugin/plugin.json` before release
+- Mechanism behavior changes bump `plugins/harness-kit/.claude-plugin/plugin.json` before release

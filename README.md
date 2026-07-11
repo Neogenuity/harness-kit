@@ -37,7 +37,7 @@ as the example: start at [AGENTS.md](AGENTS.md), then
 [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for
 how the pieces fit and
 [docs/architecture/decisions/](docs/architecture/decisions/README.md) for
-why they look the way they do. Only [plugin/](plugin/) ships to users;
+why they look the way they do. Only [plugins/harness-kit/](plugins/harness-kit/) ships to users;
 everything else is the dogfood.
 
 ## What it installs into a target repo
@@ -65,14 +65,14 @@ everything else is the dogfood.
 Everything is **vendored into the target repo**: nothing at runtime depends
 on the kit being installed, so teammates on any harness — or none — get
 identical behavior from a plain clone. The full pattern and its rationale:
-[pattern.md](plugin/skills/harness-kit/references/pattern.md); per-provider
+[pattern.md](plugins/harness-kit/skills/harness-kit/references/pattern.md); per-provider
 file locations and hook events (key facts carrying verification stamps, with
 a Sources section to re-check against):
-[provider-matrix.md](plugin/skills/harness-kit/references/provider-matrix.md).
+[provider-matrix.md](plugins/harness-kit/skills/harness-kit/references/provider-matrix.md).
 
 ## Install
 
-The kit itself is one Agent Skill (`plugin/skills/harness-kit/`) — install
+The kit itself is one Agent Skill (`plugins/harness-kit/skills/harness-kit/`) — install
 it into whichever agent will *run* the scaffolding. What it installs into
 your repo is vendored and provider-agnostic either way: a harness
 scaffolded from Claude Code works identically for Codex, Cursor, and
@@ -96,7 +96,7 @@ credential helper); background auto-update additionally needs a
 
 ```bash
 git clone git@github.com:riotCode/harness-kit.git
-cp -R harness-kit/plugin/skills/harness-kit ~/.claude/skills/harness-kit
+cp -R harness-kit/plugins/harness-kit/skills/harness-kit ~/.claude/skills/harness-kit
 ```
 
 **Codex** discovers personal skills in `~/.agents/skills` (verified
@@ -104,7 +104,7 @@ cp -R harness-kit/plugin/skills/harness-kit ~/.claude/skills/harness-kit
 
 ```bash
 git clone git@github.com:riotCode/harness-kit.git
-cp -R harness-kit/plugin/skills/harness-kit ~/.agents/skills/harness-kit
+cp -R harness-kit/plugins/harness-kit/skills/harness-kit ~/.agents/skills/harness-kit
 ```
 
 Copied installs update by `git pull` + re-copy. To offer the kit inside a
@@ -129,8 +129,8 @@ worth an advisory stop-hook.
 ## Layout
 
 ```
-.claude-plugin/marketplace.json   marketplace manifest (points at plugin/)
-plugin/                           what ships: plugin manifest + the skill
+.claude-plugin/marketplace.json   marketplace manifest (points at plugins/harness-kit/)
+plugins/harness-kit/              what ships: plugin manifest + the skill
   skills/harness-kit/             SKILL.md, references/, templates/
 AGENTS.md, CLAUDE.md, docs/,      this repo's own installed harness
 scripts/, .claude/ .cursor/ ...   (see "This repo runs on itself")
@@ -138,7 +138,7 @@ scripts/, .claude/ .cursor/ ...   (see "This repo runs on itself")
 
 ## Status
 
-v0.4.0, extracted and generalized from a production Laravel modular
+v0.5.0, extracted and generalized from a production Laravel modular
 monolith where the pattern is exercised daily across multiple harnesses.
 Pre-launch checklist:
 
