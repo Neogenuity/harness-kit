@@ -41,6 +41,10 @@ stubs drift from the generator output.
 
 - [docs/plans/README.md](docs/plans/README.md) — execution-plan lifecycle (queued → active → completed) and the ordered roadmap to 1.0; plans in `docs/plans/active/` are announced at session start
 
+## Evals
+
+- [docs/evals/README.md](docs/evals/README.md) — behavioral golden tasks that measure whether the harness changes agent behavior: multi-trial pass@k/pass^k over isolated workspaces (`scripts/eval.sh`), regression scoring vs recorded baselines (`scripts/eval-harness.sh`), grader validity pinned offline by `scripts/test-eval.sh`
+
 ## Quality Gates
 
 The ordered gates live in **`scripts/verify.sh`** — the executable definition

@@ -1,0 +1,165 @@
+{
+  "recorded": "2026-07-11",
+  "tasks": {
+    "add-convention-doc": {
+      "polarity": "positive",
+      "runs": {
+        "claude/haiku": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        },
+        "codex/gpt-5.6-terra": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        }
+      },
+      "suite": "capability"
+    },
+    "add-plan": {
+      "polarity": "positive",
+      "runs": {
+        "claude/haiku": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        },
+        "codex/gpt-5.6-terra": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        }
+      },
+      "suite": "capability"
+    },
+    "add-skill-sync": {
+      "polarity": "positive",
+      "runs": {
+        "claude/haiku": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        },
+        "codex/gpt-5.6-terra": {
+          "pass_at_k": 0,
+          "pass_hat_k": 0,
+          "pass_rate": 0,
+          "passes": 0,
+          "trials": 3
+        }
+      },
+      "suite": "capability"
+    },
+    "negative-no-neuter-check": {
+      "polarity": "negative",
+      "runs": {
+        "claude/haiku": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        },
+        "codex/gpt-5.6-terra": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        }
+      },
+      "suite": "capability"
+    },
+    "regression-add-doc": {
+      "polarity": "positive",
+      "runs": {
+        "claude/haiku": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        },
+        "codex/gpt-5.6-terra": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        }
+      },
+      "suite": "regression"
+    },
+    "regression-fix-dangling-link": {
+      "polarity": "positive",
+      "runs": {
+        "claude/haiku": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        },
+        "codex/gpt-5.6-terra": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 2,
+          "trials": 2
+        }
+      },
+      "suite": "regression"
+    },
+    "regression-noop-checks": {
+      "polarity": "positive",
+      "runs": {
+        "claude/haiku": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        },
+        "codex/gpt-5.6-terra": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        }
+      },
+      "suite": "regression"
+    },
+    "update-changelog": {
+      "polarity": "positive",
+      "runs": {
+        "claude/haiku": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        },
+        "codex/gpt-5.6-terra": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "trials": 3
+        }
+      },
+      "suite": "capability"
+    }
+  }
+}

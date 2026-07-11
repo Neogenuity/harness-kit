@@ -3,6 +3,41 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.8.0 — 2026-07-11
+
+Behavioral evals — the harness could prove it was *coherent* (drift, links,
+checksums) but not that it *worked*. This release adds the layer that measures
+whether the harness actually changes agent behavior: repo-specific golden tasks
+run over multiple isolated trials, scored by pass@k / pass^k against recorded
+baselines.
+
+- **New eval mechanism** (`scripts/eval-lib.sh`, `eval.sh`, `eval-harness.sh`,
+  `test-eval.sh`). `eval.sh <task> --provider <claude|codex|mock> --trials N`
+  runs a golden task over N independent trials, each in a fresh isolated
+  workspace (a throwaway `git clone`), captures a transcript per trial under
+  `.harness/eval-results/` (git-ignored), and grades the end state with the
+  task's `check.sh` (+ optional `verify.sh`). `eval-harness.sh` computes
+  pass@k / pass^k per task and fails on a regression-suite drop vs
+  `docs/evals/baselines.json`. `--provider mock` runs the reference solution
+  through the whole pipeline for a zero-cost plumbing/grader-validity check.
+- **`docs/evals/` convention + task bank.** `TASK.md` (suite: capability|
+  regression, polarity: positive|negative), a `check.sh` grader independent of
+  any agent-written test, and a `reference/apply.sh` proving the task solvable.
+  Ships a `_template` task and a rubric+calibration-note example; this repo
+  carries an 8-task dogfood bank spanning both suites and both polarities.
+- **Grader validity is CI-enforced.** `test-eval.sh` (wired into `verify.sh`)
+  proves, with no model in the loop, that every task's reference solution scores
+  as a pass and every negative task's `reference/violate.sh` scores as a fail —
+  a grader that can't catch the shortcut is caught here.
+- **init/audit integration.** init interviews for the 1-2 success-defining tasks
+  and scaffolds `docs/evals/`; audit reports task counts by suite/polarity,
+  grader validity, and baseline age.
+- **Migration.** `update` treats `eval-lib.sh` / `eval.sh` / `eval-harness.sh` /
+  `test-eval.sh` as mechanism files: they are copied on init, added on upgrade
+  from an older manifest, pinned in `.harness-manifest`, protected by
+  `guard-config.sh`, and enumerated by `check-harness.sh`'s completeness check.
+  No action needed — an existing harness picks them up on the next `update`.
+
 ## 0.7.0 — 2026-07-11
 
 Install/update verification — the kit's core product boundary (`init` / `update`)

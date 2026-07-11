@@ -58,11 +58,15 @@ behavior from the repo alone.
    - One domain invariant for the advisory stop-hook, if any (the mistake
      that costs a review cycle every time — e.g. tenancy scoping, missing
      migration, unregistered route). Skippable; the hook ships as a no-op.
+   - The 1-2 recurring tasks that *define success* in this repo ("add an
+     endpoint", "add a model") — the seeds for the first behavioral eval golden
+     tasks. Skippable; the eval bank starts empty and an empty bank is fine.
 
 3. **Install mechanism** from `templates/scripts/` into `scripts/`:
    `harness.conf`, `install-lib.sh`, `sync-agent-skills.sh`, `check-harness.sh`,
-   `test-check-harness.sh`, `test-install.sh`, `verify.sh`, and `hooks/` (all
-   scripts + tests + README). `chmod +x scripts/hooks/*.sh scripts/*.sh`.
+   `test-check-harness.sh`, `test-install.sh`, `eval-lib.sh`, `eval.sh`,
+   `eval-harness.sh`, `test-eval.sh`, `verify.sh`, and `hooks/` (all scripts +
+   tests + README). `chmod +x scripts/hooks/*.sh scripts/*.sh`.
    `install-lib.sh` is the deterministic, model-free core of this flow —
    `harness_install_mechanism` copies exactly this set, and step 8's
    `harness_generate_manifest` and `update` mode both call it; `test-install.sh`
@@ -109,6 +113,14 @@ behavior from the repo alone.
      `session-context.sh` has a directory to announce. Copy
      `templates/docs/plans/_template.md` alongside it; seed real plans only
      when there's long-horizon work to track (an empty queue is fine).
+   - `docs/evals/` from `templates/docs/evals/` (`README.md` + `tasks/_template/`
+     + `rubrics/_example.md`) — the behavioral eval bank. Author real golden
+     tasks only for the recurring success-defining work named in the interview;
+     an empty bank is fine, but if you ship none, delete the AGENTS.md Evals
+     link so `check-harness.sh` doesn't dangle. Each task grades the *end state*
+     via `check.sh` and ships a `reference/apply.sh` that `test-eval.sh` proves
+     scores as a pass (and, for negative tasks, a `reference/violate.sh` it
+     proves scores as a fail).
 
 6. **Wire providers** (for each provider chosen in the interview):
    - Claude Code: `templates/providers/claude/settings.json` →
@@ -150,7 +162,8 @@ behavior from the repo alone.
    in `scripts/install-lib.sh` is the single producer; it pins the whole
    `scripts/hooks/` tree plus the top-level mechanism files (`harness.conf`,
    `install-lib.sh`, `sync-agent-skills.sh`, `check-harness.sh`,
-   `test-check-harness.sh`, `test-install.sh`, `verify.sh`):
+   `test-check-harness.sh`, `test-install.sh`, `eval-lib.sh`, `eval.sh`,
+   `eval-harness.sh`, `test-eval.sh`, `verify.sh`):
    ```bash
    . scripts/install-lib.sh
    harness_generate_manifest . <kit-version> > scripts/.harness-manifest
@@ -188,8 +201,12 @@ permission deny list mirroring the secret guard; the configured `PLANS_DIR`
 `session-context.sh` silently announce nothing) and `docs/plans/README.md`
 present (AGENTS.md links it, so a missing README is a dead link); CI running
 the drift gate; manifest present and passing its checksum
-verification. Then run `scripts/check-harness.sh` and the hook tests if
-they exist. If `.harness/log.jsonl` exists, summarize it: deny / advise /
+verification. If a behavioral eval bank exists (`docs/evals/`), report its
+health too: number of golden tasks by suite (capability / regression) and
+polarity, whether `test-eval.sh` passes (grader validity), and the age of
+`docs/evals/baselines.json` (stale or absent baselines mean the harness is
+unmeasured — recommend a scheduled `eval-harness.sh` run). Then run
+`scripts/check-harness.sh` and the hook tests if they exist. If `.harness/log.jsonl` exists, summarize it: deny / advise /
 lint-findings counts by hook and by file — a repeatedly-denied path or a
 warning surfaced every session is the next mistake to engineer away
 (tighten a pattern, add a lint rule, write a convention doc). Output: a

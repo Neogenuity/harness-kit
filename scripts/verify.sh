@@ -56,6 +56,12 @@ full_gate "template-tests" bash -c 'for t in \
     plugins/harness-kit/skills/harness-kit/templates/scripts/test-*.sh \
     plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/test-*.sh; do \
         echo "== $t"; bash "$t" || exit 1; done'
+# Behavioral-eval grader validity for THIS repo's real golden-task bank. The
+# template-tests gate above only runs the shipped _template (empty bank), and
+# the nested harness gate below skips the root test-eval.sh (its graders call
+# check-harness.sh — would recurse). So the real bank is validated here, once,
+# with no model in the loop. Dogfood-only, same rationale as the dedup below.
+full_gate "evals" bash scripts/test-eval.sh
 # HARNESS_NESTED_FIXTURE here skips check-harness.sh's re-run of test-install.sh
 # and test-check-harness.sh (each spins up fixtures / sub-checks and is already
 # run above on the byte-identical templates, so re-running the root copies is

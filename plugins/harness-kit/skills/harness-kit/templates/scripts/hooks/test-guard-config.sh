@@ -42,6 +42,8 @@ run() {
 run 2 "hook script edit denied"          "$(payload "$WORK/scripts/hooks/lib.sh")"
 run 2 "check-harness.sh edit denied"     "$(payload "$WORK/scripts/check-harness.sh")"
 run 2 "install-lib.sh edit denied"       "$(payload "$WORK/scripts/install-lib.sh")"
+run 2 "eval runner edit denied"          "$(payload "$WORK/scripts/eval.sh")"
+run 2 "eval-lib edit denied"             "$(payload "$WORK/scripts/eval-lib.sh")"
 run 2 "manifest edit denied"             "$(payload "$WORK/scripts/.harness-manifest")"
 run 2 "regression test edit denied"      "$(payload "$WORK/scripts/test-check-harness.sh")"
 run 2 "hook wiring edit denied"          "$(payload "$WORK/.claude/settings.json")"

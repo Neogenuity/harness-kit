@@ -188,17 +188,18 @@ done
 # 6. Regression tests must pass — both hook guards (scripts/hooks/test-*.sh)
 #    and top-level mechanism tests (scripts/test-*.sh, e.g. test-check-harness.sh).
 #    test-install.sh drives fixtures that run check-harness.sh inside a throwaway
-#    install; HARNESS_NESTED_FIXTURE (set by test-install.sh) makes THIS check
-#    skip only the two tests that themselves invoke check-harness.sh —
-#    test-install.sh (would recurse) and test-check-harness.sh (already run at the
-#    top level, pure redundancy inside a fixture). Every guard behavioral test
-#    (test-guard-*.sh, the catch for a re-pinned guard weakening) always runs, so
-#    no single env var can switch off the security-relevant regression layer.
-#    Unset in normal and CI runs.
+#    install; test-eval.sh clones fixtures whose graders run check-harness.sh.
+#    HARNESS_NESTED_FIXTURE (set by test-install.sh, and by every eval grader that
+#    calls check-harness.sh) makes THIS check skip only the tests that themselves
+#    invoke check-harness.sh — test-install.sh and test-eval.sh (would recurse)
+#    and test-check-harness.sh (already run at the top level, pure redundancy
+#    inside a fixture). Every guard behavioral test (test-guard-*.sh, the catch
+#    for a re-pinned guard weakening) always runs, so no single env var can switch
+#    off the security-relevant regression layer. Unset in normal and CI runs.
 for test in "$ROOT"/scripts/test-*.sh "$ROOT"/scripts/hooks/test-*.sh; do
     [ -f "$test" ] || continue
     case "$(basename "$test")" in
-        test-install.sh|test-check-harness.sh)
+        test-install.sh|test-check-harness.sh|test-eval.sh)
             [ -n "${HARNESS_NESTED_FIXTURE:-}" ] && continue ;;
     esac
     if ! bash "$test" >/dev/null 2>&1; then
@@ -357,6 +358,8 @@ if [ -f "$MANIFEST" ] && [ -d "$ROOT/scripts/hooks" ]; then
     for mech in "$ROOT"/scripts/hooks/* \
                 "$ROOT"/scripts/harness.conf "$ROOT"/scripts/check-harness.sh \
                 "$ROOT"/scripts/sync-agent-skills.sh "$ROOT"/scripts/install-lib.sh \
+                "$ROOT"/scripts/eval-lib.sh "$ROOT"/scripts/eval.sh \
+                "$ROOT"/scripts/eval-harness.sh \
                 "$ROOT"/scripts/verify.sh "$ROOT"/scripts/test-*.sh; do
         [ -f "$mech" ] || continue
         rel="scripts/${mech#"$ROOT"/scripts/}"

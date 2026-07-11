@@ -38,6 +38,7 @@ scripts/hooks/*.sh
 scripts/check-harness.sh
 scripts/install-lib.sh
 scripts/sync-agent-skills.sh
+scripts/eval*.sh
 scripts/test-*.sh
 scripts/.harness-manifest
 .claude/settings.json

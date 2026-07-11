@@ -56,7 +56,10 @@ not-yet-existing paths are legal — queued plans name future files by design.
 
 ## Roadmap (set 2026-07-10, re-sorted 2026-07-11)
 
-Shipped: **v0.7.0** — deterministic fixture tests of the `init`/`update`
+Shipped: **v0.8.0** — the behavioral eval layer (golden tasks, multi-trial
+pass@k/pass^k runner, recorded baselines — measure the harness itself)
+([completed/v0.8.0-behavioral-evals.md](completed/v0.8.0-behavioral-evals.md));
+**v0.7.0** — deterministic fixture tests of the `init`/`update`
 mechanics (`install-lib.sh` + `test-install.sh`) + two verified integrity fixes
 (pinned `harness.conf`, missing-manifest ERROR)
 ([completed/v0.7.0-install-update-verification.md](completed/v0.7.0-install-update-verification.md));
@@ -68,11 +71,10 @@ rows + strict Agent Skills validation + matrix stamping
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [behavioral-evals.md](behavioral-evals.md) | Golden tasks, multi-trial pass@k/pass^k runner, baselines — measure the harness itself |
-| 2 | [execution-governance.md](execution-governance.md) | Baseline: MCP trust inventory, untrusted-repo/prompt-injection guidance, CI hardening (advanced sandbox profiles trail #4) |
-| 3 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
-| 4 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
-| 5 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
+| 1 | [execution-governance.md](execution-governance.md) | Baseline: MCP trust inventory, untrusted-repo/prompt-injection guidance, CI hardening (advanced sandbox profiles trail #3) |
+| 2 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
+| 3 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
+| 4 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
 
 **Ordering rationale.** Claim-to-implementation gaps went first — plans
 machinery (v0.6.0) closed the space between what the docs promise and what
