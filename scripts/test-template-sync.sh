@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Drift gate for the dogfood installation (THIS repo only — never shipped).
-# The templates under plugin/skills/harness-kit/templates/scripts/ are the
+# The templates under plugins/harness-kit/skills/harness-kit/templates/scripts/ are the
 # source of truth; the root scripts/ are the kit's own installed copy (see
 # docs/architecture/decisions/006-dogfood-copies-are-enforced-duplicates.md).
 # Every non-tailored mechanism file must be byte-identical to its template
@@ -13,7 +13,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TPL="$ROOT/plugin/skills/harness-kit/templates/scripts"
+TPL="$ROOT/plugins/harness-kit/skills/harness-kit/templates/scripts"
 MANIFEST="$ROOT/scripts/.harness-manifest"
 
 [ -d "$TPL" ] || { echo "SKIP: no template dir at ${TPL#"$ROOT"/}"; exit 0; }
@@ -58,7 +58,7 @@ while IFS= read -r line; do
     rel=$(printf '%s\n' "$line" | awk '{print $2}')
     [ -n "$rel" ] || continue
     if [ ! -f "$TPL/${rel#scripts/}" ]; then
-        echo "FAIL: $rel is manifest-pinned but has no template twin under plugin/skills/harness-kit/templates/scripts/ — the template was renamed or removed; update the installed copy and its manifest line to match"
+        echo "FAIL: $rel is manifest-pinned but has no template twin under plugins/harness-kit/skills/harness-kit/templates/scripts/ — the template was renamed or removed; update the installed copy and its manifest line to match"
         fails=$((fails + 1))
     fi
 done < "$MANIFEST"

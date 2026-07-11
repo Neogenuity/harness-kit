@@ -18,6 +18,19 @@ against. (Full matrix last validated: 2026-07; Codex facts re-verified
 | Hooks | `.claude/settings.json` → `hooks` | `.cursor/hooks.json` | `.codex/hooks.json` (or `config.toml` `[hooks]`; trust-gated) | `.opencode/plugins/*.ts` shim (JS/TS only) | — |
 | Permissions | `.claude/settings.json` → `permissions` | (harness UI) | (trust model + `PermissionRequest` hook) | `opencode.json` `permission.read` denies (mirror `harness.conf` `SECRET_PATTERNS`) | — |
 | MCP servers | `.mcp.json` (project) | `.cursor/mcp.json` | `.codex/config.toml` `[mcp_servers.*]` | `opencode.json` `"mcp"` | `~/.agents/mcp-settings.json` (proposed, user-level) |
+| Distribution | `.claude-plugin/marketplace.json` → `plugins/harness-kit/.claude-plugin/plugin.json`; `/plugin marketplace add <owner>/harness-kit` (verified 2026-07-10) | — (no plugin channel) | `.agents/plugins/marketplace.json` → `plugins/harness-kit/.codex-plugin/plugin.json`; `codex plugin marketplace add <path>` (verified 2026-07-10) | — (no plugin channel) | `.agents/plugins/marketplace.json` (Codex's channel rides the `.agents` tree) |
+
+**Distribution** is the versioned, updatable install path (vs. the manual
+clone-and-copy of `skills/harness-kit`). The two providers do **not** share a
+marketplace shape: Claude Code's `plugins[].source` is a flat `"./…"` string;
+Codex's is a nested object (`{ "source": "local", "path": "./…" }`) and its
+entry additionally requires `policy.installation`
+(`AVAILABLE`\|`INSTALLED_BY_DEFAULT`\|`NOT_AVAILABLE`), `policy.authentication`
+(`ON_INSTALL`\|`ON_FIRST_USE`), and a `category`, with a top-level
+`interface.displayName`. `.codex-plugin/plugin.json` requires
+`name`/`version`/`description` and takes `skills: "./skills/"`. `VERSION` is
+the neutral single source both plugin manifests must equal — `check-packaging.sh`
+enforces the whole invariant (schema verified 2026-07-10, see Sources; ADR 007).
 
 ## Hook event mapping
 
@@ -155,6 +168,12 @@ Primary docs to re-validate each section against (all last consulted
   (developers.openai.com/codex/hooks now 308-redirects here)
 - Codex skills (discovery dirs incl. user-level `~/.agents/skills`,
   invocation): <https://learn.chatgpt.com/docs/build-skills>
+- Codex plugins + marketplace (`.codex-plugin/plugin.json` and
+  `.agents/plugins/marketplace.json` schemas, `codex plugin marketplace add`):
+  <https://learn.chatgpt.com/docs/build-plugins>
+  (developers.openai.com/codex/plugins/build 308-redirects here; the hooks
+  doc <https://learn.chatgpt.com/docs/hooks> recommends Git-root-resolved
+  hook commands)
 - OpenCode permissions (`permission.read` pattern rules):
   <https://opencode.ai/docs/permissions/>
 - OpenCode plugins (the hook shim's API):

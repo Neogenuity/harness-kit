@@ -10,6 +10,7 @@ that touches the same ground.
 - [004 — Per-fact verification stamps in the provider matrix](004-provider-matrix-verification.md)
 - [005 — The harness protects itself from the agent it serves](005-manifest-self-protection.md)
 - [006 — Dogfood copies are enforced duplicates, not references](006-dogfood-copies-are-enforced-duplicates.md)
+- [007 — Dual-provider packaging: one plugin tree, two manifests, a neutral VERSION](007-dual-provider-packaging.md)
 
 Format: context / decision / consequences, half a page each. New ADRs take
 the next number; superseded ADRs stay in place with a pointer to their

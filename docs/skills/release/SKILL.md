@@ -23,12 +23,15 @@ templates being shipped, and an annotated tag pushed.
 
 1. `bash scripts/verify.sh` — all gates green before anything else.
 2. Decide the version (semver: mechanism behavior or template layout changes
-   are at least minor while pre-1.0). Set it in
-   `plugin/.claude-plugin/plugin.json`.
+   are at least minor while pre-1.0). `plugins/harness-kit/VERSION` is the
+   single source of truth — set it there, and set the same value in **both**
+   `plugins/harness-kit/.claude-plugin/plugin.json` and
+   `plugins/harness-kit/.codex-plugin/plugin.json`. `scripts/check-packaging.sh`
+   (the `verify.sh` manifests gate) fails unless all three agree (see ADR 007).
 3. Add the `CHANGELOG.md` entry: user-facing changes first, mechanism
    changes with their migration note (does update mode replace the file, or
    diff it?).
-4. If `plugin/skills/harness-kit/templates/scripts/` changed since the last
+4. If `plugins/harness-kit/skills/harness-kit/templates/scripts/` changed since the last
    release, roll the changes into this repo's own installation (the kit's
    **update** mode: replace manifest-matching files in `scripts/`, diff
    tailored ones), then re-pin `scripts/.harness-manifest` with the new
@@ -44,14 +47,16 @@ templates being shipped, and an annotated tag pushed.
 
 - `bash scripts/verify.sh` passes on the release commit.
 - `git show v<version>` shows the tag on the release commit.
-- `plugin/.claude-plugin/plugin.json` version, the manifest header, and the
-  CHANGELOG heading all state the same version.
+- `plugins/harness-kit/VERSION`, both plugin.json versions, the manifest
+  header, and the CHANGELOG heading all state the same version
+  (`check-packaging.sh` enforces the manifest trio).
 
 ## Common Mistakes
 
 - Re-pinning the manifest *before* rolling template changes into `scripts/`
   — the pin then blesses the stale copy and CI goes green on a lie.
-- Bumping the marketplace description instead of the plugin version — the
-  version lives only in `plugin/.claude-plugin/plugin.json`.
+- Bumping only one version field — the version lives in
+  `plugins/harness-kit/VERSION` and must be mirrored into both plugin.json
+  files; the packaging gate fails on any mismatch.
 - Forgetting `--follow-tags`, so the marketplace serves the new version but
   the tag never reaches the remote.

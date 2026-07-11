@@ -5,7 +5,7 @@
 ## Context
 
 Every mechanism script — including the regression tests — exists twice: the
-shipped template under `plugin/skills/harness-kit/templates/scripts/` and
+shipped template under `plugins/harness-kit/skills/harness-kit/templates/scripts/` and
 this repo's installed copy under `scripts/`. The obvious de-duplications all
 break something load-bearing. Root-only tests pointing at the plugin copies:
 the tests are themselves shipped product (installed repos self-test via

@@ -10,7 +10,7 @@ the ones users get.
    (warning severity) on every script, JSON-valid manifests, the template
    regression tests, and the harness drift gate.
 2. **Template changes ship with a test.** Anything under
-   `plugin/skills/harness-kit/templates/scripts/` is code that gets
+   `plugins/harness-kit/skills/harness-kit/templates/scripts/` is code that gets
    installed into other people's repos — a new or changed guard hook gets a
    `test-<name>.sh` beside it. The advisory stop-hook will remind you; CI
    will insist. See [docs/conventions/templates.md](docs/conventions/templates.md).

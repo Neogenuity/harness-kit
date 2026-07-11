@@ -16,7 +16,7 @@ confidence.
 ## Decision
 
 Load-bearing facts in
-[provider-matrix.md](../../../plugin/skills/harness-kit/references/provider-matrix.md)
+[provider-matrix.md](../../../plugins/harness-kit/skills/harness-kit/references/provider-matrix.md)
 carry a **verified stamp** — a validated date, cross-referenced to the file's
 Sources section — recorded as each fact is individually checked. The header
 states how current the matrix is overall, and facts that haven't been

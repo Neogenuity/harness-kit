@@ -10,17 +10,17 @@ deeper sources.
 cross-agent harness (Claude Code, Cursor, Codex, OpenCode, `.agents`) into
 any repository. Two facts to know before touching anything:
 
-1. The distributed plugin lives entirely under `plugin/` — everything at the
+1. The distributed plugin lives entirely under `plugins/harness-kit/` — everything at the
    repo root is this repo's **own installed harness** (dogfooding) and never
    ships to users.
-2. `plugin/skills/harness-kit/templates/` is the product. The root
+2. `plugins/harness-kit/skills/harness-kit/templates/` is the product. The root
    `scripts/` are an *installed, tailored copy* of those templates, pinned by
    `scripts/.harness-manifest`. Improve the templates first, then roll the
    change into the installed copy via the kit's update mode.
 
 ## Architecture
 
-- [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) — repo anatomy: marketplace root, `plugin/` distribution, the self-installed harness and its upgrade loop
+- [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) — repo anatomy: marketplace root, `plugins/harness-kit/` distribution, the self-installed harness and its upgrade loop
 - [docs/architecture/decisions/README.md](docs/architecture/decisions/README.md) — decision records: the "why" behind the pattern's load-bearing choices
 
 ## Conventions

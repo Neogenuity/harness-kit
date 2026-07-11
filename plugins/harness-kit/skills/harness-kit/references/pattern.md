@@ -130,9 +130,11 @@ At install, the kit writes `scripts/.harness-manifest`: the kit version plus
 a sha256 per installed mechanism file, pinned AFTER init-time tailoring.
 `check-harness.sh` verifies those checksums on every run, so any later edit
 — agent, human, or merge — fails CI until its line is deliberately re-pinned.
-A line suffixed ` # tailored` marks a deliberate local fork: the integrity
-check skips it, and `update` will only ever diff that file, never replace
-it. On `update`, files whose checksum still matches the manifest are
+A line suffixed ` # tailored` marks a deliberate local fork: its checksum is
+**still** integrity-verified (a tailored file may not drift unnoticed — the
+marker only exempts it from template *replacement*, not from pinning), but
+`update` will only ever diff that file, never replace it. On `update`, files
+whose checksum still matches the manifest are
 upgraded in place; files that differ (or are marked tailored) get a diff
 instead of an overwrite. Policy templates (TAILOR blocks) are always treated
 as tailored after init.

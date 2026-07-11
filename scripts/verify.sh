@@ -48,14 +48,13 @@ full_gate() { [ "$MODE" = "fast" ] && return 0; run_gate "$@"; }
 # hook tests itself).
 
 gate      "shellcheck" bash -c 'shellcheck -x --severity=warning \
-    plugin/skills/harness-kit/templates/scripts/*.sh \
-    plugin/skills/harness-kit/templates/scripts/hooks/*.sh \
+    plugins/harness-kit/skills/harness-kit/templates/scripts/*.sh \
+    plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/*.sh \
     scripts/*.sh scripts/hooks/*.sh'
-full_gate "manifests" bash -c 'jq empty .claude-plugin/marketplace.json \
-    plugin/.claude-plugin/plugin.json'
+full_gate "manifests" bash scripts/check-packaging.sh
 full_gate "template-tests" bash -c 'for t in \
-    plugin/skills/harness-kit/templates/scripts/test-*.sh \
-    plugin/skills/harness-kit/templates/scripts/hooks/test-*.sh; do \
+    plugins/harness-kit/skills/harness-kit/templates/scripts/test-*.sh \
+    plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/test-*.sh; do \
         echo "== $t"; bash "$t" || exit 1; done'
 full_gate "harness" bash scripts/check-harness.sh
 # ------------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 # rule that, when missed, costs a review cycle every time.
 #
 # Tailored for THIS repo (harness-kit): the invariant is shipped-mechanism
-# discipline. When a mechanism template under plugin/.../templates/scripts/
+# discipline. When a mechanism template under plugins/harness-kit/.../templates/scripts/
 # changes in the working tree, warn unless a regression test was touched too
 # and the plugin version was bumped vs HEAD. Uses `git status --porcelain
 # -uall` so a brand-new untracked directory expands to its individual files.
@@ -30,7 +30,7 @@ append() { warnings="${warnings}$1"$'\n'; }
 # change to the mechanism templates that ship inside the plugin must carry a
 # regression test, and must not reach a release without a version bump.
 # See docs/conventions/templates.md.
-TPL="plugin/skills/harness-kit/templates/scripts"
+TPL="plugins/harness-kit/skills/harness-kit/templates/scripts"
 # -uall expands a brand-new untracked directory to its individual files (plain
 # --porcelain collapses it to one "dir/" entry, so a test added inside it
 # would be missed). Strip the XY status prefix and any "orig -> " rename arrow
@@ -45,10 +45,10 @@ if [ -n "$changed" ]; then
     # change" (a rename or a description-only edit would fool that). Fail safe:
     # if either value is unreadable (no jq, or the file is new-at-path mid-move)
     # stay silent rather than warn wrongly.
-    cur_ver=$(jq -r '.version // empty' plugin/.claude-plugin/plugin.json 2>/dev/null)
-    head_ver=$(git show HEAD:plugin/.claude-plugin/plugin.json 2>/dev/null | jq -r '.version // empty' 2>/dev/null)
+    cur_ver=$(cat plugins/harness-kit/VERSION 2>/dev/null | tr -d '[:space:]')
+    head_ver=$(git show HEAD:plugins/harness-kit/VERSION 2>/dev/null | tr -d '[:space:]')
     if [ -n "$cur_ver" ] && [ -n "$head_ver" ] && [ "$cur_ver" = "$head_ver" ]; then
-        append "POLICY WARNING: shipped mechanism templates changed but the plugin version is still $cur_ver. Bump plugin/.claude-plugin/plugin.json before release — see docs/skills/release/SKILL.md."
+        append "POLICY WARNING: shipped mechanism templates changed but the version is still $cur_ver. Bump plugins/harness-kit/VERSION (and both plugin.json versions) before release — see docs/skills/release/SKILL.md."
     fi
 fi
 
