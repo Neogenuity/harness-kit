@@ -56,7 +56,11 @@ not-yet-existing paths are legal — queued plans name future files by design.
 
 ## Roadmap (set 2026-07-10, re-sorted 2026-07-11)
 
-Shipped: **v0.6.0** — plans machinery the docs already promised + Copilot/Gemini
+Shipped: **v0.7.0** — deterministic fixture tests of the `init`/`update`
+mechanics (`install-lib.sh` + `test-install.sh`) + two verified integrity fixes
+(pinned `harness.conf`, missing-manifest ERROR)
+([completed/v0.7.0-install-update-verification.md](completed/v0.7.0-install-update-verification.md));
+**v0.6.0** — plans machinery the docs already promised + Copilot/Gemini
 rows + strict Agent Skills validation + matrix stamping
 ([completed/v0.6.0-plans-machinery-and-provider-breadth.md](completed/v0.6.0-plans-machinery-and-provider-breadth.md));
 **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
@@ -64,28 +68,27 @@ rows + strict Agent Skills validation + matrix stamping
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [install-update-verification.md](install-update-verification.md) | Deterministic fixture tests of `init`/`audit`/`update` — prove the core product boundary; + close two verified integrity blind spots (unpinned `harness.conf`, silently-skipped missing manifest) |
-| 2 | [behavioral-evals.md](behavioral-evals.md) | Golden tasks, multi-trial pass@k/pass^k runner, baselines — measure the harness itself |
-| 3 | [execution-governance.md](execution-governance.md) | Baseline: MCP trust inventory, untrusted-repo/prompt-injection guidance, CI hardening (advanced sandbox profiles trail #5) |
-| 4 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
-| 5 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
-| 6 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
+| 1 | [behavioral-evals.md](behavioral-evals.md) | Golden tasks, multi-trial pass@k/pass^k runner, baselines — measure the harness itself |
+| 2 | [execution-governance.md](execution-governance.md) | Baseline: MCP trust inventory, untrusted-repo/prompt-injection guidance, CI hardening (advanced sandbox profiles trail #4) |
+| 3 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
+| 4 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
+| 5 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
 
-**Ordering rationale.** Claim-to-implementation gaps go first — plans
-machinery closes the space between what the docs promise and what ships, then
-install/update-verification puts the core product boundary (the `init`/`update`
-workflow) under an automated deterministic test, the largest previously
-unowned reliability gap. Measurement (behavioral evals) lands before every
-component that must prove its value — the reviewer loop is validated by the
-seeded-defect eval the evals plan makes possible. Execution governance's
-*baseline* (guidance docs, MCP inventory, CI hardening — near-zero tailoring
-cost) moves ahead of the reviewer and runtime work per current
-combined-controls guidance, which treats containment as non-optional rather
-than finishing work; its *advanced* per-provider sandbox profiles keep the
-high tailoring cost that argues for a later slot and trail runtime-legibility
-(shared `.devcontainer/` surface). Outcome telemetry is last because outcome
-metrics are only worth collecting once gates, reviews, and evals emit
-outcomes worth measuring.
+**Ordering rationale.** Claim-to-implementation gaps went first — plans
+machinery (v0.6.0) closed the space between what the docs promise and what
+ships, then install/update-verification (v0.7.0) put the core product boundary
+(the `init`/`update` workflow) under an automated deterministic test, the
+largest previously unowned reliability gap. With those shipped, measurement
+(behavioral evals) now leads: it lands before every component that must prove
+its value — the reviewer loop is validated by the seeded-defect eval the evals
+plan makes possible. Execution governance's *baseline* (guidance docs, MCP
+inventory, CI hardening — near-zero tailoring cost) moves ahead of the reviewer
+and runtime work per current combined-controls guidance, which treats
+containment as non-optional rather than finishing work; its *advanced*
+per-provider sandbox profiles keep the high tailoring cost that argues for a
+later slot and trail runtime-legibility (shared `.devcontainer/` surface).
+Outcome telemetry is last because outcome metrics are only worth collecting
+once gates, reviews, and evals emit outcomes worth measuring.
 
 The 2026-07-11 re-sort (new verification plan; governance baseline pulled
 forward) followed a standards-coverage audit against current Anthropic and

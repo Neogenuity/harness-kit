@@ -3,6 +3,60 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.7.0 — 2026-07-11
+
+Install/update verification — the kit's core product boundary (`init` / `update`)
+was the only mechanism with no automated test; it now has a deterministic
+fixture suite, and two *verified* integrity blind spots in the manifest
+mechanism it exercises are closed.
+
+- **Deterministic install/update mechanics extracted and tested.** New template
+  `scripts/install-lib.sh` is the model-free core of init/update — pure
+  filesystem functions (`harness_install_mechanism`, `harness_generate_manifest`,
+  `harness_repin_manifest`, `harness_update_decision`, `harness_update_apply`,
+  `harness_append_gitignore`) that the SKILL's `init`/`update` prose now calls
+  instead of inlining shell. New template `scripts/test-install.sh` drives them
+  against throwaway git fixtures: clean init, non-clobber floor (hand-written
+  `AGENTS.md`/`settings.json` survive byte-for-byte), no-op update idempotence,
+  mechanism upgrade, and `# tailored`-file preservation, plus a seeded
+  deny-list drift case. The model-graded half of init/update (authoring quality,
+  merge judgment) stays out of scope by design. **Migration:** `update` now
+  manages `install-lib.sh` and `test-install.sh` like any other mechanism file;
+  they are copied on init and pinned in the manifest.
+- **`scripts/harness.conf` is now manifest-pinned** (verified finding). It is the
+  single source for `SECRET_PATTERNS`, yet was pinned by neither the manifest
+  producer nor `guard-config.sh` — so a narrowed `SECRET_PATTERNS` disarmed the
+  secret guard for `id_rsa`/`*.pem`/`.env.*` while `check-harness.sh` stayed
+  green. It is now enumerated by `harness_generate_manifest` (marked
+  ` # tailored`, since its patterns are repo-specific), so an un-re-pinned edit
+  fails CI like every other policy file. **Migration:** `update` gains a
+  `harness.conf` line in the manifest; re-pin after tailoring `SECRET_PATTERNS`.
+- **Manifest integrity hardened on three fronts** (verified findings, incl. a
+  multi-model review round). `check-harness.sh` check #9 previously only verified
+  the files the manifest *did* pin, so an adopted repo's manifest could be
+  gutted by shell edit to disarm a guard while CI stayed green. Now, when
+  `scripts/hooks/` is present: (a) a missing / emptied / all-malformed manifest
+  is an ERROR, not a silent skip; (b) a nonempty malformed line no longer counts
+  as a pin; and (c) **completeness** — every mechanism file on disk must be
+  pinned (the expected set is derived from the filesystem, not the manifest), so
+  *partial* pin deletion (un-pinning one guard while leaving others) is caught.
+  A genuinely pre-adoption repo still passes.
+- **Update mechanics corrected** (review round). `harness_update_apply` now (i)
+  treats policy files (`verify.sh`, `harness.conf`, `format.sh`, `guard-secrets.sh`,
+  `guard-project-policy.sh`) as diff-only even when pristine and unmarked — never
+  auto-overwriting them (SKILL update step 3) — and (ii) installs mechanism files
+  the new kit ships that an older install's manifest can't list, so a `0.6`→`0.7`
+  upgrade actually picks up `install-lib.sh`/`test-install.sh`. `harness_repin_manifest`
+  carries forward tailored pins the shipped producer doesn't emit (a repo's own
+  local gates), so a re-pin never silently drops a project-added integrity pin.
+- **`install-lib.sh` added to `guard-config.sh`'s protected paths** (mechanism,
+  with a `test-guard-config.sh` case) and **check #6 skips only `test-install.sh`
+  and `test-check-harness.sh` when nested** (via `HARNESS_NESTED_FIXTURE`, set by
+  `test-install.sh`) so the fixture suite can run `check-harness.sh` inside a
+  throwaway install without recursing — every other regression test, the guard
+  behavioral checks included, still runs, so no single env var can switch off the
+  regression layer.
+
 ## 0.6.0 — 2026-07-11
 
 - **Plans machinery now ships.** The kit's docs promised a `docs/plans/`

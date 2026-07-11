@@ -206,6 +206,31 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
     assert_flags "manifest: missing tailored file is flagged too" "$W" "does not exist"
 fi
 
+# --- check #9: a missing manifest is an ERROR once the harness is adopted ---
+# (scripts/hooks/ present), but still a skip for a pre-adoption repo. Needs no
+# sha tool — detecting an absent manifest hashes nothing — so it sits outside
+# the sha gate above.
+W=$(new_fixture)
+mkdir -p "$W/scripts/hooks"          # adoption signal, but no .harness-manifest
+assert_flags "adopted repo (scripts/hooks/) missing its manifest is flagged" "$W" ".harness-manifest is missing"
+
+# Truncating the manifest to a header (or 0 bytes) must be caught too: sha256_of
+# hashes an empty file to a real digest, so without the valid-pin guard the
+# verify branch would accept a manifest that pins nothing.
+W=$(new_fixture)
+mkdir -p "$W/scripts/hooks"
+printf '# harness-kit 9.9.9\n' > "$W/scripts/.harness-manifest"   # header only, no pins
+assert_flags "adopted repo with an emptied manifest is flagged" "$W" "no valid pinned entries"
+
+# A nonempty MALFORMED line must not count as a pin (it would otherwise satisfy
+# the adopted-repo guard while enforcing nothing) — it is itself an error.
+W=$(new_fixture)
+printf '# harness-kit 9.9.9\nx\n' > "$W/scripts/.harness-manifest"   # garbage line
+assert_flags "a malformed manifest entry is flagged" "$W" "malformed entry"
+
+W=$(new_fixture)                     # pre-adoption: no hooks dir, no manifest
+assert_ok "a pre-adoption repo with no manifest still passes" "$W"
+
 # --- check #1: strict Agent Skills spec validation (ERRORs) ---
 # One fixture per failure class the spec makes a hard requirement.
 W=$(new_fixture)

@@ -56,7 +56,14 @@ full_gate "template-tests" bash -c 'for t in \
     plugins/harness-kit/skills/harness-kit/templates/scripts/test-*.sh \
     plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/test-*.sh; do \
         echo "== $t"; bash "$t" || exit 1; done'
-full_gate "harness" bash scripts/check-harness.sh
+# HARNESS_NESTED_FIXTURE here skips check-harness.sh's re-run of test-install.sh
+# and test-check-harness.sh (each spins up fixtures / sub-checks and is already
+# run above on the byte-identical templates, so re-running the root copies is
+# pure duplication). Every guard behavioral test still runs, so the harness drift
+# gate keeps full coverage. This double-run only exists in THIS dogfood repo (a
+# user install has just the harness gate), which is why it lives in the tailored
+# verify.sh, not the shipped template.
+full_gate "harness" env HARNESS_NESTED_FIXTURE=1 bash scripts/check-harness.sh
 # ------------------------------------------------------------------------------
 
 echo "OK: all quality gates passed ($MODE)"

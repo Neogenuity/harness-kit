@@ -60,11 +60,15 @@ behavior from the repo alone.
      migration, unregistered route). Skippable; the hook ships as a no-op.
 
 3. **Install mechanism** from `templates/scripts/` into `scripts/`:
-   `harness.conf`, `sync-agent-skills.sh`, `check-harness.sh`,
-   `test-check-harness.sh`, `verify.sh`, and `hooks/` (all scripts + tests +
-   README). `chmod +x scripts/hooks/*.sh scripts/*.sh`. Tailor `harness.conf`
-   (providers, plans dir, secret patterns). Append `.harness/` to the repo's
-   `.gitignore` — the hook observability log lives there.
+   `harness.conf`, `install-lib.sh`, `sync-agent-skills.sh`, `check-harness.sh`,
+   `test-check-harness.sh`, `test-install.sh`, `verify.sh`, and `hooks/` (all
+   scripts + tests + README). `chmod +x scripts/hooks/*.sh scripts/*.sh`.
+   `install-lib.sh` is the deterministic, model-free core of this flow —
+   `harness_install_mechanism` copies exactly this set, and step 8's
+   `harness_generate_manifest` and `update` mode both call it; `test-install.sh`
+   is its fixture suite. Tailor `harness.conf` (providers, plans dir, secret
+   patterns). Append `.harness/` to the repo's `.gitignore` — the hook
+   observability log lives there.
 
 4. **Tailor policy** in the marked `TAILOR` blocks:
    - `verify.sh`: write the interviewed quality gates as `gate` (fast:
@@ -142,17 +146,25 @@ behavior from the repo alone.
    to existing CI; translate for other CI systems).
 
 8. **Write the manifest** for upgrades *and* CI integrity — do this AFTER
-   step 4, so the checksums pin the tailored state:
+   step 4, so the checksums pin the tailored state. `harness_generate_manifest`
+   in `scripts/install-lib.sh` is the single producer; it pins the whole
+   `scripts/hooks/` tree plus the top-level mechanism files (`harness.conf`,
+   `install-lib.sh`, `sync-agent-skills.sh`, `check-harness.sh`,
+   `test-check-harness.sh`, `test-install.sh`, `verify.sh`):
    ```bash
-   { echo "# harness-kit <kit-version>"; \
-     find scripts/hooks scripts/sync-agent-skills.sh scripts/check-harness.sh scripts/test-check-harness.sh scripts/verify.sh -type f ! -name '.harness-manifest' \
-     | sort | xargs shasum -a 256; } > scripts/.harness-manifest
+   . scripts/install-lib.sh
+   harness_generate_manifest . <kit-version> > scripts/.harness-manifest
    ```
    (kit version = `version` in the kit's `.claude-plugin/plugin.json`).
    `check-harness.sh` verifies these checksums from now on, so every later
-   edit must re-pin its line; append ` # tailored` to a line when the
-   project deliberately forks that file (update mode will then only ever
-   diff it, never replace it).
+   edit must re-pin its line. Append ` # tailored` to a line when the project
+   deliberately forks that file (update mode then only ever diffs it, never
+   replaces it) — do this for the policy files step 4 tailors: `verify.sh`,
+   `hooks/format.sh`, `hooks/guard-project-policy.sh`, and **`harness.conf`**.
+   Pinning `harness.conf` is load-bearing: its `SECRET_PATTERNS` is the single
+   source for the secret guard, so an un-re-pinned narrowing (which would
+   silently disarm the guard) must fail CI like any other policy edit — shell
+   edits are unscanned by design, so this manifest is their enforcing layer.
 
 9. **Verify — do not skip**: `bash scripts/verify.sh` and
    `bash scripts/check-harness.sh` pass; each `scripts/hooks/test-*.sh`
@@ -212,14 +224,18 @@ to fix; don't fix unasked.
    the project owns it; show a diff of old-kit → new-kit and apply only
    what the user approves (the old kit's templates are recoverable from the
    kit repo's git tag matching the manifest header version — use them as
-   the diff base for tailored files). Set `HARNESS_ALLOW_MECHANISM_EDITS=1`
+   the diff base for tailored files). `harness_update_apply` in
+   `install-lib.sh` runs this decision deterministically
+   (`harness_update_decision` classifies each line replace-vs-diff); it is the
+   same code `test-install.sh` pins. Set `HARNESS_ALLOW_MECHANISM_EDITS=1`
    for the session if `guard-config.sh` is wired — upgrading the mechanism
    is the intended use of that escape hatch.
 3. Never auto-overwrite policy files (`verify.sh`, `format.sh`,
    `guard-secrets.sh`, `guard-project-policy.sh`, `harness.conf`, provider
    configs) — diff only.
-4. Rewrite the manifest with the new version/checksums (preserving
-   ` # tailored` markers), re-run `check-harness.sh` and all hook tests.
+4. Rewrite the manifest with the new version/checksums — `harness_repin_manifest`
+   in `install-lib.sh` regenerates it while preserving every ` # tailored`
+   marker — then re-run `check-harness.sh` and all hook tests.
 5. When the request is really a *standards* shift — a provider newly reads
    `.agents/skills/` natively, Claude Code ships AGENTS.md support, a new
    harness appears — follow the matching playbook in
