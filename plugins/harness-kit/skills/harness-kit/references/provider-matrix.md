@@ -8,17 +8,24 @@ used recently — hook event names in particular are still evolving. Facts
 below carry their own validated dates where they were individually checked;
 the Sources section at the bottom lists the primary docs to re-verify
 against. (Full matrix last validated: 2026-07; Codex facts re-verified
-2026-07-10 after the docs moved hosts — see Sources.)
+2026-07-10 after the docs moved hosts; GitHub Copilot + Gemini CLI added and
+verified 2026-07-11 — see Sources.)
 
 | Capability | Claude Code | Cursor | Codex | OpenCode | `.agents` standard |
 | --- | --- | --- | --- | --- | --- |
-| Instructions | `CLAUDE.md` (thin → AGENTS.md) | `.cursor/rules/*.mdc` (thin) | `AGENTS.md` (native) | `AGENTS.md` (native) | `AGENTS.md` (native, hierarchical) |
-| Skills | `.claude/skills/<slug>/SKILL.md` (stub) | `.cursor/skills/` (stub) | reads `.agents/skills/` (no `.codex/skills/`) | `.opencode/skills/` (stub; also reads `.claude/` + `.agents/`) | `.agents/skills/` (stub) |
-| Subagents | `.claude/agents/*.md` (thin) | `.cursor/agents/*.md` (thin) | `.codex/agents/*.toml` (thin TOML) | `.opencode/agents/*.md` (thin, `mode: subagent`) | — |
-| Hooks | `.claude/settings.json` → `hooks` | `.cursor/hooks.json` | `.codex/hooks.json` (or `config.toml` `[hooks]`; trust-gated) | `.opencode/plugins/*.ts` shim (JS/TS only) | — |
-| Permissions | `.claude/settings.json` → `permissions` | (harness UI) | (trust model + `PermissionRequest` hook) | `opencode.json` `permission.read` denies (mirror `harness.conf` `SECRET_PATTERNS`) | — |
-| MCP servers | `.mcp.json` (project) | `.cursor/mcp.json` | `.codex/config.toml` `[mcp_servers.*]` | `opencode.json` `"mcp"` | `~/.agents/mcp-settings.json` (proposed, user-level) |
+| Instructions <br>_verified 2026-07_ | `CLAUDE.md` (thin → AGENTS.md) | `.cursor/rules/*.mdc` (thin) | `AGENTS.md` (native) | `AGENTS.md` (native) | `AGENTS.md` (native, hierarchical) |
+| Skills <br>_verified 2026-07_ | `.claude/skills/<slug>/SKILL.md` (stub) | `.cursor/skills/` (stub) | reads `.agents/skills/` (no `.codex/skills/`) | `.opencode/skills/` (stub; also reads `.claude/` + `.agents/`) | `.agents/skills/` (stub) |
+| Subagents <br>_verified 2026-07_ | `.claude/agents/*.md` (thin) | `.cursor/agents/*.md` (thin) | `.codex/agents/*.toml` (thin TOML) | `.opencode/agents/*.md` (thin, `mode: subagent`) | — |
+| Hooks <br>_verified 2026-07_ | `.claude/settings.json` → `hooks` | `.cursor/hooks.json` | `.codex/hooks.json` (or `config.toml` `[hooks]`; trust-gated) | `.opencode/plugins/*.ts` shim (JS/TS only) | — |
+| Permissions <br>_verified 2026-07_ | `.claude/settings.json` → `permissions` | (harness UI) | (trust model + `PermissionRequest` hook) | `opencode.json` `permission.read` denies (mirror `harness.conf` `SECRET_PATTERNS`) | — |
+| MCP servers <br>_verified 2026-07_ | `.mcp.json` (project) | `.cursor/mcp.json` | `.codex/config.toml` `[mcp_servers.*]` | `opencode.json` `"mcp"` | `~/.agents/mcp-settings.json` (proposed, user-level) |
 | Distribution | `.claude-plugin/marketplace.json` → `plugins/harness-kit/.claude-plugin/plugin.json`; `/plugin marketplace add <owner>/harness-kit` (verified 2026-07-10) | — (no plugin channel) | `.agents/plugins/marketplace.json` → `plugins/harness-kit/.codex-plugin/plugin.json`; `codex plugin marketplace add <path>` (verified 2026-07-10) | — (no plugin channel) | `.agents/plugins/marketplace.json` (Codex's channel rides the `.agents` tree) |
+
+Each capability row carries a `verified <date>` stamp — month-level for the
+last full-matrix pass, with finer per-cell stamps overriding where a fact was
+individually re-checked (as in Distribution and the Codex facts).
+`check-harness.sh`'s doctor warns when any stamp ages past
+`HARNESS_MATRIX_STALE_DAYS` (default 90), so restamp the rows you re-verify.
 
 **Distribution** is the versioned, updatable install path (vs. the manual
 clone-and-copy of `skills/harness-kit`). The two providers do **not** share a
@@ -31,6 +38,22 @@ entry additionally requires `policy.installation`
 `name`/`version`/`description` and takes `skills: "./skills/"`. `VERSION` is
 the neutral single source both plugin manifests must equal — `check-packaging.sh`
 enforces the whole invariant (schema verified 2026-07-10, see Sources; ADR 007).
+
+## Instructions-only providers (GitHub Copilot, Gemini CLI)
+
+Two high-install-base harnesses read `AGENTS.md` but expose no hook / skill /
+subagent / permission surface the kit wires — they participate only in the
+Instructions row, so they get a compact table rather than full columns above.
+
+| Provider | Instructions file(s) | Wire step |
+| --- | --- | --- |
+| GitHub Copilot coding agent | `AGENTS.md` **native, including nested files** (verified 2026-07-11); also reads `.github/copilot-instructions.md`, `.github/instructions/**.instructions.md`, and `CLAUDE.md`/`GEMINI.md`; no documented precedence between them | Nothing to wire — `AGENTS.md` is read as-is. Optionally add a thin `.github/copilot-instructions.md` that points at `AGENTS.md` for the completions surface. No skill/hook/agent dirs. |
+| Gemini CLI | `GEMINI.md` by default; reads `AGENTS.md` via the `context.fileName` setting; context is **hierarchical and concatenated** across global/workspace/JIT locations (verified 2026-07-11) | Add `.gemini/settings.json` with `{ "context": { "fileName": ["AGENTS.md", "GEMINI.md"] } }` so the shared `AGENTS.md` loads (default reads `GEMINI.md` only). No skill/hook/agent dirs. |
+
+Neither is added to `harness.conf` `PROVIDERS` (that list drives skill-stub
+generation, which these providers don't consume). Both are near-free breadth:
+the kit already authors `AGENTS.md`, so Copilot needs nothing and Gemini needs
+one settings snippet.
 
 ## Hook event mapping
 
@@ -179,9 +202,14 @@ Primary docs to re-validate each section against (all last consulted
 - OpenCode plugins (the hook shim's API):
   <https://opencode.ai/docs/plugins/>
 - Agent Skills standard (SKILL.md + references/scripts/assets):
-  <https://agentskills.io>
+  <https://agentskills.io> — full spec at <https://agentskills.io/specification>
 - AGENTS.md standard (hierarchical, Linux Foundation):
   <https://agents.md>
+- GitHub Copilot coding agent AGENTS.md support (native + nested; also
+  `.github/copilot-instructions.md`):
+  <https://github.blog/changelog/2025-08-28-copilot-coding-agent-now-supports-agents-md-custom-instructions/>
+- Gemini CLI context files (`GEMINI.md` default, `context.fileName` to read
+  `AGENTS.md`, hierarchical loading): <https://geminicli.com/docs/cli/gemini-md/>
 
 When revalidating, update the inline "verified <date>" stamps next to the
 facts you actually re-checked — not just this list.

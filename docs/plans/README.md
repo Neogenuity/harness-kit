@@ -61,7 +61,7 @@ distribution ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [plans-machinery-and-provider-breadth.md](plans-machinery-and-provider-breadth.md) | Plans machinery the docs already promise; Copilot + Gemini rows; strict Agent Skills validation; matrix stamping (next up) |
+| 1 | [active/v0.6.0-plans-machinery-and-provider-breadth.md](active/v0.6.0-plans-machinery-and-provider-breadth.md) | Plans machinery the docs already promise; Copilot + Gemini rows; strict Agent Skills validation; matrix stamping (**active — v0.6.0**) |
 | 2 | [install-update-verification.md](install-update-verification.md) | Deterministic fixture tests of `init`/`audit`/`update` — prove the core product boundary |
 | 3 | [behavioral-evals.md](behavioral-evals.md) | Golden tasks, multi-trial pass@k/pass^k runner, baselines — measure the harness itself |
 | 4 | [execution-governance.md](execution-governance.md) | Baseline: MCP trust inventory, untrusted-repo/prompt-injection guidance, CI hardening (advanced sandbox profiles trail #6) |
