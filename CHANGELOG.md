@@ -3,6 +3,47 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.7.0 — 2026-07-11
+
+Install/update verification — the kit's core product boundary (`init` / `update`)
+was the only mechanism with no automated test; it now has a deterministic
+fixture suite, and two *verified* integrity blind spots in the manifest
+mechanism it exercises are closed.
+
+- **Deterministic install/update mechanics extracted and tested.** New template
+  `scripts/install-lib.sh` is the model-free core of init/update — pure
+  filesystem functions (`harness_install_mechanism`, `harness_generate_manifest`,
+  `harness_repin_manifest`, `harness_update_decision`, `harness_update_apply`,
+  `harness_append_gitignore`) that the SKILL's `init`/`update` prose now calls
+  instead of inlining shell. New template `scripts/test-install.sh` drives them
+  against throwaway git fixtures: clean init, non-clobber floor (hand-written
+  `AGENTS.md`/`settings.json` survive byte-for-byte), no-op update idempotence,
+  mechanism upgrade, and `# tailored`-file preservation, plus a seeded
+  deny-list drift case. The model-graded half of init/update (authoring quality,
+  merge judgment) stays out of scope by design. **Migration:** `update` now
+  manages `install-lib.sh` and `test-install.sh` like any other mechanism file;
+  they are copied on init and pinned in the manifest.
+- **`scripts/harness.conf` is now manifest-pinned** (verified finding). It is the
+  single source for `SECRET_PATTERNS`, yet was pinned by neither the manifest
+  producer nor `guard-config.sh` — so a narrowed `SECRET_PATTERNS` disarmed the
+  secret guard for `id_rsa`/`*.pem`/`.env.*` while `check-harness.sh` stayed
+  green. It is now enumerated by `harness_generate_manifest` (marked
+  ` # tailored`, since its patterns are repo-specific), so an un-re-pinned edit
+  fails CI like every other policy file. **Migration:** `update` gains a
+  `harness.conf` line in the manifest; re-pin after tailoring `SECRET_PATTERNS`.
+- **A missing manifest is now an ERROR once the harness is adopted** (verified
+  finding). `check-harness.sh` check #9 silently skipped its whole checksum
+  block when `scripts/.harness-manifest` was absent — so deleting the manifest
+  (the enforcing layer for shell edits the guards can't scan) collapsed
+  integrity checking with exit 0. It now ERRORs when `scripts/hooks/` is present
+  but the manifest is gone, while a genuinely pre-adoption repo still passes.
+- **`install-lib.sh` added to `guard-config.sh`'s protected paths** (mechanism,
+  with a `test-guard-config.sh` case) and **check #6 skips only `test-install.sh`
+  when nested** (via `HARNESS_NESTED_FIXTURE`, set by `test-install.sh`) so the
+  fixture suite can run `check-harness.sh` inside a throwaway install without
+  recursing — every other regression test, the guard behavioral checks included,
+  still runs, so no single env var can switch off the regression layer.
+
 ## 0.6.0 — 2026-07-11
 
 - **Plans machinery now ships.** The kit's docs promised a `docs/plans/`

@@ -187,8 +187,20 @@ done
 
 # 6. Regression tests must pass — both hook guards (scripts/hooks/test-*.sh)
 #    and top-level mechanism tests (scripts/test-*.sh, e.g. test-check-harness.sh).
+#    test-install.sh drives fixtures that run check-harness.sh inside a throwaway
+#    install; HARNESS_NESTED_FIXTURE (set by test-install.sh) makes THIS check
+#    skip only the two tests that themselves invoke check-harness.sh —
+#    test-install.sh (would recurse) and test-check-harness.sh (already run at the
+#    top level, pure redundancy inside a fixture). Every guard behavioral test
+#    (test-guard-*.sh, the catch for a re-pinned guard weakening) always runs, so
+#    no single env var can switch off the security-relevant regression layer.
+#    Unset in normal and CI runs.
 for test in "$ROOT"/scripts/test-*.sh "$ROOT"/scripts/hooks/test-*.sh; do
     [ -f "$test" ] || continue
+    case "$(basename "$test")" in
+        test-install.sh|test-check-harness.sh)
+            [ -n "${HARNESS_NESTED_FIXTURE:-}" ] && continue ;;
+    esac
     if ! bash "$test" >/dev/null 2>&1; then
         echo "ERROR: ${test#"$ROOT"/} failed — run it directly for details"
         ERRORS=$((ERRORS + 1))
@@ -272,11 +284,29 @@ fi
 #    (integrity), but never auto-replaced by the kit's update mode and exempt
 #    from template-equality checks (ownership) — the marker changes who may
 #    rewrite the file, not whether edits must be pinned.
+#    A *missing or emptied* manifest in an already-adopted repo (scripts/hooks/
+#    present) is itself an ERROR, not a skip: shell edits (rm, sed -i, `: >`) are
+#    unscanned by the guards by design, so this manifest is the enforcing layer
+#    for them — silently accepting its deletion (or truncation to a header-only
+#    file, which sha256_of still hashes to a real digest) would collapse that
+#    layer. A brand-new repo that has not run init yet (no scripts/hooks/) still
+#    skips.
 sha256_of() {
     if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
     elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
     fi
 }
+# Count real (non-comment, non-blank) pinned entries — sha-tool-independent, so a
+# jq/sha-less host still catches an emptied manifest. Zero entries in an adopted
+# repo is the collapse case; an empty file passes the [ -n "$(sha256_of …)" ]
+# guard below (sha256 of "" is a valid digest) and would otherwise verify nothing.
+manifest_pins=0
+[ -f "$ROOT/scripts/.harness-manifest" ] \
+    && manifest_pins=$(grep -cvE '^[[:space:]]*#|^[[:space:]]*$' "$ROOT/scripts/.harness-manifest" 2>/dev/null)
+if [ -d "$ROOT/scripts/hooks" ] && [ "${manifest_pins:-0}" -eq 0 ]; then
+    echo "ERROR: harness is adopted (scripts/hooks/ present) but scripts/.harness-manifest is missing or has no pinned entries — it is the integrity pin for the mechanism (the enforcing layer for shell edits the guards can't scan); a deleted or emptied manifest lets guards be rewritten undetected. Restore it (re-pin per the kit's init step 8)"
+    ERRORS=$((ERRORS + 1))
+fi
 if [ -f "$ROOT/scripts/.harness-manifest" ] && [ -n "$(sha256_of "$ROOT/scripts/.harness-manifest")" ]; then
     while IFS= read -r line; do
         case "$line" in

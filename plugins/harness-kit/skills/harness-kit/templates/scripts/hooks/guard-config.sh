@@ -36,6 +36,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PROTECTED_PATHS="
 scripts/hooks/*.sh
 scripts/check-harness.sh
+scripts/install-lib.sh
 scripts/sync-agent-skills.sh
 scripts/test-*.sh
 scripts/.harness-manifest
