@@ -99,6 +99,11 @@ run 0 "Codex bare patch: ordinary file allowed"  "$(codex_patch_bare '*** Update
 # indistinguishable from command text); check-harness.sh's manifest
 # verification is the enforcing layer for shell edits.
 run 0 "Codex shell: sed on mechanism not scanned (documented limit)" "$(jq -cn '{tool_input: {command: "sed -i s/a/b/ scripts/hooks/lib.sh"}}')"
+# A plain shell command that merely CONTAINS patch text (tool_name shell, no
+# "apply_patch" literal — a heredoc writing a .patch file) is not a patch
+# application and must not fail-close the guard (PR #6 review): the bare
+# envelope is only parsed when tool_name is apply_patch.
+run 0 "Codex shell: patch text in a heredoc not treated as a mechanism edit" "$(jq -cn --arg c "$(printf 'cat > demo.patch <<PATCH\n*** Begin Patch\n*** Update File: scripts/hooks/lib.sh\n@@\n+evil\n*** End Patch\nPATCH')" '{turn_id: "t1", tool_name: "shell", tool_use_id: "c1", tool_input: {command: $c}}')"
 run 0 "Codex patch: escape hatch allows mechanism edit" "$(codex_patch '*** Update File: scripts/hooks/lib.sh
 @@
 +x')" "HARNESS_ALLOW_MECHANISM_EDITS=1"

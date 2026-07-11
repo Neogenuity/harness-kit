@@ -132,6 +132,12 @@ run 0 "Codex bare patch: ordinary file allowed"   "$(codex_patch_bare "*** Updat
 run 0 "Codex bare patch: body mentioning .env allowed (envelope stripped)" "$(codex_patch_bare "*** Update File: $WORK/notes-about-env.md
 @@
 +See .env for configuration")"
+# A plain shell command that merely CONTAINS patch text (tool_name shell, no
+# "apply_patch" literal — a heredoc writing a .patch file) must not fail-close
+# even when the patch body's Update-File header names a secret (PR #6 review):
+# the file-header layer only fires for real apply_patch events, and the token
+# scan strips the envelope before scanning.
+run 0 "Codex shell: patch text mentioning .env in a heredoc not denied" "$(jq -cn --arg c "$(printf 'cat > demo.patch <<PATCH\n*** Begin Patch\n*** Update File: %s\n@@\n+SECRET=2\n*** End Patch\nPATCH' "$WORK/.env")" '{turn_id: "t1", tool_name: "shell", tool_use_id: "c1", tool_input: {command: $c}}')"
 
 # --- harness.conf is the authoritative pattern source ---
 # A tailored conf fully replaces the defaults: its own globs deny/allow, and

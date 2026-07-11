@@ -110,6 +110,23 @@ c.py
 old.py
 new.py"
 
+# --- tool identity gates the parse: a plain shell command that merely
+#     CONTAINS patch text (no "apply_patch" literal, tool_name != apply_patch,
+#     e.g. a heredoc writing a .patch file) is NOT a patch application. Keying
+#     the bare-envelope branch on command text alone extracted these paths and
+#     fail-closed the guards on ordinary shell payloads (PR #6 review); the
+#     gate now trusts tool_name for the bare form and the literal otherwise. ---
+run "shell command containing bare patch text yields nothing" \
+    "$(codex_cmd shell "$(bare_patch '*** Update File: scripts/hooks/lib.sh
+@@
++evil')")" \
+    ""
+run "shell command invoking apply_patch literal still parses" \
+    "$(codex_cmd shell "$(patch_cmd '*** Update File: a.py
+@@
++x')")" \
+    "a.py"
+
 # --- multi-file patch: every header, in order; rename yields both paths ---
 run "Codex patch: multi-file + rename" \
     "$(codex_cmd apply_patch "$(patch_cmd '*** Update File: a.py

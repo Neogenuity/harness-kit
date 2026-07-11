@@ -48,7 +48,7 @@ hook_command_string() {
 # hook_deny's exit 2 inside a pipeline subshell would not end the hook.
 hook_affected_files() {
     command -v jq >/dev/null 2>&1 || return 0
-    local direct cmd
+    local direct cmd tool
     direct=$(printf '%s' "${HOOK_INPUT:-}" \
         | jq -r '.file_path // .tool_input.file_path // .tool_input.path // empty' 2>/dev/null)
     if [ -n "$direct" ]; then
@@ -56,10 +56,19 @@ hook_affected_files() {
         return 0
     fi
     cmd=$(hook_command_string)
-    # Gate on the bare envelope marker as well as the "apply_patch" wrapper
-    # literal — a real Codex apply_patch command is the bare patch body and
-    # need not contain "apply_patch" (see the header note above).
-    case "$cmd" in *apply_patch*|*'*** Begin Patch'*) ;; *) return 0 ;; esac
+    # Decide whether this command IS a patch application, keyed on the tool
+    # identity — never on command text alone. Codex's dedicated apply_patch
+    # tool sends the BARE envelope with no "apply_patch" literal, so trust its
+    # tool_name; and any tool that invokes the apply_patch CLI literally
+    # (`apply_patch <<'EOF' …`, including under a Bash/shell tool) is a real
+    # application too. A plain shell command that merely CONTAINS patch text
+    # (a heredoc writing a .patch file, an echo of a diff) is NOT one —
+    # parsing it would fabricate affected-file paths and fail-close a guard,
+    # so skip it.
+    tool=$(printf '%s' "${HOOK_INPUT:-}" | jq -r '.tool_name // empty' 2>/dev/null)
+    if [ "$tool" != "apply_patch" ]; then
+        case "$cmd" in *apply_patch*) ;; *) return 0 ;; esac
+    fi
     printf '%s\n' "$cmd" | awk '
         /^\*\*\* (Update|Add|Delete) File: / { sub(/^\*\*\* (Update|Add|Delete) File: /, ""); print; next }
         /^\*\*\* Move to: /                  { sub(/^\*\*\* Move to: /, ""); print }

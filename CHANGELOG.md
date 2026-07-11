@@ -16,15 +16,22 @@ All notable changes to harness-kit. Versions refer to
   `format.sh`, and `guard-secrets.sh`'s write-side denial silent no-ops on
   Codex. Impact: an agent on Codex could edit protected harness mechanism
   (e.g. `scripts/hooks/lib.sh`) or write a secret file via apply_patch
-  **undenied**. Fix: the gate now also recognizes the bare envelope marker
-  (`*** Begin Patch`); the shell-wrapper form still works. One line in
-  `lib.sh`.
+  **undenied**. Fix: `hook_affected_files` parses the bare envelope when
+  `tool_name` is `apply_patch` — the tool identity, not command text — and
+  keeps the `apply_patch`-literal branch for the shell-wrapper form
+  (`apply_patch <<'EOF' …`, which also rides a Bash/shell tool). Gating on the
+  tool identity, rather than on the bare `*** Begin Patch` marker, is
+  deliberate: a first pass keyed on the marker text alone fail-**closed**
+  ordinary shell payloads that merely *contain* patch text (a heredoc writing
+  a `.patch` file), fabricating affected-file paths and denying them — caught
+  in review before merge.
 - **Why CI stayed green:** every Codex apply_patch fixture used the
   `apply_patch <<'EOF'` wrapper form (which contains the literal), so the
   wrong envelope shape was never exercised. Bare-envelope regression cases are
   added to `test-affected-files.sh`, `test-guard-config.sh`, and
-  `test-guard-secrets.sh`; the affected-files/guard fixture comments now cite
-  the captured payload as the source of truth.
+  `test-guard-secrets.sh`, plus a shell-command-containing-patch-text case in
+  each pinning the no-false-close boundary; the affected-files/guard fixture
+  comments now cite the captured payload as the source of truth.
 - Update-mode note: `lib.sh` and the three `test-*.sh` files are mechanism
   (replaced on checksum match). Take the kit update and re-pin
   `scripts/.harness-manifest`; behavior-only change, no config migration.
