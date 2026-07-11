@@ -61,7 +61,10 @@ lifecycle a user's repo does:
    byte-identical to its template — see
    [ADR 006](decisions/006-dogfood-copies-are-enforced-duplicates.md).
 4. `scripts/verify.sh` (shellcheck → manifest JSON → template regression
-   tests → `check-harness.sh`) gates the release; CI runs the same gates.
+   tests → `check-harness.sh`) gates the release; `ci.yml` executes
+   `bash scripts/verify.sh` directly (plus `harness-check.yml` for the
+   shipped drift-gate template), so the gate list can never drift from this
+   executable definition.
 
 Anything that breaks in this loop breaks here first, before it ships.
 

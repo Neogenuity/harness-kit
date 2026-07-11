@@ -31,7 +31,10 @@ templates being shipped, and an annotated tag pushed.
 3. Add the `CHANGELOG.md` entry: user-facing changes first, mechanism
    changes with their migration note (does update mode replace the file, or
    diff it?).
-4. If `plugins/harness-kit/skills/harness-kit/templates/scripts/` changed since the last
+4. Sweep `README.md` and any status docs for version references that would
+   go stale — README must not carry a hardcoded kit version (see Common
+   Mistakes).
+5. If `plugins/harness-kit/skills/harness-kit/templates/scripts/` changed since the last
    release, roll the changes into this repo's own installation (the kit's
    **update** mode: replace manifest-matching files in `scripts/`, diff
    tailored ones), then re-pin `scripts/.harness-manifest` with the new
@@ -39,8 +42,8 @@ templates being shipped, and an annotated tag pushed.
    `HARNESS_ALLOW_MECHANISM_EDITS=1` for the session). This step is
    CI-enforced: `scripts/test-template-sync.sh` fails when a non-tailored
    installed file differs from its template.
-5. `bash scripts/verify.sh` again — the manifest gate must pass post-re-pin.
-6. Commit `release: v<version>`, tag `v<version>` (annotated), push with
+6. `bash scripts/verify.sh` again — the manifest gate must pass post-re-pin.
+7. Commit `release: v<version>`, tag `v<version>` (annotated), push with
    `--follow-tags`.
 
 ## Verification
@@ -50,6 +53,9 @@ templates being shipped, and an annotated tag pushed.
 - `plugins/harness-kit/VERSION`, both plugin.json versions, the manifest
   header, and the CHANGELOG heading all state the same version
   (`check-packaging.sh` enforces the manifest trio).
+- `grep -nE '\bv?[0-9]+\.[0-9]+\.[0-9]+' README.md` returns no kit-version
+  claims that contradict `plugins/harness-kit/VERSION` (install-command
+  examples and provider version stamps are fine).
 
 ## Common Mistakes
 
@@ -60,3 +66,6 @@ templates being shipped, and an annotated tag pushed.
   files; the packaging gate fails on any mismatch.
 - Forgetting `--follow-tags`, so the marketplace serves the new version but
   the tag never reaches the remote.
+- Letting README go stale — a hardcoded `v0.6.0` sat in README's Status
+  section through two releases because no step owned sweeping it; README
+  now points at `plugins/harness-kit/VERSION` instead of a literal version.

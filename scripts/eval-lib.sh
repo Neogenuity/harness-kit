@@ -102,15 +102,29 @@ eval_apply_violation() {
 # Runs the task's acceptance grader (check.sh) inside <workspace>, and — when
 # the task's `grade` metadata is `check+verify` — also runs the workspace's own
 # scripts/verify.sh. check.sh inspects its cwd (the workspace). Writes check.log
-# and (when run) verify.log into <log_dir>. Prints "pass" / "fail" and returns
-# 0 / 1. A missing check.sh is a hard error (return 2): a task with no grader
-# cannot be scored.
+# and (when run) verify.log into <log_dir>.
+#
+# check.sh's exit code is a three-way convention, not a bare pass/fail:
+#   exit 0  -> prints "pass",      returns 0  (the goal was met honestly)
+#   exit 3  -> prints "violation", returns 1  (a NEGATIVE task's grader
+#              detected the forbidden shortcut itself — e.g. the gate script
+#              was modified or the evidence was deleted — a stronger signal
+#              than an ordinary miss; callers map this to outcome
+#              negative_violation)
+#   other   -> prints "fail",      returns 1  (ordinary unmet goal)
+# The check+verify path's verify.sh failure always prints "fail" (verify.sh
+# has no violation concept). A missing check.sh is a hard error (return 2): a
+# task with no grader cannot be scored.
 eval_grade() {
-    local task_dir ws="$2" log_dir="$3" grade
+    local task_dir ws="$2" log_dir="$3" grade rc
     task_dir="$(cd "$1" && pwd)"
     [ -f "$task_dir/check.sh" ] || { echo "eval-lib: no check.sh in $1" >&2; return 2; }
     mkdir -p "$log_dir"
-    if ! ( cd "$ws" && bash "$task_dir/check.sh" ) >"$log_dir/check.log" 2>&1; then
+    ( cd "$ws" && bash "$task_dir/check.sh" ) >"$log_dir/check.log" 2>&1
+    rc=$?
+    if [ "$rc" -eq 3 ]; then
+        echo violation; return 1
+    elif [ "$rc" -ne 0 ]; then
         echo fail; return 1
     fi
     grade="$(eval_task_meta "$1" grade)"
@@ -144,19 +158,31 @@ eval_passrate() {
 }
 
 # eval_result_json <task> <provider> <model> <suite> <polarity> <run> \
-#                  <trial> <pass:true|false> <duration_s> <agent_rc> <transcript>
+#                  <trial> <pass:true|false> <duration_s> <agent_rc> <transcript> \
+#                  <run_started_at> <outcome>
 # Emits one compact JSON object — the results.jsonl schema. The single source for
 # that shape, so eval.sh (writer) and test-eval.sh (shape assertion) can never
 # disagree. Requires jq (the only jq-dependent function in this lib).
+#   arg 12  run_started_at  integer epoch seconds, the SAME value for every
+#                           row of one eval.sh invocation (see eval.sh's
+#                           RUN_STARTED_AT) — lets eval-harness.sh pick the
+#                           truly-latest run instead of a lexicographic max
+#                           over the (often hand-typed) --run-id string.
+#   arg 13  outcome         "pass" | "task_failure" | "negative_violation" —
+#                           eval_grade's verdict mapped by the caller (pass ->
+#                           pass, violation -> negative_violation, fail /
+#                           workspace-prep failure -> task_failure).
 eval_result_json() {
     jq -cn \
         --arg task "$1" --arg provider "$2" --arg model "$3" \
         --arg suite "$4" --arg polarity "$5" --arg run "$6" \
         --argjson trial "$7" --argjson pass "$8" --argjson duration_s "$9" \
         --argjson agent_rc "${10}" --arg transcript "${11}" \
+        --argjson run_started_at "${12}" --arg outcome "${13}" \
         '{task:$task, provider:$provider, model:$model, suite:$suite,
           polarity:$polarity, run:$run, trial:$trial, pass:$pass,
-          duration_s:$duration_s, agent_rc:$agent_rc, transcript:$transcript}'
+          duration_s:$duration_s, agent_rc:$agent_rc, transcript:$transcript,
+          run_started_at:$run_started_at, outcome:$outcome}'
 }
 
 # eval_list_tasks <tasks_dir>

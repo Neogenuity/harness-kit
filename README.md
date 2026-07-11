@@ -155,20 +155,22 @@ scripts/, .claude/ .cursor/ ...   (see "This repo runs on itself")
 
 ## Status
 
-v0.6.0, extracted and generalized from a production Laravel modular
-monolith where the pattern is exercised daily across multiple harnesses.
-Pre-launch checklist:
+Extracted and generalized from a production Laravel modular monolith where
+the pattern is exercised daily across multiple harnesses. Current version
+lives in [`plugins/harness-kit/VERSION`](plugins/harness-kit/VERSION) and
+[`CHANGELOG.md`](CHANGELOG.md). Pre-launch checklist:
 
 - [x] MIT license
 - [x] Self-application (this repo runs its own harness, CI-gated)
 - [x] Re-verify the provider matrix against current harness docs
       (re-validated 2026-07-10; hook event names are still evolving — check
       the per-fact stamps before wiring a provider you haven't used lately)
-- [x] Tag releases (`v0.1.0`–`v0.5.0`, retroactive on their release
-      commits; update mode recovers old templates by the tag matching the
-      manifest header)
-- [ ] Demo recording of `init` on a fresh repo
-- [ ] Move to the `neogenuity` org and update install commands
+- [x] Tag releases — every release is tagged on its release commit; update
+      mode recovers old templates by the tag matching the manifest header
+- [ ] Demo recording of `init` on a fresh repo — tracked in
+      [docs/plans/launch-readiness.md](docs/plans/launch-readiness.md)
+- [ ] Move to the `neogenuity` org and update install commands — tracked in
+      [docs/plans/launch-readiness.md](docs/plans/launch-readiness.md)
 
 ## License
 

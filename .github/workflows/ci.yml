@@ -24,16 +24,7 @@ jobs:
             [ -x "$f" ] || { echo "not executable: $f"; fails=1; }
           done
           exit $fails
-      - name: Regression tests
-        run: |
-          fails=0
-          for t in plugins/harness-kit/skills/harness-kit/templates/scripts/test-*.sh \
-                   plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/test-*.sh; do
-            echo "== $t"
-            bash "$t" || fails=1
-          done
-          exit $fails
-      - name: ShellCheck
+      - name: Install ShellCheck
         run: |
           if ! command -v shellcheck >/dev/null 2>&1; then
             if [ "$RUNNER_OS" = "Linux" ]; then
@@ -42,11 +33,19 @@ jobs:
               brew install shellcheck
             fi
           fi
-          # info/style notices are acceptable in templates (helpers sit next
-          # to commented TAILOR arms); fail on warning and above. Lint the
-          # shipped templates AND the root-only tailored scripts (verify.sh,
-          # check-packaging.sh, …), which have no template twin.
-          shellcheck -x --severity=warning \
-                        plugins/harness-kit/skills/harness-kit/templates/scripts/*.sh \
-                        plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/*.sh \
-                        scripts/*.sh scripts/hooks/*.sh
+      # verify.sh is the executable definition of "done" (shellcheck ->
+      # manifest JSON -> template regression tests -> check-harness.sh,
+      # plus the evals gate). Running it directly here — rather than
+      # reconstructing its steps one by one in this workflow — means a gate
+      # added to verify.sh can never silently drop out of CI; the two used
+      # to drift, which is exactly the failure mode this avoids. Needs git
+      # + jq, both preinstalled on GitHub-hosted ubuntu-latest/macos-latest
+      # runners.
+      #
+      # info/style shellcheck notices are acceptable in templates (helpers
+      # sit next to commented TAILOR arms); verify.sh's shellcheck gate
+      # fails on warning and above, and lints both the shipped templates and
+      # the root-only tailored scripts (verify.sh, check-packaging.sh, …),
+      # which have no template twin.
+      - name: verify.sh
+        run: bash scripts/verify.sh

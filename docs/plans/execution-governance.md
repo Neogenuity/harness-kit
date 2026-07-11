@@ -72,10 +72,10 @@ first.
 
 ### Advanced profiles (higher tailoring cost — stays later)
 
-These two items block on the runtime-legibility devcontainer/boot work (#6),
-so a resuming session should not attempt them in-line at this plan's #4 slot:
-when the baseline (items 1–5) ships, split items 6–7 into their own queued
-plan slotted after runtime-legibility, keeping the roadmap numbering literal.
+These two items block on the runtime-legibility plan's devcontainer/boot
+work, so a resuming session should not attempt them in-line here: when the
+baseline (items 1–5) ships, split items 6–7 into their own queued plan
+slotted after runtime-legibility.
 
 6. **Per-provider profiles** (opt-in templates + matrix rows, each stamped
    per ADR 004 at edit time): Claude Code sandbox/network settings +

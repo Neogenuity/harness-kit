@@ -204,8 +204,11 @@ the drift gate; manifest present and passing its checksum
 verification. If a behavioral eval bank exists (`docs/evals/`), report its
 health too: number of golden tasks by suite (capability / regression) and
 polarity, whether `test-eval.sh` passes (grader validity), and the age of
-`docs/evals/baselines.json` (stale or absent baselines mean the harness is
-unmeasured — recommend a scheduled `eval-harness.sh` run). Then run
+`docs/evals/baselines.json` — report the age of the OLDEST per-cell
+`recorded` date across `tasks.*.runs.*.recorded` (falling back to the file's
+top-level `recorded` for older baselines that predate per-cell dates); a
+stale or absent baseline means the harness is unmeasured — recommend a
+scheduled `eval-harness.sh` run. Then run
 `scripts/check-harness.sh` and the hook tests if they exist. If `.harness/log.jsonl` exists, summarize it: deny / advise /
 lint-findings counts by hook and by file — a repeatedly-denied path or a
 warning surfaced every session is the next mistake to engineer away

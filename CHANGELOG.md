@@ -3,6 +3,54 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.9.0 — 2026-07-11
+
+Eval integrity and plans hygiene — a 2026-07-11 project review (findings
+adversarially checked by a second model, Codex gpt-5.6-sol) found the v0.8.0
+eval layer could silently mis-score, and found the launch and a saturated
+task bank tracked nowhere the plans machinery could see.
+
+- **Eval integrity fixes.** Latest-run selection in `eval-harness.sh` now
+  picks by per-run `run_started_at` epoch (`max_by([(.run_started_at // 0),
+  .run])`) instead of lexicographic run-id sort, so a custom `--run-id`
+  can no longer permanently outrank a chronologically newer run; legacy
+  result lines with no `run_started_at` still parse. `eval.sh` refuses to
+  reuse a results directory that already has recorded results, and
+  refuses to run against a dirty working tree (each trial clones committed
+  `HEAD`) unless `--allow-dirty-head` is passed. Negative tasks gain a
+  distinct `negative_violation` outcome via a `check.sh` exit-3 convention
+  (exit 1 keeps meaning `task_failure`), and `eval-harness.sh` fails loudly
+  on any `negative_violation` regardless of suite. `--update-baseline` now
+  excludes `--provider mock` rows, refuses atomically unless every cell has
+  exactly `--expected-trials` (default 3) trials, and writes each cell's
+  `recorded` date from the run's own timestamp. Task metadata (`suite`,
+  `polarity`, `provider`, `grade`) is now enum-validated at load time, and a
+  `provider:` value gates a task off providers it doesn't target (`mock` is
+  exempt). The default `--run-id` (when none is passed) changes from a bare
+  UTC timestamp (`YYYYMMDD-HHMMSS`) to `TIMESTAMP-provider-model`, so two
+  providers (or two models) launched in the same second no longer collide on
+  a results dir — anything scripting against results-dir names by pattern
+  should account for the new suffix. **Migration:** `update` mode replaces
+  the four eval scripts as usual; the `results.jsonl` schema gains
+  `run_started_at` and `outcome` fields (old lines keep parsing — legacy rows
+  are outranked by any new, timestamped run). Negative-task graders should
+  adopt exit 3 for a caught shortcut; a plain exit 1 still fails the task but
+  records `task_failure`, which does not trigger the loud scorer failure
+  path.
+- **Plans, docs, and CI.** New active plan
+  [docs/plans/completed/v0.9.0-eval-integrity-and-plan-hygiene.md](docs/plans/completed/v0.9.0-eval-integrity-and-plan-hygiene.md)
+  tracks this work; two new queued plans,
+  [docs/plans/eval-discrimination.md](docs/plans/eval-discrimination.md)
+  (a task bank that actually discriminates model behavior) and
+  [docs/plans/launch-readiness.md](docs/plans/launch-readiness.md) (the
+  launch, previously tracked only as README checkboxes), join the roadmap;
+  `docs/plans/active/` is now tracked (a fresh clone previously lost the
+  directory). `.github/workflows/ci.yml` now runs `bash scripts/verify.sh`
+  directly instead of hand-reconstructing its steps, so a gate added to
+  `verify.sh` can no longer silently drop out of CI. README's hardcoded
+  `v0.6.0` claim is replaced with a pointer to `plugins/harness-kit/VERSION`,
+  and the release skill gains a sweep step so this can't go stale again.
+
 ## 0.8.0 — 2026-07-11
 
 Behavioral evals — the harness could prove it was *coherent* (drift, links,
