@@ -42,6 +42,21 @@ into should not track its own launch as an untracked checkbox.
    *Acceptance: the section exists, is linked from README.md's Status
    section, and states concretely what does and doesn't break across a
    template version bump.*
+5. **Security policy** — a root `SECURITY.md`: how to privately report a
+   vulnerability in the shipped guard machinery, the expected response
+   window, which versions receive fixes pre-1.0, and a pointer to the
+   enforcement-layer honesty docs
+   ([../conventions/risky-actions.md](../conventions/risky-actions.md)) so
+   reports are triaged against the boundary the kit actually claims. A
+   project whose pitch is agent-safety machinery shipped into other people's
+   repos needs a disclosure path at launch. *Acceptance: `SECURITY.md` exists
+   at the repo root, is linked from README.md and CONTRIBUTING.md, and
+   GitHub's security-policy detection recognizes it.*
+6. **Supported-platforms statement** — an explicit README line on the hook
+   runtime posture: bash + jq on macOS / Linux / WSL / Git Bash; no
+   native-Windows hook execution (Codex's `commandWindows` override and the
+   Windows notes stay in the provider matrix). *Acceptance: README states the
+   posture; no doc claims native-Windows hook support.*
 
 ## Out of scope
 
@@ -52,9 +67,10 @@ being fixed inline here.
 
 ## Dependencies
 
-None hard. Sensible to sequence after the reviewer-loop plan ships — a
-reviewer persona is part of the launch pitch — but nothing here blocks on
-mechanism work; this plan touches no mechanism and can parallel-track.
+None hard: this plan touches no mechanism.
+Originally sequenced loosely after reviewer-loop (Decision 2026-07-11);
+superseded by the 2026-07-12 decision below — start immediately and
+parallel-track the mechanism plans.
 
 ## Verification
 
@@ -65,12 +81,24 @@ every doc this plan touches.
 
 ## Progress
 
+- 2026-07-12 — Re-prioritized to start immediately (parallel-track) by the
+  2026-07-12 project review; scope grew the security policy (item 5) and the
+  supported-platforms statement (item 6) from the same review's
+  launch-hygiene findings. The review also ran a filename-level git-history
+  sweep (no secret-shaped filenames ever committed) — item 3's content-level
+  sweep is still owed.
 - 2026-07-11 — Scoped from the 2026-07-11 project review, which found the
   launch tracked only as README checkboxes with no acceptance criteria or
   progress log.
 
 ## Decisions
 
+- 2026-07-12 — **Start now, don't wait for reviewer-loop** (supersedes the
+  2026-07-11 sequencing decision): v0.10.0 is already a credible launch
+  baseline — self-applied, CI-gated, eval-measured, governance-reviewed —
+  and deferring the launch for a stronger pitch traded the project's point
+  for polish. The reviewer persona strengthens the pitch whenever it ships;
+  it gates nothing here.
 - 2026-07-11 — Sequenced after reviewer-loop but not blocked on it: the
   launch pitch is stronger with a reviewer persona shipped, but nothing in
   this plan's scope requires it to exist first.

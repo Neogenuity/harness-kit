@@ -45,6 +45,15 @@ signal.
    what it's turning on before it does. *Acceptance: the workflow template
    exists, is documented as opt-in, and a dry run against this repo's own
    bank completes and appends results.*
+5. **Backfill per-cell `recorded` dates** — the current
+   [baselines.json](../evals/baselines.json) predates the v0.9.0 per-cell
+   `recorded` feature its own README documents: no cell carries a date, only
+   the back-compat top-level stamp, so a single stale cell inside an
+   otherwise-fresh file is invisible — the exact case the per-cell date
+   exists to expose. When recording the fuller matrix (item 2), also
+   re-record the existing claude/haiku and codex/gpt-5.6-terra cells so every
+   cell carries its own date. *Acceptance: every `tasks.*.runs.*` cell in
+   `docs/evals/baselines.json` carries a `recorded` date.*
 
 ## Out of scope
 
@@ -74,6 +83,11 @@ without per-PR triggering.
 
 ## Progress
 
+- 2026-07-12 — Added scope item 5 from the 2026-07-12 project review:
+  `baselines.json` predates the per-cell `recorded` feature the evals README
+  documents (no cell carries a date — only the back-compat top-level stamp).
+  Folded here rather than a new plan — it's one more re-record on the
+  same runs this plan already schedules.
 - 2026-07-11 — Scoped from v0.8.0's Next-action follow-up note and the
   2026-07-11 project review, which flagged the saturated bank as the reason
   the reviewer-loop's seeded-defect eval has nothing to discriminate against
