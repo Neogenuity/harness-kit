@@ -31,7 +31,11 @@ version everywhere from `plugin.json` to the manifest header). Queued plans
 are named by **theme** — versions are assigned when a plan moves to
 `active/`, because the release skill assigns semver by what actually shipped
 and interstitial releases happen (0.4.0 was one). A public roadmap shouldn't
-promise numbers it can't keep.
+promise numbers it can't keep. One exception: a **parallel-track plan with no
+mechanism scope** (launch-readiness is the case in point) activates under its
+theme name — its items may span several releases or, like an org move or a
+visibility flip, no commit at all, so it takes a version only if and when a
+single release ships its tracked-file changes.
 
 ## Plan format
 

@@ -57,6 +57,13 @@ into should not track its own launch as an untracked checkbox.
    native-Windows hook execution (Codex's `commandWindows` override and the
    Windows notes stay in the provider matrix). *Acceptance: README states the
    posture; no doc claims native-Windows hook support.*
+7. **Flip the repository public** — the launch act itself, which every item
+   above prepares for and none performs: switch the repository (at its
+   post-item-2 home) from private to public, after the org move (item 2) and
+   the hygiene sweep (item 3) land, then prove the outside-in path works.
+   *Acceptance: the repo's GitHub visibility is public; the README install
+   commands succeed from a clean environment with no collaborator access;
+   CI badges render for logged-out visitors.*
 
 ## Out of scope
 
@@ -76,11 +83,20 @@ parallel-track the mechanism plans.
 
 README.md carries no unresolved launch checkboxes; the demo recording,
 org-move grep, hygiene-pass note, and "what 1.0 promises" section are all
-linkable and current; `bash scripts/check-harness.sh` link-checks pass on
-every doc this plan touches.
+linkable and current; the repository's GitHub visibility is public and the
+install path works from a cold clone; `bash scripts/check-harness.sh`
+link-checks pass on every doc this plan touches.
 
 ## Progress
 
+- 2026-07-12 — Cross-review (gpt-5.6-sol, claims independently re-verified
+  in-repo) caught that the launch act itself — flipping the private repo
+  public — was never a scope item: items 1–6 all prepare for the launch,
+  none performs it. Added as item 7, sequenced after the org move and
+  hygiene sweep, with an outside-in acceptance check (cold-clone install,
+  logged-out badges). The same review re-confirmed the item-2 premise: the
+  old org string currently appears in exactly one tracked file (README.md,
+  6 occurrences).
 - 2026-07-12 — Re-prioritized to start immediately (parallel-track) by the
   2026-07-12 project review; scope grew the security policy (item 5) and the
   supported-platforms statement (item 6) from the same review's
