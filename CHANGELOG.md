@@ -164,7 +164,7 @@ task bank tracked nowhere the plans machinery could see.
 - **Plans, docs, and CI.** New active plan
   [docs/plans/completed/v0.9.0-eval-integrity-and-plan-hygiene.md](docs/plans/completed/v0.9.0-eval-integrity-and-plan-hygiene.md)
   tracks this work; two new queued plans,
-  [docs/plans/eval-discrimination.md](docs/plans/eval-discrimination.md)
+  [docs/plans/eval-discrimination.md](docs/plans/active/v0.12.0-eval-discrimination.md)
   (a task bank that actually discriminates model behavior) and
   [docs/plans/launch-readiness.md](docs/plans/launch-readiness.md) (the
   launch, previously tracked only as README checkboxes), join the roadmap;
