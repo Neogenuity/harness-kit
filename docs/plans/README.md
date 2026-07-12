@@ -95,11 +95,12 @@ rows + strict Agent Skills validation + matrix stamping
 | # | Plan | Theme |
 | --- | --- | --- |
 | 1 | [eval-discrimination.md](eval-discrimination.md) | Harder capability tasks, a fuller baseline matrix, a scheduled eval run — makes the bank actually discriminate |
-| 2 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
-| 3 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
-| 4 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
-| 5 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
-| 6 | [launch-readiness.md](launch-readiness.md) | Demo recording, org move, public-repo hygiene, security policy, supported-platforms statement, "what 1.0 promises" — parallel-track, start immediately |
+| 2 | [context-efficiency.md](context-efficiency.md) | Audit-measured fixes: eval usage instrumentation, the skill-link convention line, deny-hint tailoring, protected-path fix, banner/stop-hook trims, and a parity-gated plugin-skill split |
+| 3 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
+| 4 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
+| 5 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
+| 6 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
+| 7 | [launch-readiness.md](launch-readiness.md) | Demo recording, org move, public-repo hygiene, security policy, supported-platforms statement, "what 1.0 promises" — parallel-track, start immediately |
 
 **Ordering rationale.** Claim-to-implementation gaps went first — plans
 machinery (v0.6.0) closed the space between what the docs promise and what
@@ -120,7 +121,14 @@ the v0.10.0 baseline forward applied. Eval-discrimination now leads the queue,
 still ahead of the reviewer loop because that seeded-defect
 eval needs a bank capable of showing a catch-rate below 100% — the v0.8.0
 bank saturated at pass^k=1 on 15 of 16 recorded cells, leaving no headroom
-to demonstrate the reviewer catching anything. Execution governance's *baseline* (guidance docs,
+to demonstrate the reviewer catching anything. Context-efficiency slots
+directly behind it: its trial-confirmed *gaps* have small fixes that displace
+nothing downstream (the same logic that let v0.11.0 jump the queue), but the
+flip-to-pass and parity cells that prove those fixes consume the
+discriminating tasks eval-discrimination adopts, so it trails rather than
+leads — while its own first item (usage fields on eval results) is sequenced
+early precisely so eval-discrimination's new baseline recordings sit on
+usage-carrying rows. Execution governance's *baseline* (guidance docs,
 MCP inventory, CI hardening — near-zero tailoring cost) moved ahead of the
 reviewer and runtime work per current combined-controls guidance, which treats
 containment as non-optional rather than finishing work — it shipped as
@@ -152,7 +160,14 @@ Code CLI 2.1.207 — added
 [hook-hardening-and-feedback-repair.md](completed/v0.11.0-hook-hardening-and-feedback-repair.md)
 at #1, re-prioritized launch-readiness to parallel-track immediately (adding
 security-policy and supported-platforms items to its scope), and added the
-per-cell baseline-date backfill to eval-discrimination.
+per-cell baseline-date backfill to eval-discrimination. A separate 2026-07-12
+context-efficiency audit — 72 controlled trials over the installed harness
+and plugin (minimal-baseline vs installed vs plugin-activated vs
+reduced-context configurations, claude-haiku + codex gpt-5.6-terra, exact
+provider-reported usage per trial) — added
+[context-efficiency.md](context-efficiency.md) at #2 and left
+eval-discrimination two validated donor tasks with recorded
+discrimination-headroom cells (see both plans' Progress logs).
 
 Re-sorting is expected. Every harness component encodes an assumption about
 what models can't do on their own, and those assumptions get stress-tested

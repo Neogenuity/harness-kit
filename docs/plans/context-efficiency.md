@@ -1,0 +1,162 @@
+# Context efficiency
+
+Status: queued
+
+## Objective
+
+Land the measured fixes from the 2026-07-12 context-efficiency audit: make
+context efficiency a regression-tested property of the eval layer, close the
+three trial-confirmed behavior gaps (skill-link convention, deny-hint
+steering, protected-path over-match), trim the two runtime injections with no
+observed consumer (banner commit block, clean-tree stop verify), and — gated
+on eval parity — split the plugin skill so an activation loads one mode's
+playbook instead of the 5.2k-token monolith.
+
+## Value
+
+The audit (72 controlled trials, A/B/C/CR/D configurations, claude-haiku +
+codex gpt-5.6-terra, isolated clone workspaces; artifacts under
+`.harness/context-efficiency-eval/`, report in `reports/FINAL-REPORT.md`
+there) measured the installed harness at +1,470 exact always-on tokens buying
+a 90% orientation-cost reduction and a 0/3→2/3 swing on template discipline —
+and also caught concrete defects: 6/6 add-skill failures on one missing
+sentence, a guard deny message that steered an agent into the wrong-place
+edit it exists to prevent, a basename glob denying edits to a shipped
+template, a 4.1s stop-hook tax that fired usefully in 0 of 54 green-tree
+trials, and 3/3 timeouts when the monolithic skill activates on long tasks.
+Each fix below is small; what makes them a plan rather than a patch is the
+regression gate — the same audit showed naive reduction backfiring (compact
+AGENTS.md quadrupled orientation cost; a naive router split dropped a trial
+when the model skipped the mode-file hop), so every change ships against
+eval evidence, not intuition.
+
+## Scope
+
+1. **Eval usage instrumentation** — extend `eval_result_json` (and eval.sh's
+   capture) so every results.jsonl row records provider-reported usage:
+   uncached input, cached read, cache write, output tokens, cost when
+   reported, and tool-call count; `test-eval.sh` pins the new shape;
+   `eval-harness.sh` tolerates old rows. Template-first
+   (`templates/scripts/eval.sh`, `eval-lib.sh`, `test-eval.sh`), rolled into
+   root via update mode + re-pin. *Acceptance: a live `eval.sh` run emits
+   rows carrying the usage fields for both providers; `test-eval.sh` fails on
+   a row missing them; `eval-harness.sh` scores a mixed old/new results dir
+   without error.*
+2. **AGENTS.md skill-link convention line** — one sentence in the Skills
+   section: new skills (and convention docs) must be linked from AGENTS.md.
+   `templates/AGENTS.md.tmpl` + this repo's root `AGENTS.md` (content layer).
+   *Acceptance: line present in both; once eval-discrimination adopts the
+   recipe-free add-skill donor task, record a baseline-model B-config cell
+   for it — the audit's 0/6 A+B failure mode (grader: "AGENTS.md does not
+   link the skill") is the number this line exists to move.*
+3. **guard-config deny-hint TAILOR slot** — the deny message gains a
+   tailorable hint line; this repo's tailored copy says: changing shipped
+   behavior means editing `plugins/harness-kit/skills/harness-kit/templates/`,
+   not the installed copy. Template gains the empty TAILOR slot; root copy
+   tailored, its manifest line gaining the ` # tailored` marker (today root
+   and template guard-config.sh are byte-identical and unmarked). *Acceptance:
+   `test-guard-config.sh` covers the hint; a root `scripts/harness.conf` edit
+   payload produces a deny naming the templates path.*
+4. **Protected-path basename over-match fix** — `opencode.json` in
+   PROTECTED_PATHS matches by basename and denies editing
+   `templates/providers/opencode/opencode.json`, a file the secret-mirror
+   convention requires updating (audit payload test; 5 historical dogfood-log
+   denies on template paths). Scope the entry (or exempt the templates
+   subtree) so root `opencode.json` stays protected while the shipped
+   template is editable. Template + root. *Acceptance: payload tests — root
+   `opencode.json` edit denied; `templates/providers/opencode/opencode.json`
+   edit allowed; both as `test-guard-config.sh` cases.*
+5. **Banner commit-block trim** — `session-context.sh` emits branch, state,
+   and active plans; the recent-commits block becomes a `harness.conf`
+   tailorable (`BANNER_RECENT_COMMITS`, default 0). Audit: zero observed
+   consumers across 60+ transcripts; ~70 tokens × every session × every
+   subagent. Template-first + root roll-in. *Acceptance: hook test covers
+   default-off and a tailored non-zero value; manifest re-pinned.*
+6. **Stop-hook clean-tree skip** — `guard-project-policy.sh` skips the
+   `verify.sh --fast` run when `git status --porcelain` is empty (a clean
+   tree cannot newly fail the fast gates); advisory behavior unchanged
+   otherwise. Measured cost today: 4.1s wall on every stop. Template-first +
+   root roll-in. *Acceptance: hook test proves no verify invocation on a
+   clean tree and unchanged advisory output on a dirty one.*
+7. **Plugin skill split (gated)** — SKILL.md becomes a compact router whose
+   mode table *inlines each mode's two or three load-bearing invariants*
+   (the audit's naive split lost a trial exactly because the mode-file hop
+   was skippable); full playbooks move to `references/modes/{init,audit,add,
+   update}.md`; the pattern.md read mandate scopes to init/audit. Plugin
+   content only — nothing installs into targets; the stub-resource mirror
+   already ships `references/` verbatim. *Acceptance: activation loads ≤1k
+   tokens of router; C-config cells on the adopted discriminating tasks show
+   pass@k/pass^k not below the monolith's recorded cells (audit baseline:
+   add-skill C 3/3; template-discipline C 2/3 with 3/3 timeouts to beat on
+   wall clock); ship only on parity.*
+
+## Out of scope
+
+Compressing AGENTS.md or thinning the conventions/security docs — the audit
+measured the compact-AGENTS.md variant costing 4× on orientation while saving
+440 tokens, and showed no safety slack on the negative task; both are
+standing anti-recommendations, not deferred work. Rewording the skill
+description for self-activation sensitivity (0/3 unprompted activations on
+haiku despite a near-verbatim trigger match) — blocked on re-testing
+sensitivity with a stronger model before touching wording that currently has
+a perfect false-positive record (0/3 on ordinary work). `llms.txt` (loaded by
+no wired provider) — public-repo browsing surface, launch-readiness
+territory. Authoring the discriminating golden tasks themselves — that is
+[eval-discrimination.md](eval-discrimination.md) item 1; this plan only
+consumes them (donor tasks with validated graders sit in the audit
+artifacts).
+
+## Dependencies
+
+[eval-discrimination.md](eval-discrimination.md) — items 2 and 7 take their
+acceptance evidence from the adopted discriminating tasks and re-recorded
+baselines; item 1 here (usage fields) should land first so the results rows
+behind those baselines carry usage data from day one (baseline *aggregation*
+of usage stays out of scope — `eval-harness.sh` keeps scoring correctness
+only). v0.11.0's hook-test layout (shipped) is the substrate items 3-6
+extend.
+
+## Verification
+
+`bash scripts/verify.sh` green after every item (template tests + manifest
+re-pin discipline per [../conventions/templates.md](../conventions/templates.md));
+new/changed hooks each carry a `test-*.sh` case; items 2 and 7 verified by
+eval cells against the adopted tasks (recorded in `docs/evals/baselines.json`,
+with the underlying `results.jsonl` rows carrying the item-1 usage fields);
+release cut per
+[../skills/release/SKILL.md](../skills/release/SKILL.md) with version bump
+and root roll-in.
+
+## Progress
+
+- 2026-07-12 — Scoped from the context-efficiency audit run this date: 72
+  live trials (minimal-baseline / installed-harness / plugin-activated /
+  split-router / reduced-context configurations; claude-haiku-4-5 and codex
+  gpt-5.6-terra; fresh clone per trial; graders validity-pinned offline
+  first). Headline evidence: always-on harness context +1,470 exact tokens;
+  orientation 295k→29k tokens at equal correctness; template-discipline
+  0/3→2/3; add-skill 0/6 without the plugin's one sentence, 3/3 with it
+  activated — and 0/3 self-activation; both naive reductions (compact
+  AGENTS.md, skippable-hop router) measurably regressed. Full report and
+  per-trial transcripts under `.harness/context-efficiency-eval/`
+  (git-ignored audit artifact).
+
+## Decisions
+
+- 2026-07-12 — Usage instrumentation lives here, not in eval-discrimination:
+  that plan fences off scorer changes and owns *what* is measured (tasks,
+  baselines); this plan owns making efficiency itself a measured property.
+- 2026-07-12 — Banner commits default to 0 (conf-tailorable) rather than a
+  smaller fixed count: zero observed in-session consumers; cross-session
+  resume value is unmeasured, so the toggle preserves it for repos that want
+  it — one line in a TAILOR surface, not a fork.
+- 2026-07-12 — The skill split ships gated on C-parity cells, not on token
+  savings: the audit's CR probe (naive router) saved ~4.2k tokens per
+  activation and dropped a trial to a skipped mode-file read. Invariants
+  inline in the router table are the fix to validate, and parity is the bar.
+
+## Next action
+
+Implement scope item 1 (usage fields in `eval_result_json` + eval.sh capture,
+template-first, with the `test-eval.sh` shape pin) so every later item's eval
+evidence carries efficiency columns.

@@ -83,6 +83,20 @@ without per-PR triggering.
 
 ## Progress
 
+- 2026-07-12 — The context-efficiency audit run this date produced two
+  validated donor tasks for item 1: a recipe-free add-skill task (the
+  existing `add-skill-sync` golden task embeds the workflow recipe in its
+  prompt, which is why it saturates) and a template-vs-installed
+  secret-pattern task whose grader distinguishes wrong-place and unrepinned
+  edits. Both graders are proven by reference/violation fixtures, and the
+  audit recorded haiku cells demonstrating discrimination headroom
+  (add-skill: 0/3 baseline and 0/3 installed-harness vs 3/3
+  plugin-activated; template-discipline: 0/3 vs 2/3). Donor artifacts sit
+  under `.harness/context-efficiency-eval/tasks/` (git-ignored) — adopt by
+  copying into `docs/evals/tasks/` and running `test-eval.sh`. The new
+  [context-efficiency.md](context-efficiency.md) plan consumes these cells
+  as acceptance evidence and adds usage columns to the results schema
+  (kept out of this plan per its out-of-scope fence).
 - 2026-07-12 — Added scope item 5 from the 2026-07-12 project review:
   `baselines.json` predates the per-cell `recorded` feature the evals README
   documents (no cell carries a date — only the back-compat top-level stamp).
