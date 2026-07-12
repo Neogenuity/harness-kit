@@ -1,0 +1,103 @@
+# Scheduled behavioral-eval run for the agent harness. Add as
+# .github/workflows/eval-cron.yml. OPT-IN and COST-AWARE:
+#
+#   * A live run spends REAL model credits (tasks x trials x providers) —
+#     DOLLARS, not cents. It is deliberately NEVER wired to push / pull_request;
+#     only a weekly schedule and a manual dispatch (which DEFAULTS to the free
+#     `mock` provider) can trigger it.
+#   * It SCORES the bank against the committed baselines and uploads transcripts
+#     as an artifact. It NEVER runs `--update-baseline`: baselines are curated
+#     ground truth a human records deliberately, never overwritten by CI.
+#
+# Before enabling live runs: add the provider CLI install step, expose the
+# provider credential as a repo secret, and scope the task/model matrix below.
+name: eval-cron
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "claude | codex | mock  (mock = free plumbing check, no model spend)"
+        default: mock
+        type: string
+      model:
+        description: "provider model (blank = eval.sh default for the provider)"
+        default: ""
+        type: string
+      trials:
+        description: "trials per task"
+        default: "3"
+        type: string
+  schedule:
+    # Weekly, Mondays 06:00 UTC. A scheduled run is LIVE (see PROVIDER default
+    # below) and spends real credits — keep the cadence honest (weekly, not
+    # nightly) and the matrix small.
+    - cron: "0 6 * * 1"
+
+# Never let two eval runs overlap — they would race on results dirs and
+# double-spend credits.
+concurrency:
+  group: eval-cron
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # A manual dispatch uses its inputs; a scheduled run carries none, so it
+      # falls back to these defaults. Set the scheduled provider/model here.
+      PROVIDER: ${{ github.event.inputs.provider || 'claude' }}
+      MODEL: ${{ github.event.inputs.model || '' }}
+      TRIALS: ${{ github.event.inputs.trials || '3' }}
+    steps:
+      # Pinned to a full commit SHA (supply-chain hardening). To bump: re-resolve
+      # with `git ls-remote https://github.com/actions/checkout.git refs/tags/vX.Y.Z`
+      # and update the SHA + comment together, or let Dependabot manage it.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      # jq and git (the eval layer's only hard deps) are preinstalled on
+      # ubuntu-latest. For a LIVE run, install your provider CLI here, e.g.:
+      #   - run: npm install -g @anthropic-ai/claude-code    # claude
+      #   - run: <install your codex CLI>                     # codex
+      # `mock` needs neither — it runs each task's reference solution, no model.
+
+      - name: Run the eval bank
+        # Expose the live provider's credential from a repo secret (harmless when
+        # empty, e.g. for a mock run). Add the ones your provider CLI needs.
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          ran=0
+          for d in docs/evals/tasks/*/; do
+            slug="$(basename "$d")"
+            case "$slug" in _*) continue ;; esac
+            [ -f "$d/TASK.md" ] || continue
+            echo "::group::eval $slug ($PROVIDER)"
+            # A provider-pinned task refuses a mismatched --provider; tolerate it
+            # so one non-matching task can't fail the whole scheduled run.
+            bash scripts/eval.sh "$slug" --provider "$PROVIDER" \
+              ${MODEL:+--model "$MODEL"} --trials "$TRIALS" || true
+            echo "::endgroup::"
+            ran=1
+          done
+          [ "$ran" = 1 ] || { echo "no tasks under docs/evals/tasks/"; exit 1; }
+
+      - name: Score vs baseline (never --update-baseline)
+        # --no-fail reports regressions/violations without failing the job, so the
+        # transcripts still upload. Drop --no-fail to make a regression fail the
+        # run. NEVER add --update-baseline here — a human records baselines.
+        run: bash scripts/eval-harness.sh --no-fail
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: eval-results
+          path: .harness/eval-results/
+          retention-days: 30
