@@ -3,6 +3,19 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.10.1 — 2026-07-12
+
+CI fix — the `ci` workflow's "Hook templates are executable" check had failed
+on every push to `main` since v0.8.0. The four eval-layer scripts added in
+that release (`eval.sh`, `eval-lib.sh`, `eval-harness.sh`, `test-eval.sh`)
+were committed to `plugins/harness-kit/skills/harness-kit/templates/scripts/`
+without the executable bit, even though their identical-content counterparts
+under the repo's own installed `scripts/` were correctly `+x`. No behavior or
+template-layout change; mode bits only.
+
+- `chmod +x` the four affected template files to match their `scripts/`
+  counterparts and every sibling file in that directory.
+
 ## 0.10.0 — 2026-07-12
 
 Execution governance baseline — the kit previously scaffolded knowledge,
