@@ -271,8 +271,13 @@ while [ "$i" -le "$TRIALS" ]; do
         *) outcome=task_failure ;;
     esac
 
+    # Exact provider-reported usage for this trial (tokens, cost when reported,
+    # tool-call count), parsed from the captured transcript; an all-null object
+    # when the provider reports nothing (or for mock, which has no transcript
+    # usage). Efficiency is now a recorded property of every results row.
+    usage="$(eval_usage_json "$PROVIDER" "$TRIAL_DIR/transcript.jsonl")"
     eval_result_json "$TASK" "$PROVIDER" "$MODEL" "$SUITE" "$POLARITY" "$RUN_ID" \
-        "$i" "$passed" "$dur" "$agent_rc" "$TRIAL_DIR" "$RUN_STARTED_AT" "$outcome" >> "$RESULTS" \
+        "$i" "$passed" "$dur" "$agent_rc" "$TRIAL_DIR" "$RUN_STARTED_AT" "$outcome" "$usage" >> "$RESULTS" \
         || { rm -rf "$WS_BASE"; die "cannot write results to $RESULTS (trial $i) — a read-only or full disk must not exit 0 with missing rows"; }
 
     printf '  trial %d: %s  (%ds%s)\n' "$i" \

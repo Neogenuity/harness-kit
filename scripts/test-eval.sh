@@ -52,6 +52,104 @@ else
     ok "results-JSON schema (skipped: jq absent)"
 fi
 
+# ---- usage instrumentation: eval_usage_json extraction + row schema --------
+# Exact provider-reported usage per trial (token/cost/tool-call fields), pinned
+# by committed fixtures asserting the EXACT values the extractor pulls from a
+# Claude stream-json / Codex --json transcript (not merely the shape). Also
+# proves eval_result_json embeds the object, that a row missing it fails the
+# check, and that eval-harness.sh tolerates a mixed usage/no-usage results dir.
+if ! command -v jq >/dev/null 2>&1; then
+    ok "usage instrumentation (skipped: jq absent)"
+elif ! utmp="$(mktemp -d "${TMPDIR:-/tmp}/test-eval-usage-XXXXXX")" || [ -z "$utmp" ]; then
+    bad "usage instrumentation: mktemp failed"
+else
+    _uexpect() { # <name> <actual-json> <expected-json>
+        local a b; a="$(printf '%s' "$2" | jq -Sc . 2>/dev/null)"; b="$(printf '%s' "$3" | jq -Sc .)"
+        if [ "$a" = "$b" ]; then ok "$1"; else bad "$1"; printf '    got: %s\n    exp: %s\n' "$a" "$b"; fi
+    }
+    cat > "$utmp/claude.jsonl" <<'UEOF'
+{"type":"system","subtype":"init"}
+{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":100,"cache_creation_input_tokens":20,"cache_read_input_tokens":5,"output_tokens":10},"content":[{"type":"tool_use","name":"Read","input":{"file_path":"a"}}]}}
+{"type":"assistant","message":{"id":"m2","usage":{"input_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":120,"output_tokens":30},"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"b"}},{"type":"text","text":"ok"}]}}
+{"type":"result","subtype":"success","total_cost_usd":0.0123,"usage":{"input_tokens":150,"cache_creation_input_tokens":20,"cache_read_input_tokens":125,"output_tokens":40}}
+UEOF
+    _uexpect "usage: claude result-line extraction (exact values)" \
+        "$(eval_usage_json claude "$utmp/claude.jsonl")" \
+        '{"input_uncached":150,"input_cached_read":125,"input_cache_write":20,"output":40,"cost":0.0123,"tool_calls":2}'
+
+    cat > "$utmp/claude-timeout.jsonl" <<'UEOF'
+{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":100,"cache_creation_input_tokens":20,"cache_read_input_tokens":5,"output_tokens":10},"content":[{"type":"tool_use","name":"Read","input":{"file_path":"a"}}]}}
+{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":100,"cache_creation_input_tokens":20,"cache_read_input_tokens":5,"output_tokens":10},"content":[]}}
+{"type":"assistant","message":{"id":"m2","usage":{"input_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":120,"output_tokens":30},"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"b"}}]}}
+UEOF
+    _uexpect "usage: claude timeout fallback (no result line; per-message-id sum, deduped)" \
+        "$(eval_usage_json claude "$utmp/claude-timeout.jsonl")" \
+        '{"input_uncached":150,"input_cached_read":125,"input_cache_write":20,"output":40,"cost":null,"tool_calls":2}'
+
+    cat > "$utmp/codex.jsonl" <<'UEOF'
+{"type":"item.completed","item":{"item_type":"command_execution"}}
+{"type":"item.completed","item":{"item_type":"command_execution"}}
+{"type":"item.completed","item":{"item_type":"file_change"}}
+{"type":"item.completed","item":{"item_type":"agent_message"}}
+{"type":"turn.completed","usage":{"input_tokens":2000,"cached_input_tokens":1500,"output_tokens":300,"reasoning_output_tokens":50}}
+UEOF
+    _uexpect "usage: codex turn.completed extraction (uncached=input-cached; cost null)" \
+        "$(eval_usage_json codex "$utmp/codex.jsonl")" \
+        '{"input_uncached":500,"input_cached_read":1500,"input_cache_write":null,"output":300,"cost":null,"tool_calls":3}'
+
+    _uexpect "usage: missing transcript => all-null object" \
+        "$(eval_usage_json claude "$utmp/does-not-exist.jsonl")" \
+        '{"input_uncached":null,"input_cached_read":null,"input_cache_write":null,"output":null,"cost":null,"tool_calls":0}'
+
+    _uexpect "usage: mock provider => all-null object" \
+        "$(eval_usage_json mock "$utmp/claude.jsonl")" \
+        '{"input_uncached":null,"input_cached_read":null,"input_cache_write":null,"output":null,"cost":null,"tool_calls":0}'
+
+    # eval_result_json embeds the usage object; all six keys present, tool_calls numeric.
+    urow="$(eval_result_json demo claude haiku capability positive run1 1 true 5 0 /tmp/x 1752345600 pass "$(eval_usage_json claude "$utmp/claude.jsonl")")"
+    if printf '%s' "$urow" | jq -e '
+            .usage | (has("input_uncached") and has("input_cached_read") and
+                      has("input_cache_write") and has("output") and has("cost") and
+                      has("tool_calls")) and (.tool_calls|type=="number")' >/dev/null 2>&1; then
+        ok "usage: results row carries a well-formed usage object"
+    else
+        bad "usage: results row is missing a well-formed usage object"
+    fi
+
+    # The shape check must BITE: a row with .usage removed fails it (a row
+    # "missing" the usage fields is detectable, per the item-1 acceptance).
+    if printf '%s' "$urow" | jq -c 'del(.usage)' | jq -e '.usage.tool_calls|type=="number"' >/dev/null 2>&1; then
+        bad "usage: a row missing .usage unexpectedly passed the shape check"
+    else
+        ok "usage: a row missing .usage fails the shape check"
+    fi
+
+    # Back-compat: eval_result_json called the legacy 13-arg way still emits an
+    # all-null usage object, so every row has a uniform shape.
+    udrow="$(eval_result_json demo claude haiku capability positive run1 1 true 5 0 /tmp/x 1752345600 pass)"
+    if printf '%s' "$udrow" | jq -e '.usage.input_uncached==null and .usage.tool_calls==0' >/dev/null 2>&1; then
+        ok "usage: omitted usage arg defaults to an all-null object (legacy 13-arg callers)"
+    else
+        bad "usage: omitted usage arg did not default to an all-null object"
+    fi
+
+    # eval-harness.sh tolerates a MIXED old/new results dir — usage on one row,
+    # absent on another — because it scores correctness only (item-1 acceptance).
+    if [ -f "$ROOT/scripts/eval-harness.sh" ]; then
+        mrd="$utmp/results/mix-demo"; mkdir -p "$mrd"
+        {
+            eval_result_json mix-demo claude haiku capability positive run1 1 true 1 0 /tmp/x 1700000000 pass "$(eval_usage_json claude "$utmp/claude.jsonl")"
+            eval_result_json mix-demo claude haiku capability positive run1 2 true 1 0 /tmp/x 1700000000 pass | jq -c 'del(.usage)'
+        } > "$mrd/results.jsonl"
+        if bash "$ROOT/scripts/eval-harness.sh" --results-dir "$utmp/results" --baseline "$utmp/none.json" >/dev/null 2>&1; then
+            ok "usage: eval-harness scores a mixed usage/no-usage results dir without error"
+        else
+            bad "usage: eval-harness failed on a mixed old/new results dir"
+        fi
+    fi
+    rm -rf "$utmp"
+fi
+
 # ---- bank-wide metadata enum validation (offline, cheap) -------------------
 # Every task's suite/polarity/provider/grade metadata must be one of the
 # values eval.sh enforces at runtime — a typo here (e.g. "suite: regresion")

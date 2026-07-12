@@ -14,8 +14,8 @@
 # Source it — it defines functions and runs nothing:
 #   . scripts/eval-lib.sh
 # Compatible with macOS (BSD) and Linux (GNU). Hard deps: git, tar (workspace
-# isolation). jq is used by eval.sh/eval-harness.sh for JSON and is required
-# there; the pure functions here do not need it.
+# isolation). jq is required by eval_result_json / eval_usage_json here (and by
+# eval.sh / eval-harness.sh); the other pure functions do not need it.
 
 # shellcheck disable=SC2034  # consumed by the sourcing scripts (eval.sh, eval-harness.sh, test-eval.sh)
 EVAL_TASKS_DIR_DEFAULT="docs/evals/tasks"
@@ -157,9 +157,87 @@ eval_passrate() {
     awk -v n="${1:-0}" -v c="${2:-0}" 'BEGIN{ if(n<=0){print "0.00"} else {printf "%.2f", c/n} }'
 }
 
+# eval_usage_json <provider> <transcript_file>
+# Emits the compact `usage` object embedded in each results row: exact
+# provider-reported token/cost usage plus a tool-call count, extracted from the
+# trial's captured transcript. Fields are integers (cost a float) when the
+# provider reports them and JSON null when it does not — never 0, so
+# "unreported" and "measured zero" stay distinguishable:
+#   input_uncached     new input tokens NOT served from cache
+#   input_cached_read  input tokens served from a prompt cache
+#   input_cache_write  input tokens written to the cache (Claude cache creation;
+#                      null for Codex, which reports no cache-write figure)
+#   output             output tokens
+#   cost               total USD when reported, else null (Codex on a ChatGPT
+#                      plan reports tokens but no cost)
+#   tool_calls         number of tool invocations in the transcript
+# Extraction is provider-specific — Claude stream-json (the `result` event, or a
+# per-message-id usage sum when a timeout killed the run before the result line)
+# vs Codex --json (`turn.completed`; its input_tokens INCLUDES the cached subset,
+# so uncached = input - cached). A missing/empty transcript, the mock provider,
+# or an unknown provider yields an all-null object (tool_calls 0), so every row's
+# shape is uniform. Requires jq; malformed transcript lines are skipped.
+eval_usage_json() {
+    local provider="$1" transcript="${2:-}"
+    local nullobj='{"input_uncached":null,"input_cached_read":null,"input_cache_write":null,"output":null,"cost":null,"tool_calls":0}'
+    if ! command -v jq >/dev/null 2>&1 || [ -z "$transcript" ] || [ ! -s "$transcript" ]; then
+        printf '%s' "$nullobj"; return 0
+    fi
+    case "$provider" in
+        claude)
+            jq -sRc '
+              [ split("\n")[] | select(length>0) | (fromjson? // empty) ] as $rows
+              | ($rows | map(select(.type=="result")) | last) as $r
+              | ($rows | map(select(.type=="assistant")
+                    | ((.message.content // []) | map(select(.type=="tool_use")) | length)) | add // 0) as $tools
+              | if $r != null then
+                  {input_uncached: ($r.usage.input_tokens // null),
+                   input_cached_read: ($r.usage.cache_read_input_tokens // null),
+                   input_cache_write: ($r.usage.cache_creation_input_tokens // null),
+                   output: ($r.usage.output_tokens // null),
+                   cost: ($r.total_cost_usd // null),
+                   tool_calls: $tools}
+                else
+                  ([ $rows | map(select(.type=="assistant" and .message.id != null and .message.usage != null))
+                       | group_by(.message.id)[] | (.[-1].message.usage) ]) as $u
+                  | if ($u | length) == 0 then
+                      {input_uncached:null,input_cached_read:null,input_cache_write:null,output:null,cost:null,tool_calls:$tools}
+                    else
+                      {input_uncached: ($u | map(.input_tokens // 0) | add),
+                       input_cached_read: ($u | map(.cache_read_input_tokens // 0) | add),
+                       input_cache_write: ($u | map(.cache_creation_input_tokens // 0) | add),
+                       output: ($u | map(.output_tokens // 0) | add),
+                       cost: null, tool_calls: $tools}
+                    end
+                end
+            ' "$transcript" 2>/dev/null || printf '%s' "$nullobj"
+            ;;
+        codex)
+            jq -sRc '
+              [ split("\n")[] | select(length>0) | (fromjson? // empty) ] as $rows
+              | ($rows | map(select(.type=="turn.completed")) | last) as $t
+              | ($rows | map(select(.type=="item.completed")
+                    | ((.item.item_type // .item.type // "")) | select(test("command|file_change|patch"))) | length) as $tools
+              | if $t != null then
+                  ($t.usage.input_tokens // null) as $in
+                  | ($t.usage.cached_input_tokens // null) as $cr
+                  | {input_uncached: (if $in == null then null else ($in - ($cr // 0)) end),
+                     input_cached_read: $cr,
+                     input_cache_write: null,
+                     output: ($t.usage.output_tokens // null),
+                     cost: null, tool_calls: $tools}
+                else
+                  {input_uncached:null,input_cached_read:null,input_cache_write:null,output:null,cost:null,tool_calls:$tools}
+                end
+            ' "$transcript" 2>/dev/null || printf '%s' "$nullobj"
+            ;;
+        *) printf '%s' "$nullobj" ;;
+    esac
+}
+
 # eval_result_json <task> <provider> <model> <suite> <polarity> <run> \
 #                  <trial> <pass:true|false> <duration_s> <agent_rc> <transcript> \
-#                  <run_started_at> <outcome>
+#                  <run_started_at> <outcome> [usage_json]
 # Emits one compact JSON object — the results.jsonl schema. The single source for
 # that shape, so eval.sh (writer) and test-eval.sh (shape assertion) can never
 # disagree. Requires jq (the only jq-dependent function in this lib).
@@ -172,17 +250,26 @@ eval_passrate() {
 #                           eval_grade's verdict mapped by the caller (pass ->
 #                           pass, violation -> negative_violation, fail /
 #                           workspace-prep failure -> task_failure).
+#   arg 14  usage_json     (optional) a JSON object from eval_usage_json — exact
+#                           provider-reported token/cost usage + tool_calls.
+#                           Omitted/empty => an all-null usage object, so every
+#                           row carries the field; legacy rows written without
+#                           it still score (eval-harness.sh reads correctness
+#                           fields only and never reads usage).
 eval_result_json() {
+    local usage="${14:-}"
+    [ -n "$usage" ] || usage='{"input_uncached":null,"input_cached_read":null,"input_cache_write":null,"output":null,"cost":null,"tool_calls":0}'
     jq -cn \
         --arg task "$1" --arg provider "$2" --arg model "$3" \
         --arg suite "$4" --arg polarity "$5" --arg run "$6" \
         --argjson trial "$7" --argjson pass "$8" --argjson duration_s "$9" \
         --argjson agent_rc "${10}" --arg transcript "${11}" \
         --argjson run_started_at "${12}" --arg outcome "${13}" \
+        --argjson usage "$usage" \
         '{task:$task, provider:$provider, model:$model, suite:$suite,
           polarity:$polarity, run:$run, trial:$trial, pass:$pass,
           duration_s:$duration_s, agent_rc:$agent_rc, transcript:$transcript,
-          run_started_at:$run_started_at, outcome:$outcome}'
+          run_started_at:$run_started_at, outcome:$outcome, usage:$usage}'
 }
 
 # eval_list_tasks <tasks_dir>
