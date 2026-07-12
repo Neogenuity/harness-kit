@@ -68,8 +68,10 @@ secret read, feed a lint finding back, advise once) and on the harness's native
 permission/trust layers plus the CI manifest check as the layers that actually
 hold. *Enforcement* proper — OS-level sandboxing, network-egress control,
 filesystem scoping — is a platform capability the kit's job is to **configure**,
-not reimplement; that surface is scoped in the execution-governance plan
-(`docs/plans/execution-governance.md`).
+not reimplement. The hostile-input and risky-output guidance now ships as
+convention docs (installed at `docs/conventions/untrusted-content.md` and
+`docs/conventions/risky-actions.md`); the advanced per-provider enforcement
+surface is scoped in the queued `docs/plans/execution-sandbox-profiles.md`.
 
 ## Anatomy of an installed harness
 

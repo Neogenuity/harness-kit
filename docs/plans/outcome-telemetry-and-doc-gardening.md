@@ -49,7 +49,7 @@ the same treatment.
 
 ## Out of scope
 
-Hosted dashboards/collectors (point at OTel per the execution-governance
+Hosted dashboards/collectors (point at OTel per the execution-sandbox-profiles
 plan); autonomous harness self-modification (the arXiv direction — the kit
 keeps a human in the audit loop by design, per ADR 001's advisory
 philosophy).
@@ -57,10 +57,10 @@ philosophy).
 ## Dependencies
 
 Behavioral-evals (results to trend), reviewer-loop (findings lines + the
-trailer convention), execution-governance's advanced audit-log-export item
-(the OTel/monitoring export pointers — its later half, which trails
-runtime-legibility). This is deliberately last: outcome telemetry is only
-worth building once gates, reviews, and evals emit outcomes.
+trailer convention), execution-sandbox-profiles' audit-log-export item
+(the OTel/monitoring export pointers, which trails runtime-legibility). This is
+deliberately last: outcome telemetry is only worth building once gates,
+reviews, and evals emit outcomes.
 
 ## Verification
 
@@ -83,5 +83,5 @@ real log; gardening skill flags a seeded stale stamp; `verify.sh` green.
 
 ## Next action
 
-After execution-governance ships: design log schema v2 with a version field
-first; everything else consumes it.
+After execution-sandbox-profiles ships: design log schema v2 with a version
+field first; everything else consumes it.

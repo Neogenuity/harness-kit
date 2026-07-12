@@ -352,6 +352,334 @@ cat > "$W/references/matrix.md" <<EOF
 EOF
 assert_ok_without "a freshly-stamped matrix does not warn stale" "$W" "older than"
 
+# --- check #8c: MCP trust inventory, split severity, cases (a)-(j) ---
+# (f) no MCP configs + no inventory declared → fully silent (bare fixture).
+W=$(new_fixture)
+assert_ok_without "8c(f): no MCP configs, no inventory → silent" "$W" "trust inventory"
+
+# TOML (.codex/config.toml) is parsed with awk, no jq — so these two run
+# regardless of jq. Quoted-hyphenated table name + a disabled entry that must
+# be skipped.
+# (a-toml) undeclared server, no inventory → the no-inventory WARN.
+W=$(new_fixture)
+mkdir -p "$W/.codex"
+cat > "$W/.codex/config.toml" <<'EOF'
+[mcp_servers."my-linter"]
+command = "npx"
+args = ["-y", "@lint/mcp"]
+
+[mcp_servers.turnedoff]
+command = "foo"
+enabled = false
+EOF
+assert_warns "8c(a) TOML server, no inventory → no-inventory WARN" "$W" "no trust inventory declared"
+
+# (a-toml) inventory SET (empty, strict) → the quoted-hyphenated server ERRORs,
+# naming file + server; the enabled=false entry stays silent.
+W=$(new_fixture)
+mkdir -p "$W/.codex"
+printf 'MCP_ALLOWED_SERVERS=""\n' > "$W/scripts/harness.conf"
+cat > "$W/.codex/config.toml" <<'EOF'
+[mcp_servers."my-linter"]
+command = "npx"
+args = ["-y", "@lint/mcp"]
+
+[mcp_servers.turnedoff]
+command = "foo"
+enabled = false
+EOF
+assert_flags "8c(a) TOML quoted-hyphen server, inventory set → ERROR" "$W" "'my-linter' in .codex/config.toml"
+
+# (k) a name-only inventory line is itself an ERROR — an empty pin would make
+#     the identity check vacuous (grep -F "" matches everything). Fires even
+#     with no MCP configs present; trailing whitespace is still name-only.
+W=$(new_fixture)
+printf 'MCP_ALLOWED_SERVERS="\nok-server @good/pkg\nbare-name   \n"\n' > "$W/scripts/harness.conf"
+assert_flags "8c(k) name-only inventory line → ERROR (even with no configs)" "$W" "'bare-name' has no identity substring"
+
+# (l) the vacuous-pass attack the empty pin enables: a configured server whose
+#     inventory line has no pin must FAIL the run, not silently match.
+W=$(new_fixture)
+mkdir -p "$W/.codex"
+printf 'MCP_ALLOWED_SERVERS="bare-name"\n' > "$W/scripts/harness.conf"
+cat > "$W/.codex/config.toml" <<'EOF'
+[mcp_servers.bare-name]
+command = "npx"
+args = ["-y", "@whatever/mcp"]
+EOF
+assert_flags "8c(l) configured server with pin-less inventory line → ERROR, not a pass" "$W" "no identity substring"
+
+# (m) a single-quoted (TOML literal-string) table name unwraps like a
+#     double-quoted one: correctly pinned, the dotted name is clean — before
+#     the fix the name parsed as 'dotted (mangled) and spuriously ERRORed.
+W=$(new_fixture)
+mkdir -p "$W/.codex"
+printf 'MCP_ALLOWED_SERVERS="dotted.name @good/pkg"\n' > "$W/scripts/harness.conf"
+cat > "$W/.codex/config.toml" <<'EOF'
+[mcp_servers.'dotted.name']
+command = "npx"
+args = ["-y", "@good/pkg"]
+EOF
+assert_ok "8c(m) single-quoted dotted TOML name, correctly pinned → clean" "$W"
+
+# (n) a TOML config whose only server is disabled stays fully silent even
+#     under a strict (set-but-empty) inventory — disabled entries are not
+#     audited, mirroring the JSON case (e).
+W=$(new_fixture)
+mkdir -p "$W/.codex"
+printf 'MCP_ALLOWED_SERVERS=""\n' > "$W/scripts/harness.conf"
+cat > "$W/.codex/config.toml" <<'EOF'
+[mcp_servers.turnedoff]
+command = "foo"
+disabled = true
+EOF
+assert_ok_without "8c(n) disabled-only TOML server under strict inventory → silent" "$W" "turnedoff"
+
+# The JSON providers need jq; the check skips (WARNs "not audited") without it,
+# so the ERROR/clean assertions below are only meaningful where jq exists.
+if command -v jq >/dev/null 2>&1; then
+    # (a) .mcp.json — WARN with no inventory, ERROR (file + name) once set.
+    W=$(new_fixture)
+    cat > "$W/.mcp.json" <<'EOF'
+{"mcpServers":{"alpha":{"command":"npx","args":["-y","@a/mcp"]}}}
+EOF
+    assert_warns "8c(a) .mcp.json server, no inventory → WARN" "$W" "no trust inventory declared"
+
+    W=$(new_fixture)
+    printf 'MCP_ALLOWED_SERVERS=""\n' > "$W/scripts/harness.conf"
+    cat > "$W/.mcp.json" <<'EOF'
+{"mcpServers":{"alpha":{"command":"npx","args":["-y","@a/mcp"]}}}
+EOF
+    assert_flags "8c(a) .mcp.json server, inventory set → ERROR" "$W" "'alpha' in .mcp.json"
+
+    # (a) .cursor/mcp.json — same shape.
+    W=$(new_fixture)
+    mkdir -p "$W/.cursor"
+    cat > "$W/.cursor/mcp.json" <<'EOF'
+{"mcpServers":{"curserver":{"url":"https://c.example/mcp"}}}
+EOF
+    assert_warns "8c(a) .cursor/mcp.json server, no inventory → WARN" "$W" "no trust inventory declared"
+
+    W=$(new_fixture)
+    mkdir -p "$W/.cursor"
+    printf 'MCP_ALLOWED_SERVERS=""\n' > "$W/scripts/harness.conf"
+    cat > "$W/.cursor/mcp.json" <<'EOF'
+{"mcpServers":{"curserver":{"url":"https://c.example/mcp"}}}
+EOF
+    assert_flags "8c(a) .cursor/mcp.json server, inventory set → ERROR" "$W" "'curserver' in .cursor/mcp.json"
+
+    # (a) opencode.json "mcp" — array-command shape, enabled flag.
+    W=$(new_fixture)
+    cat > "$W/opencode.json" <<'EOF'
+{"mcp":{"ocserver":{"type":"local","command":["npx","-y","@oc/mcp"],"enabled":true}}}
+EOF
+    assert_warns "8c(a) opencode.json server, no inventory → WARN" "$W" "no trust inventory declared"
+
+    W=$(new_fixture)
+    printf 'MCP_ALLOWED_SERVERS=""\n' > "$W/scripts/harness.conf"
+    cat > "$W/opencode.json" <<'EOF'
+{"mcp":{"ocserver":{"type":"local","command":["npx","-y","@oc/mcp"],"enabled":true}}}
+EOF
+    assert_flags "8c(a) opencode.json server, inventory set → ERROR" "$W" "'ocserver' in opencode.json"
+
+    # (b) name allowed but identity repointed → ERROR (identity drift).
+    W=$(new_fixture)
+    printf 'MCP_ALLOWED_SERVERS="alpha @good/pkg"\n' > "$W/scripts/harness.conf"
+    cat > "$W/.mcp.json" <<'EOF'
+{"mcpServers":{"alpha":{"command":"npx","args":["-y","@evil/pkg"]}}}
+EOF
+    assert_flags "8c(b) allowed name, repointed identity → ERROR" "$W" "does not contain its pinned substring"
+
+    # (c) fully covered, including names with dots and hyphens → clean.
+    W=$(new_fixture)
+    printf 'MCP_ALLOWED_SERVERS="\nmy.server @good/pkg\nmy-server https://x.example/mcp\n"\n' > "$W/scripts/harness.conf"
+    cat > "$W/.mcp.json" <<'EOF'
+{"mcpServers":{"my.server":{"command":"npx","args":["-y","@good/pkg"]},"my-server":{"url":"https://x.example/mcp"}}}
+EOF
+    assert_ok "8c(c) every server covered (dotted/hyphenated names) → clean" "$W"
+
+    # (d) empty maps (the shipped opencode "mcp": {}) → silent even undeclared.
+    W=$(new_fixture)
+    cat > "$W/.mcp.json" <<'EOF'
+{"mcpServers":{}}
+EOF
+    cat > "$W/opencode.json" <<'EOF'
+{"mcp":{}}
+EOF
+    assert_ok_without "8c(d) empty mcp maps → silent (no WARN)" "$W" "trust inventory"
+
+    # (e) a single disabled server → silent (must not count as configured).
+    W=$(new_fixture)
+    cat > "$W/.mcp.json" <<'EOF'
+{"mcpServers":{"off1":{"command":"x","disabled":true}}}
+EOF
+    assert_ok_without "8c(e) disabled server → silent" "$W" "trust inventory"
+
+    # (g) the no-inventory WARN fires EXACTLY once across multiple configs.
+    W=$(new_fixture)
+    mkdir -p "$W/.cursor"
+    cat > "$W/.mcp.json" <<'EOF'
+{"mcpServers":{"alpha":{"command":"npx","args":["-y","@a/mcp"]}}}
+EOF
+    cat > "$W/.cursor/mcp.json" <<'EOF'
+{"mcpServers":{"beta":{"command":"npx","args":["-y","@b/mcp"]}}}
+EOF
+    out=$(bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
+    count=$(printf '%s\n' "$out" | grep -c "no trust inventory declared")
+    if [ "$rc" = "0" ] && [ "$count" -eq 1 ]; then
+        echo "ok:   8c(g) no-inventory WARN fires exactly once across configs"
+    else
+        echo "FAIL: 8c(g) no-inventory WARN once — rc=$rc count=$count"
+        printf '%s\n' "$out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W"
+
+    # (h) malformed JSON alongside a valid config → unaudited WARN for the
+    #     malformed file AND the valid file is still checked (ERROR here).
+    W=$(new_fixture)
+    mkdir -p "$W/.cursor"
+    printf 'MCP_ALLOWED_SERVERS=""\n' > "$W/scripts/harness.conf"
+    printf '{ this is not json\n' > "$W/.mcp.json"
+    cat > "$W/.cursor/mcp.json" <<'EOF'
+{"mcpServers":{"beta":{"command":"npx","args":["-y","@b/mcp"]}}}
+EOF
+    out=$(bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
+    if [ "$rc" = "1" ] \
+        && printf '%s' "$out" | grep -qF ".mcp.json could not be parsed" \
+        && printf '%s' "$out" | grep -qF "'beta' in .cursor/mcp.json"; then
+        echo "ok:   8c(h) malformed config WARNs unaudited; valid config still checked"
+    else
+        echo "FAIL: 8c(h) malformed+valid — rc=$rc"
+        printf '%s\n' "$out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W"
+
+    # (i) jq removed via a PATH shim (symlink only the utilities check-harness
+    #     needs) with a JSON config present → unaudited WARN, exit 0. Proves the
+    #     jq-absent path is loud, not silent.
+    shim=$(mktemp -d)
+    for u in bash sh env dirname basename grep egrep awk sed sort find wc tr head cat date git shasum sha256sum mktemp rm chmod ls uname printf seq; do
+        p=$(command -v "$u" 2>/dev/null) && ln -s "$p" "$shim/$u" 2>/dev/null
+    done
+    W=$(new_fixture)
+    printf 'MCP_ALLOWED_SERVERS=""\n' > "$W/scripts/harness.conf"
+    cat > "$W/.mcp.json" <<'EOF'
+{"mcpServers":{"gamma":{"command":"npx","args":["-y","@g/mcp"]}}}
+EOF
+    out=$(env PATH="$shim" bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
+    if [ "$rc" = "0" ] \
+        && printf '%s' "$out" | grep -qF ".mcp.json is an MCP config but jq is unavailable"; then
+        echo "ok:   8c(i) jq absent + JSON config → unaudited WARN, exit 0"
+    else
+        echo "FAIL: 8c(i) no-jq shim — rc=$rc (jq-in-shim: $(PATH="$shim" command -v jq || echo none))"
+        printf '%s\n' "$out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W" "$shim"
+
+    # (j) same server name in two providers, one identity pinned → only the
+    #     mismatching provider ERRORs; the matching one stays clean.
+    W=$(new_fixture)
+    mkdir -p "$W/.cursor"
+    printf 'MCP_ALLOWED_SERVERS="dup @correct/pkg"\n' > "$W/scripts/harness.conf"
+    cat > "$W/.mcp.json" <<'EOF'
+{"mcpServers":{"dup":{"command":"npx","args":["-y","@correct/pkg"]}}}
+EOF
+    cat > "$W/.cursor/mcp.json" <<'EOF'
+{"mcpServers":{"dup":{"command":"npx","args":["-y","@evil/pkg"]}}}
+EOF
+    out=$(bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
+    if [ "$rc" = "1" ] \
+        && printf '%s' "$out" | grep -qF "'dup' in .cursor/mcp.json" \
+        && ! printf '%s' "$out" | grep -qF "'dup' in .mcp.json"; then
+        echo "ok:   8c(j) only the mismatching provider ERRORs"
+    else
+        echo "FAIL: 8c(j) dup name across providers — rc=$rc"
+        printf '%s\n' "$out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W"
+
+    # (o) a non-object junk sibling under mcpServers must NOT crash the jq
+    #     extraction and downgrade the real server's drift ERROR into a
+    #     "could not be parsed" WARN — the junk is ignored, evil still ERRORs.
+    W=$(new_fixture)
+    printf 'MCP_ALLOWED_SERVERS=""\n' > "$W/scripts/harness.conf"
+    cat > "$W/.mcp.json" <<'EOF'
+{"mcpServers":{"evil":{"command":"npx","args":["-y","@evil/pkg"]},"junk":"not-a-server"}}
+EOF
+    out=$(bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
+    if [ "$rc" = "1" ] \
+        && printf '%s' "$out" | grep -qF "'evil' in .mcp.json" \
+        && ! printf '%s' "$out" | grep -qF "could not be parsed"; then
+        echo "ok:   8c(o) junk non-object sibling ignored; evil server still ERRORs"
+    else
+        echo "FAIL: 8c(o) junk sibling downgrade — rc=$rc"
+        printf '%s\n' "$out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W"
+
+    # (p) jq absent + configs whose maps are trivially empty (the shipped
+    #     opencode template shape) → fully silent, not a perpetual unaudited
+    #     WARN: the dependency-free empty-map fast path.
+    shim=$(mktemp -d)
+    for u in bash sh env dirname basename grep egrep awk sed sort find wc tr head cat date git shasum sha256sum mktemp rm chmod ls uname printf seq; do
+        p=$(command -v "$u" 2>/dev/null) && ln -s "$p" "$shim/$u" 2>/dev/null
+    done
+    W=$(new_fixture)
+    cat > "$W/.mcp.json" <<'EOF'
+{ "mcpServers": {} }
+EOF
+    cat > "$W/opencode.json" <<'EOF'
+{ "mcp": {} }
+EOF
+    out=$(env PATH="$shim" bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
+    if [ "$rc" = "0" ] \
+        && ! printf '%s' "$out" | grep -qF "jq is unavailable" \
+        && ! printf '%s' "$out" | grep -qF "trust inventory"; then
+        echo "ok:   8c(p) jq absent + empty mcp maps → silent (no unaudited WARN)"
+    else
+        echo "FAIL: 8c(p) no-jq empty-map fast path — rc=$rc"
+        printf '%s\n' "$out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W" "$shim"
+fi
+
+# --- check #10d: CI action pinning (doctor WARNs) ---
+# A mutable @tag ref WARNs; a full 40-hex SHA (and a local ./ ref) stays clean.
+W=$(new_fixture)
+mkdir -p "$W/.github/workflows"
+cat > "$W/.github/workflows/ci.yml" <<'EOF'
+name: ci
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/local-thing
+EOF
+assert_warns "10d: a mutable @tag action ref warns" "$W" "mutable ref"
+
+W=$(new_fixture)
+mkdir -p "$W/.github/workflows"
+cat > "$W/.github/workflows/ci.yml" <<'EOF'
+name: ci
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: 'actions/cache@36f1e144e1c8edb0a652766b484448563d8baf46' # v4.2.0
+      - uses: ./.github/actions/local-thing
+EOF
+assert_ok_without "10d: SHA-pinned actions (bare and single-quoted) and a local ref are clean" "$W" "mutable ref"
+
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails check-harness case(s)"
     exit 1

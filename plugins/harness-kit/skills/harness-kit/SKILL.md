@@ -37,7 +37,9 @@ behavior from the repo alone.
    formatter/linter/test commands (from manifest scripts, Makefile, CI
    config); CI system (.github/workflows, .gitlab-ci.yml); existing agent
    config (`CLAUDE.md`, `AGENTS.md`, `.claude/`, `.cursor/`, `.codex/`,
-   `.opencode/`, `.agents/`); secret-file patterns present (`.env*`,
+   `.opencode/`, `.agents/`); MCP server configs (`.mcp.json`,
+   `.cursor/mcp.json`, `opencode.json` `mcp`, `.codex/config.toml`
+   `[mcp_servers.*]`); secret-file patterns present (`.env*`,
    `auth.json`, key files); docs already written. If a partial harness
    exists, switch to a gap-filling variant of this flow — never overwrite
    hand-written content; migrate it toward `docs/` instead.
@@ -51,6 +53,9 @@ behavior from the repo alone.
      toolchain; slow static analysis stays in `verify.sh`.
    - Which providers to wire beyond Claude Code + `AGENTS.md` (Cursor?
      Codex? OpenCode? `.agents`? — cheap to include, default to all five).
+   - Each MCP server recon found: approve it (name + what it runs or connects
+     to) or defer it. The approved set becomes the trust inventory (step 4);
+     a deferred server is left out and will surface as drift until listed.
    - The 2-4 conventions worth a `docs/conventions/` doc (what do reviewers
      correct most often?).
    - The first 1-3 skills: recurring task shapes with a known recipe
@@ -85,6 +90,12 @@ behavior from the repo alone.
      (`guard-secrets.sh` enforces it, `check-harness.sh` verifies the native
      deny lists against it). Mirror additions into
      `hooks/test-guard-secrets.sh` cases.
+   - `harness.conf` `MCP_ALLOWED_SERVERS`: one
+     `<name> <identity-substring>` per line for each server approved in the
+     interview — the substring is matched fixed-string against the server's
+     configured command+args or URL. `check-harness.sh` ERRORs on a
+     configured server missing from the inventory or whose identity drifted;
+     leave it set-but-empty to assert "no MCP servers" strictly.
    - `hooks/guard-config.sh`: extend `PROTECTED_PATHS` with the repo's
      linter/formatter configs — the files an agent could edit to make
      findings disappear. The harness mechanism is protected by default.
@@ -99,6 +110,12 @@ behavior from the repo alone.
      `scripts/verify.sh`.
    - `docs/conventions/<topic>.md` for each interviewed convention — short,
      example-driven, written from real code in the repo.
+   - `docs/conventions/untrusted-content.md` and
+     `docs/conventions/risky-actions.md` from `templates/docs/conventions/` —
+     copy, then tailor: set the risky-actions default posture to the repo's
+     real defaults, delete inapplicable sections (production environment, MCP)
+     and, for the enforcement facts, keep only what the wired providers' rows
+     in the provider matrix prove.
    - `docs/skills/<slug>/SKILL.md` per initial skill, following
      `templates/docs/skills/_example/SKILL.md`. Frontmatter descriptions are
      activation triggers — spend effort on them.
@@ -137,13 +154,15 @@ behavior from the repo alone.
      carry no file path: the guards parse apply_patch envelopes and
      token-scan shell commands via `lib.sh:hook_affected_files` — best
      effort, so keep Codex's native trust/permission layer as a second
-     guard. `config.toml` only if MCP servers are needed. Skills come from
-     `.agents/skills/` — no Codex skill dir.
+     guard. `config.toml` only if MCP servers are needed — and every server
+     added to `[mcp_servers.*]` gets a matching `MCP_ALLOWED_SERVERS` line
+     (step 4). Skills come from `.agents/skills/` — no Codex skill dir.
    - OpenCode: `opencode.json` — its `permission.read` deny block mirrors
      `SECRET_PATTERNS` (keep the two in sync when tailoring; add `"mcp"`
-     servers only if needed); optionally a TS plugin shim in
-     `.opencode/plugins/` that shells out to the portable hooks (see provider
-     matrix) — otherwise guards degrade to these native permissions + CI.
+     servers only if needed — each also gets an `MCP_ALLOWED_SERVERS` line,
+     step 4); optionally a TS plugin shim in `.opencode/plugins/` that shells
+     out to the portable hooks (see provider matrix) — otherwise guards
+     degrade to these native permissions + CI.
    - GitHub Copilot coding agent: nothing to wire — it reads `AGENTS.md`
      natively, including nested files (verified 2026-07-11). Optionally add a
      thin `.github/copilot-instructions.md` pointing at `AGENTS.md` for the
@@ -201,8 +220,11 @@ permission deny list mirroring the secret guard; the configured `PLANS_DIR`
 `session-context.sh` silently announce nothing) and `docs/plans/README.md`
 present (AGENTS.md links it, so a missing README is a dead link); CI running
 the drift gate; manifest present and passing its checksum
-verification. If a behavioral eval bank exists (`docs/evals/`), report its
-health too: number of golden tasks by suite (capability / regression) and
+verification. Report the MCP trust-inventory state: servers configured across
+the four MCP locations vs. `MCP_ALLOWED_SERVERS` coverage (or "no inventory
+declared"), and whether the `docs/conventions/untrusted-content.md` and
+`docs/conventions/risky-actions.md` governance docs are present or missing. If
+a behavioral eval bank exists (`docs/evals/`), report its health too: number of golden tasks by suite (capability / regression) and
 polarity, whether `test-eval.sh` passes (grader validity), and the age of
 `docs/evals/baselines.json` — report the age of the OLDEST per-cell
 `recorded` date across `tasks.*.runs.*.recorded` (falling back to the file's

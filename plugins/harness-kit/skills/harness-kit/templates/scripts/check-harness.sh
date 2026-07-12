@@ -278,6 +278,198 @@ if command -v jq >/dev/null 2>&1 && [ -n "${SECRET_PATTERNS:-}" ]; then
     fi
 fi
 
+# 8c. MCP servers get the same single-source + drift-check treatment as the
+#     secret patterns (#8/#8b), extended to server *identity*: an allowed name
+#     silently repointed at other code is exactly the attack a bare allowlist
+#     cannot see. harness.conf's MCP_ALLOWED_SERVERS is the single source — one
+#     "<name> <expected-identity-substring>" per non-# line. Enabled servers are
+#     extracted per the provider matrix's MCP row (verified 2026-07): .mcp.json
+#     and .cursor/mcp.json `mcpServers` (identity = command + joined args, or
+#     url), opencode.json `mcp` (same shape), and .codex/config.toml
+#     `[mcp_servers.*]` tables (best-effort header + command/args/url scan;
+#     quoted table names unwrapped). Entries flagged "disabled": true /
+#     "enabled": false are skipped; an empty map is silent (the shipped opencode
+#     template carries "mcp": {}, and file existence alone must not warn).
+#     Split severity: an UNSET inventory with an enabled server present is the
+#     adoption path (one WARN); once the inventory is SET (even empty), a server
+#     whose name is uncovered or whose identity no longer contains its pinned
+#     substring is an ERROR — the same "drift from a declared single source is a
+#     silent hole" logic as #8; a config that exists but cannot be parsed (or jq
+#     absent while a JSON config exists) is a WARN naming the unaudited file
+#     ("not audited" is never silent); no configs → silent regardless. Matching
+#     is fixed-string (grep -F, set -f discipline): substring identity matching
+#     detects drift, it does not prove equivalence — as honest as #8's.
+mcp_inventory="${MCP_ALLOWED_SERVERS:-}"
+mcp_inventory_declared=0
+[ -n "${MCP_ALLOWED_SERVERS+x}" ] && mcp_inventory_declared=1
+mcp_saw_enabled_server=0
+mcp_tab=$(printf '\t')
+
+# The pin is the point: a name-only inventory line would make the identity
+# check vacuous (an empty grep -F pattern matches every identity), so a
+# declared line with no identity substring is itself an ERROR, whether or not
+# that server is currently configured anywhere.
+if [ "$mcp_inventory_declared" -eq 1 ] && [ -n "$mcp_inventory" ]; then
+    while IFS= read -r mcp_line; do
+        mcp_line=${mcp_line#"${mcp_line%%[![:space:]]*}"}
+        case "$mcp_line" in ''|\#*) continue ;; esac
+        mcp_lname=${mcp_line%%[[:space:]]*}
+        mcp_lpin=${mcp_line#"$mcp_lname"}
+        mcp_lpin=${mcp_lpin#"${mcp_lpin%%[![:space:]]*}"}
+        mcp_lpin=${mcp_lpin%"${mcp_lpin##*[![:space:]]}"}
+        if [ -z "$mcp_lpin" ]; then
+            echo "ERROR: MCP_ALLOWED_SERVERS line '$mcp_lname' has no identity substring — a name-only line pins nothing (any identity would pass); add the expected command/args or URL fragment after the name (harness.conf)"
+            ERRORS=$((ERRORS + 1))
+        fi
+    done <<EOF
+$mcp_inventory
+EOF
+fi
+
+# name -> pinned identity substring: prints the pin and returns 0 when the name
+# is present in the inventory, else returns 1. The pin may itself contain
+# whitespace (a command+args fragment), so it is "everything after the first
+# whitespace run".
+mcp_inventory_lookup() {
+    local want="$1" line lname lpin
+    while IFS= read -r line; do
+        line=${line#"${line%%[![:space:]]*}"}            # trim leading whitespace
+        case "$line" in ''|\#*) continue ;; esac
+        lname=${line%%[[:space:]]*}
+        case "$line" in
+            *[[:space:]]*)
+                lpin=${line#"$lname"}
+                lpin=${lpin#"${lpin%%[![:space:]]*}"}     # trim leading whitespace
+                lpin=${lpin%"${lpin##*[![:space:]]}"} ;;  # trim trailing whitespace
+            *) lpin="" ;;
+        esac
+        [ "$lname" = "$want" ] || continue
+        printf '%s' "$lpin"
+        return 0
+    done <<EOF
+$mcp_inventory
+EOF
+    return 1
+}
+
+# Apply the split-severity policy to a batch of "<name>\t<identity>" lines from
+# one config file ($2 = its repo-relative path, named in every message).
+mcp_apply_severity() {
+    local servers="$1" file="$2" name identity pin matched
+    [ -n "$servers" ] || return 0
+    while IFS="$mcp_tab" read -r name identity; do
+        [ -n "$name" ] || continue
+        mcp_saw_enabled_server=1
+        [ "$mcp_inventory_declared" -eq 1 ] || continue   # no inventory: WARN once, later
+        if pin=$(mcp_inventory_lookup "$name"); then
+            # Fixed-string, glob-disabled: the identity must CONTAIN the pin.
+            set -f
+            printf '%s' "$identity" | grep -qF -- "$pin"; matched=$?
+            set +f
+            if [ "$matched" -ne 0 ]; then
+                echo "ERROR: MCP server '$name' in $file has a configured identity ('$identity') that does not contain its pinned substring '$pin' (harness.conf MCP_ALLOWED_SERVERS) — identity drift; the server may be repointed. Re-verify and update its inventory line."
+                ERRORS=$((ERRORS + 1))
+            fi
+        else
+            echo "ERROR: MCP server '$name' in $file is not covered by the MCP trust inventory (harness.conf MCP_ALLOWED_SERVERS) — add a '$name <expected-identity-substring>' line after verifying what it runs, or remove the server."
+            ERRORS=$((ERRORS + 1))
+        fi
+    done <<EOF
+$servers
+EOF
+}
+
+# Extract + audit a JSON MCP config ($1 = repo-relative path, $2 = the
+# top-level key holding the server map). jq absent, or a parse failure, is a
+# loud "not audited" WARN — never a silent skip. Non-object entries under the
+# key are ignored, not fatal: a junk sibling value must not crash the jq
+# program and downgrade a real drift ERROR on the same file into a parse WARN.
+mcp_audit_json() {
+    local rel="$1" key="$2" out rc stripped after_first
+    [ -f "$ROOT/$rel" ] || return 0
+    # Trivially-empty map fast path, dependency-free: the shipped opencode
+    # template carries "mcp": {}, and a machine without jq must not WARN
+    # forever about a config with zero servers. Only taken when the key
+    # occurs exactly once — a decoy empty map alongside a real key falls
+    # through to the audited paths below.
+    stripped=$(tr -d '[:space:]' < "$ROOT/$rel" 2>/dev/null)
+    case "$stripped" in
+        *"\"$key\":{}"*)
+            after_first=${stripped#*"\"$key\":"}
+            case "$after_first" in
+                *"\"$key\":"*) ;;
+                *) return 0 ;;
+            esac ;;
+    esac
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "WARNING: $rel is an MCP config but jq is unavailable — its servers are not audited against the trust inventory (harness.conf MCP_ALLOWED_SERVERS)"
+        return 0
+    fi
+    out=$(jq -r --arg k "$key" '
+        def ident:
+            if (.url // null) != null then (.url | tostring)
+            else ((.command // "") | if type == "array" then join(" ") else tostring end)
+                 + " " + ((.args // []) | if type == "array" then join(" ") else tostring end)
+            end;
+        (.[$k] // {}) | to_entries[]
+        | select((.value | type) == "object")
+        | select(((.value.disabled // false) != true) and ((.value.enabled // true) != false))
+        | [.key, (.value | ident)] | @tsv
+    ' "$ROOT/$rel" 2>/dev/null); rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "WARNING: $rel could not be parsed as JSON — its MCP servers are not audited against the trust inventory (harness.conf MCP_ALLOWED_SERVERS)"
+        return 0
+    fi
+    mcp_apply_severity "$out" "$rel"
+}
+
+# Best-effort scan of .codex/config.toml [mcp_servers.*] tables — full TOML
+# parsing is out of scope (documented). Reads table headers plus the
+# command/args/url/enabled/disabled lines inside each table; needs no jq.
+mcp_audit_toml() {
+    local rel="$1" out
+    [ -f "$ROOT/$rel" ] || return 0
+    out=$(awk '
+        function trim(s){ sub(/^[[:space:]]+/,"",s); sub(/[[:space:]]+$/,"",s); return s }
+        /^[[:space:]]*\[/ {
+            hdr=$0; sub(/^[[:space:]]*\[+/,"",hdr); sub(/\].*$/,"",hdr); hdr=trim(hdr)
+            cur=""
+            if (index(hdr,"mcp_servers.")==1) {
+                rest=substr(hdr,length("mcp_servers.")+1)
+                qc=substr(rest,1,1)
+                if (qc=="\"" || qc=="'\''") {
+                    rest=substr(rest,2); q=index(rest,qc)
+                    if (q>0) nm=substr(rest,1,q-1); else nm=rest
+                } else {
+                    d=index(rest,"."); if (d>0) nm=substr(rest,1,d-1); else nm=rest
+                }
+                if (nm!="") { cur=nm
+                    if (!(cur in seen)) { seen[cur]=1; order[++n]=cur; ident[cur]=""; dis[cur]=0 } }
+            }
+            next
+        }
+        cur!="" {
+            l=trim($0)
+            if (l ~ /^command[[:space:]]*=/)     { v=l; sub(/^command[[:space:]]*=[[:space:]]*/,"",v); ident[cur]=ident[cur] " " v }
+            else if (l ~ /^args[[:space:]]*=/)   { v=l; sub(/^args[[:space:]]*=[[:space:]]*/,"",v);    ident[cur]=ident[cur] " " v }
+            else if (l ~ /^url[[:space:]]*=/)    { v=l; sub(/^url[[:space:]]*=[[:space:]]*/,"",v);     ident[cur]=ident[cur] " " v }
+            else if (l ~ /^disabled[[:space:]]*=[[:space:]]*true/) { dis[cur]=1 }
+            else if (l ~ /^enabled[[:space:]]*=[[:space:]]*false/) { dis[cur]=1 }
+        }
+        END { for (i=1;i<=n;i++){ c=order[i]; if(dis[c]) continue; s=ident[c]; gsub(/[[:space:]]+/," ",s); s=trim(s); printf "%s\t%s\n", c, s } }
+    ' "$ROOT/$rel" 2>/dev/null)
+    mcp_apply_severity "$out" "$rel"
+}
+
+mcp_audit_json ".mcp.json" "mcpServers"
+mcp_audit_json ".cursor/mcp.json" "mcpServers"
+mcp_audit_json "opencode.json" "mcp"
+mcp_audit_toml ".codex/config.toml"
+
+if [ "$mcp_inventory_declared" -eq 0 ] && [ "$mcp_saw_enabled_server" -eq 1 ]; then
+    echo "WARNING: MCP servers configured but no trust inventory declared — set MCP_ALLOWED_SERVERS in harness.conf to pin each enabled server's expected identity (name + a command/args or URL substring); until then their identities are unaudited"
+fi
+
 # 9. Mechanism files must match scripts/.harness-manifest (kit version plus
 #    sha256 per file, written at init). An un-pinned edit — agent, human, or
 #    merge — fails CI, so nobody can quietly rewrite a guard. Lines ending in
@@ -443,6 +635,34 @@ if [ -f "$ROOT/$MATRIX_DOC" ]; then
             fi
         done <<< "$_stamps"
     fi
+fi
+
+# 10d. Doctor: CI workflow actions should be pinned to an immutable commit SHA.
+#      A `uses:` ref pointing at a tag or branch is mutable — a retagged or
+#      compromised third-party action would run with the workflow's token, the
+#      supply-chain exposure the shipped-CI hardening closes. Local `uses: ./path`
+#      composite actions are first-party and skipped, as are `docker://` refs
+#      (a different pinning model). Freshness/hygiene WARNING like the other
+#      doctor checks — it never fails the build. Best-effort line scan; full
+#      YAML parsing is out of scope.
+if [ -d "$ROOT/.github/workflows" ]; then
+    for wf in "$ROOT"/.github/workflows/*.yml "$ROOT"/.github/workflows/*.yaml; do
+        [ -f "$wf" ] || continue
+        wf_rel=${wf#"$ROOT"/}
+        while IFS= read -r ref; do
+            [ -n "$ref" ] || continue
+            case "$ref" in
+                ./*|docker://*) continue ;;
+            esac
+            # ${ref##*@} is the pin (the whole ref when there is no '@' — an
+            # unpinned owner/repo is mutable too). A full commit SHA is 40 hex.
+            if ! printf '%s' "${ref##*@}" | grep -qE '^[0-9a-fA-F]{40}$'; then
+                echo "WARNING: $wf_rel uses '$ref' pinned to a mutable ref — pin third-party actions to a full 40-char commit SHA (a tag or branch can be moved under you); keep the human-readable tag in a trailing comment"
+            fi
+        done < <(grep -oE '^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*[^[:space:]]+' "$wf" 2>/dev/null \
+                    | sed -E 's/^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*//' \
+                    | tr -d "\"'")
+    done
 fi
 
 # -- TAILOR: project-specific freshness checks below ---------------------------

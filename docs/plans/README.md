@@ -56,7 +56,13 @@ not-yet-existing paths are legal — queued plans name future files by design.
 
 ## Roadmap (set 2026-07-10, re-sorted 2026-07-11)
 
-Shipped: **v0.9.0** — eval integrity + plan hygiene (chronological run
+Shipped: **v0.10.0** — execution governance baseline (identity-pinning MCP
+trust inventory + check #8c, untrusted-content and risky-actions conventions
+docs, a verified execution-containment matrix section, shipped-CI hardening +
+doctor #10d, `.github/workflows/*` guard widening; design-reviewed before and
+triple-reviewed after implementation)
+([completed/v0.10.0-execution-governance-baseline.md](completed/v0.10.0-execution-governance-baseline.md));
+**v0.9.0** — eval integrity + plan hygiene (chronological run
 selection, atomic baseline updates, `negative_violation` outcomes,
 dirty-tree/collision refusals, runner-guard fixtures; CI runs `verify.sh`
 directly; the launch and bank-discrimination follow-ups became queued plans)
@@ -76,10 +82,10 @@ rows + strict Agent Skills validation + matrix stamping
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [execution-governance.md](execution-governance.md) | Baseline: MCP trust inventory, untrusted-repo/prompt-injection guidance, CI hardening (advanced sandbox profiles trail runtime-legibility) |
-| 2 | [eval-discrimination.md](eval-discrimination.md) | Harder capability tasks, a fuller baseline matrix, a scheduled eval run — makes the bank actually discriminate |
-| 3 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
-| 4 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
+| 1 | [eval-discrimination.md](eval-discrimination.md) | Harder capability tasks, a fuller baseline matrix, a scheduled eval run — makes the bank actually discriminate |
+| 2 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
+| 3 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
+| 4 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
 | 5 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
 | 6 | [launch-readiness.md](launch-readiness.md) | Demo recording, org move, public-repo hygiene, "what 1.0 promises" |
 
@@ -95,11 +101,15 @@ governance and before the reviewer loop because that seeded-defect eval needs
 a bank capable of showing a catch-rate below 100% — the v0.8.0 bank saturated
 at pass^k=1 on 15 of 16 recorded cells, leaving no headroom to demonstrate the
 reviewer catching anything. Execution governance's *baseline* (guidance docs,
-MCP inventory, CI hardening — near-zero tailoring cost) moves ahead of the
+MCP inventory, CI hardening — near-zero tailoring cost) moved ahead of the
 reviewer and runtime work per current combined-controls guidance, which treats
-containment as non-optional rather than finishing work; its *advanced*
-per-provider sandbox profiles keep the high tailoring cost that argues for a
-later slot and trail runtime-legibility (shared `.devcontainer/` surface).
+containment as non-optional rather than finishing work — it shipped as
+v0.10.0; its *advanced*
+per-provider sandbox profiles were split into their own queued plan
+(execution-sandbox-profiles) that keeps the high tailoring cost arguing for a
+later slot and trails runtime-legibility — depending only on that plan's
+`dev.sh` boot contract, since runtime-legibility ships no devcontainer of its
+own.
 Outcome telemetry is last among the mechanism plans because outcome metrics
 are only worth collecting once gates, reviews, and evals emit outcomes worth
 measuring. Launch-readiness sits last in table order but can parallel-track

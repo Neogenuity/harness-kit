@@ -3,6 +3,63 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.10.0 — 2026-07-12
+
+Execution governance baseline — the kit previously scaffolded knowledge,
+gates, and evals but said nothing about *containment*: which MCP servers a
+repo trusts, what an agent should do with hostile content, or whether the
+shipped CI could be quietly repointed. Scope was design-reviewed before
+implementation (Codex gpt-5.6-sol, 14 findings incorporated — most
+materially: the MCP inventory pins expected *identity*, not just names) and
+the implementation was triple-reviewed (2× Claude Opus 4.8 + Codex
+gpt-5.6-terra, all SHIP-WITH-FIXES; every fix landed and is
+fixture-covered).
+
+- **MCP trust inventory (new check #8c).** `harness.conf` gains
+  `MCP_ALLOWED_SERVERS` — one `<name> <expected-identity-substring>` line
+  per allowed server. `check-harness.sh` extracts every *enabled* server
+  from `.mcp.json`, `.cursor/mcp.json`, `opencode.json`, and
+  `.codex/config.toml` (best-effort TOML scan; single- and double-quoted
+  table names) and audits it: with no inventory declared, configured
+  servers produce one adoption WARN; once the inventory is declared (even
+  empty — the strict default), an uncovered server or one whose configured
+  command/args/URL no longer contains its pinned substring is an **ERROR**.
+  A name-only inventory line is itself an ERROR (an empty pin would match
+  any identity). Unparseable configs and jq-absent machines get a loud
+  "not audited" WARN — except trivially-empty maps (`"mcp": {}`), which
+  stay silent via a dependency-free fast path. Disabled entries are
+  skipped. **Migration:** update mode replaces `check-harness.sh`; add an
+  `MCP_ALLOWED_SERVERS` block to your tailored `harness.conf` (the shipped
+  template carries a commented example) — repos with no MCP configs see no
+  change.
+- **Untrusted-content + risky-actions conventions (shipped docs).** Two new
+  template docs under `docs/conventions/`: `untrusted-content.md` (tool/
+  repo/web/MCP output is data, not instructions; the untrusted-clone
+  checklist; which containment layers actually *hold* under a hostile
+  instruction, per provider — including that OpenCode ships no OS sandbox)
+  and `risky-actions.md` (destructive-op policy and the safe-default
+  posture, every wiring example labeled by its enforcement layer so hooks
+  are never mistaken for boundaries). `AGENTS.md.tmpl` links both and its
+  security checklist now says repo/tool/web/**MCP**.
+- **Provider matrix: execution containment.** New verified section
+  (sandbox, network policy, approval modes for Claude Code / Codex /
+  Cursor / OpenCode, checked against vendor docs 2026-07-11) — the factual
+  basis the conventions docs cite instead of asserting.
+- **Shipped-CI hardening + guard widening (new doctor #10d).** The CI
+  templates pin actions to full commit SHAs, declare `permissions:
+  contents: read`, `timeout-minutes`, and `persist-credentials: false`;
+  `check-harness.sh` gains doctor WARN #10d flagging any mutable
+  (tag/branch) `uses:` ref in `.github/workflows/` (quoted refs
+  unwrapped); `guard-config.sh` PROTECTED_PATHS broadens from the single
+  harness-check workflow to `.github/workflows/*`. **Migration:** update
+  mode replaces the guard and check; workflows are yours — re-apply the
+  hardening from the template if you've tailored them.
+- **Plans.** The governance plan's advanced half (per-provider sandbox
+  profiles, devcontainer, audit-log export) split into its own queued plan
+  ([docs/plans/execution-sandbox-profiles.md](docs/plans/execution-sandbox-profiles.md));
+  completed plan at
+  [docs/plans/completed/v0.10.0-execution-governance-baseline.md](docs/plans/completed/v0.10.0-execution-governance-baseline.md).
+
 ## 0.9.0 — 2026-07-11
 
 Eval integrity and plans hygiene — a 2026-07-11 project review (findings

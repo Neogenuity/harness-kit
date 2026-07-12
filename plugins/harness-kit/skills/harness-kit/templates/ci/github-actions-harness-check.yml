@@ -7,10 +7,21 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   harness-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      # actions/checkout is pinned to a full commit SHA (supply-chain
+      # hardening, not a version bump). To bump: re-resolve with
+      # `git ls-remote https://github.com/actions/checkout.git refs/tags/vX.Y.Z`
+      # and update the SHA + comment together, or let Dependabot's
+      # `github-actions` ecosystem manage it.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
       - name: Validate agent harness
         run: bash scripts/check-harness.sh

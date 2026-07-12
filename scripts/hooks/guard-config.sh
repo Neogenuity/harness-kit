@@ -31,8 +31,10 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # -- TAILOR: paths agents may not edit -----------------------------------------
 # Repo-relative globs. Patterns without a slash also match by basename (so
 # nested lint configs are covered). The harness mechanism is protected by
-# default; uncomment/extend the second list with the lint and formatter
-# configs an agent could edit to make findings disappear.
+# default — including .github/workflows/*, because CI runs the gates and an
+# agent that can edit a workflow can disarm the enforcing layer. Uncomment or
+# extend the second list with the lint and formatter configs an agent could
+# edit to make findings disappear.
 PROTECTED_PATHS="
 scripts/hooks/*.sh
 scripts/check-harness.sh
@@ -46,7 +48,7 @@ scripts/.harness-manifest
 .codex/hooks.json
 .opencode/plugins/*
 opencode.json
-.github/workflows/harness-check.yml
+.github/workflows/*
 "
 # PROTECTED_PATHS="$PROTECTED_PATHS .eslintrc* eslint.config.* biome.json ruff.toml pint.json .php-cs-fixer.php phpstan.neon"
 # ------------------------------------------------------------------------------

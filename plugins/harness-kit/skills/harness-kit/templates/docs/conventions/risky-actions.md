@@ -1,0 +1,81 @@
+# Risky actions: destructive commands and production writes
+
+The dangerous *outputs* an agent can produce — history rewrites, bulk deletes,
+data-store drops, writes to production — need a policy that says which layer
+stops each one, and admits honestly which layers only warn. For hostile
+*inputs* (prompt injection, untrusted clones) see
+`docs/conventions/untrusted-content.md`.
+
+<!-- TAILOR: set the "Default posture" values to your real defaults and the
+     "Production environments" list to your real prod surfaces. Replace the
+     destructive-command examples with the ones that actually bite in this repo.
+     Keep the layer label on every example — a reviewer checks that no advisory
+     layer is described as enforcement. Delete "Production environments" if this
+     repo has no production surface. -->
+
+## The three layers (label every example with one)
+
+Each control here is exactly one class; naming it states its bypass boundary so
+nobody mistakes a warning for a wall:
+
+- **pre-action enforcement** — native permission denies, approval policies,
+  sandbox / network settings. *Holds* until the user loosens the native config,
+  and it is the only layer that stops a shell command before it runs. Cite the
+  Execution-containment row of the harness-kit provider matrix
+  (`references/provider-matrix.md`).
+- **in-turn advisory feedback** — the portable hooks. `guard-config.sh` denies
+  mechanism / lint-config *file edits* (exit 2, mid-turn); `guard-project-policy.sh`
+  warns once at stop time. Advisory: file-edit scope only, the model can reach
+  the same effect another way, and every hook fails open. Never a boundary.
+- **CI detection** — `check-harness.sh` manifest integrity + drift checks.
+  Catches an edit that slipped past the other two, *after* the fact: prevents
+  merge, not the action in the turn.
+
+## Default posture
+
+The safe default this repo aims for, loosened only deliberately:
+
+- **Workspace-only writes.** Writing outside the working tree needs an explicit
+  widen. *[pre-action enforcement — sandbox]*
+- **Network default-deny.** No outbound network unless a host is allow-listed.
+  *[pre-action enforcement — sandbox / network policy]*
+- **Approvals on for destructive actions.** Out-of-workspace writes, deletes,
+  pushes, and networked commands prompt. *[pre-action enforcement — approvals]*
+
+The exact key per harness is in `references/provider-matrix.md`: e.g. Claude
+Code `sandbox.filesystem` + `sandbox.network.allowedDomains`; Codex
+`sandbox_mode = "workspace-write"` with `network_access = false`; Cursor
+`.cursor/sandbox.json` (`networkPolicy.default: "deny"`); OpenCode has **no OS
+sandbox** — its `permission` prompts are the only layer, so a shell can still
+reach the network. **Loosening** is per-need and reversible: allow one host for
+one task, widen one write path, then restore. Widen the narrowest thing.
+
+## Destructive commands
+
+History rewrites (`git push --force`, `git reset --hard` on shared branches),
+recursive deletes (`rm -rf`), and data-store drops (`DROP TABLE`, redis
+`FLUSHALL`) are one-way:
+
+- Gate them at the native permission / approval layer so they prompt or deny
+  before running — an ask-rule on `Bash(git push --force*)`, or Codex
+  `approval_policy = "on-request"`. *[pre-action enforcement]*
+- **Hooks do not stop these.** `guard-config.sh` denies *file edits* to harness
+  mechanism and lint configs; it does **not** scan shell commands, by design, so
+  it cannot block an `rm -rf` or a force-push. *[in-turn advisory feedback —
+  file edits only]*
+- Do **not** claim `PROTECTED_PATHS` (or any hook) protects against destructive
+  shell commands: it is a file-edit deny list, not a command filter. Shell-level
+  destruction is the native layer's job, with CI as the backstop.
+
+## Production environments
+
+Treat any prod credential, host, or data store as out of scope for an agent by
+default:
+
+- Keep prod hostnames and DSNs out of files the agent reads. The native
+  secret-read deny list and sandbox credential scrubbing enforce it
+  *[pre-action enforcement]*; the portable `guard-secrets.sh` hook is in-turn
+  feedback on top *[in-turn advisory feedback]*.
+- Destructive prod operations are human-run: document the command, don't wire an
+  agent path to it. There is no hook that makes this safe — only not building
+  the path does.

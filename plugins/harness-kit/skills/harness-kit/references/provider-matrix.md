@@ -9,7 +9,8 @@ below carry their own validated dates where they were individually checked;
 the Sources section at the bottom lists the primary docs to re-verify
 against. (Full matrix last validated: 2026-07; Codex facts re-verified
 2026-07-10 after the docs moved hosts; GitHub Copilot + Gemini CLI added and
-verified 2026-07-11 — see Sources.)
+verified 2026-07-11; the Execution-containment section added and verified
+against live provider docs 2026-07-11 — see Sources.)
 
 | Capability | Claude Code | Cursor | Codex | OpenCode | `.agents` standard |
 | --- | --- | --- | --- | --- | --- |
@@ -38,6 +39,34 @@ entry additionally requires `policy.installation`
 `name`/`version`/`description` and takes `skills: "./skills/"`. `VERSION` is
 the neutral single source both plugin manifests must equal — `check-packaging.sh`
 enforces the whole invariant (schema verified 2026-07-10, see Sources; ADR 007).
+
+## Execution containment (sandbox, network, approvals)
+
+_verified 2026-07 — per-provider sources in the Sources section._
+
+This is the **enforcement** surface the risky-actions and untrusted-content
+convention docs cite. Pre-tool hooks are *feedback* (a guardrail, not a
+boundary — see the interception bullet under "Payload differences"); the
+layers below are what actually *hold* under a hostile instruction, because the
+OS sandbox or the native trust layer enforces them regardless of what the
+model chose to run. OpenCode is the honest exception: it ships no OS sandbox,
+so its containment is permission prompts only and a shell can still reach the
+network. Cite the specific cell — not "the sandbox" generically — for any
+enforcement claim in the two convention docs.
+
+| Control | Claude Code | Cursor | Codex | OpenCode |
+| --- | --- | --- | --- | --- |
+| OS-level sandbox | Seatbelt (macOS), bubblewrap (Linux/WSL2); not native Windows; `sandbox.enabled` in `settings.json` | shell-command sandbox from `.cursor/sandbox.json` (per-user or `<workspace>/.cursor/`); OS primitive not stated in the sandbox reference | Seatbelt (macOS), bubblewrap (Linux/WSL2) | none — allow/ask/deny prompts only, no OS isolation |
+| Filesystem default | writes limited to working dir + session temp; widen with `sandbox.filesystem.allowWrite`, restrict with `denyWrite`/`denyRead` | `type: "workspace_readwrite"` (workspace only) + `additionalReadwritePaths` | `sandbox_mode`: `read-only` \| `workspace-write` (default, workspace only) \| `danger-full-access` | no OS write boundary; `edit`/`bash` gated by `permission` rules |
+| Network egress default | **default-deny**: first new domain prompts, pin with `sandbox.network.allowedDomains`; managed `allowManagedDomainsOnly` blocks the rest | **default-deny** (`networkPolicy.default: "deny"`); allow hosts in `.cursor/sandbox.json` | **off in `workspace-write`**; enable per-repo via `[sandbox_workspace_write] network_access = true` | not OS-restricted; only the `webfetch` tool is permissioned — a shell `curl` is unbounded |
+| Approvals | permission rules + modes; `/sandbox` auto-allow vs. regular | run modes: Auto-review (default) \| Allowlist \| Run Everything — docs: "Auto-review is not a security boundary" | `approval_policy`: `untrusted` \| `on-request` \| `never` (or granular object) | `permission` allow/ask/deny in `opencode.json` |
+
+Two honest limits the convention docs must not paper over: Claude Code's
+default proxy does not inspect TLS, so a broad `allowedDomains` entry can still
+be a domain-fronting exfil path; and Cursor's run-mode classifier is
+self-described as "not a security boundary." The default-deny network cells and
+the OS sandbox cells are the enforcing facts; the approval cells are policy the
+user still has to set.
 
 ## Instructions-only providers (GitHub Copilot, Gemini CLI)
 
@@ -197,10 +226,24 @@ Primary docs to re-validate each section against (all last consulted
   (developers.openai.com/codex/plugins/build 308-redirects here; the hooks
   doc <https://learn.chatgpt.com/docs/hooks> recommends Git-root-resolved
   hook commands)
-- OpenCode permissions (`permission.read` pattern rules):
+- OpenCode permissions (`permission.read` pattern rules; also the allow/ask/deny
+  layer for the Execution-containment table — OpenCode ships no OS sandbox):
   <https://opencode.ai/docs/permissions/>
 - OpenCode plugins (the hook shim's API):
   <https://opencode.ai/docs/plugins/>
+- Claude Code sandboxing (`sandbox.*` settings, Seatbelt/bubblewrap OS
+  enforcement, default-deny network proxy — Execution-containment row,
+  verified 2026-07): <https://code.claude.com/docs/en/sandboxing>
+- Codex sandboxing + config (`sandbox_mode`, `approval_policy`,
+  `[sandbox_workspace_write] network_access` — Execution-containment row,
+  verified 2026-07): <https://learn.chatgpt.com/docs/sandboxing> and
+  <https://learn.chatgpt.com/docs/config-file/config-reference>
+  (developers.openai.com/codex/* 308-redirects to learn.chatgpt.com)
+- Cursor run modes + sandbox (`.cursor/sandbox.json`, `type:
+  workspace_readwrite`, `networkPolicy.default: "deny"`, "Auto-review is not a
+  security boundary" — Execution-containment row, verified 2026-07):
+  <https://cursor.com/docs/agent/security/run-modes> and
+  <https://cursor.com/docs/reference/sandbox>
 - Agent Skills standard (SKILL.md + references/scripts/assets):
   <https://agentskills.io> — full spec at <https://agentskills.io/specification>
 - AGENTS.md standard (hierarchical, Linux Foundation):
