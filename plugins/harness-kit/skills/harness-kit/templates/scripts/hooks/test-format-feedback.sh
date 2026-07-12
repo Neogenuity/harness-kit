@@ -3,9 +3,14 @@
 # lib.sh, plus format.sh's fail-open plumbing. Runnable standalone and in CI.
 #
 # The channel differs per harness: Claude Code and Codex feed a PostToolUse
-# hook's stderr to the model on exit 2 (the edit is not undone), while the
-# Cursor layout gets plain stdout. Any lint map tailored into format.sh
-# inherits exactly this behavior, so pin it here once.
+# hook's stderr to the model on exit 2 (the edit is not undone). Cursor's
+# `afterFileEdit` documents no output field for arbitrary feedback text
+# ("No output fields currently supported", verified 2026-07-12) and its
+# exit-0 stdout is parsed as JSON, so that layout gets the documented no-op
+# (`{}`) instead of dead plain text — the finding still reaches
+# .harness/log.jsonl via hook_log (format.sh calls it before hook_feedback).
+# Any lint map tailored into format.sh inherits exactly this behavior, so
+# pin it here once.
 set -uo pipefail
 
 command -v jq >/dev/null 2>&1 || { echo "SKIP: jq not available"; exit 0; }
@@ -62,9 +67,27 @@ run "Codex command layout: stderr + exit 2" "$(jq -cn --arg c "apply_patch <<'EO
 *** Update File: x.py
 *** End Patch
 EOF" '{turn_id: "t1", tool_name: "apply_patch", tool_use_id: "c1", tool_input: {command: $c}}')" 2 err
-run "Cursor layout: stdout + exit 0"        '{"file_path":"x.py"}'                0 out
 run "unknown payload: stdout fallback"      '{}'                                  0 out
 run "empty stdin: stdout fallback"          ''                                    0 out
+
+# Cursor layout: afterFileEdit documents no output field for arbitrary
+# feedback text and exit-0 stdout there is parsed as JSON, so the diagnostic
+# must NOT leak as plain text — it degrades to the documented no-op object.
+# Assert both halves: stdout parses as JSON, and the diagnostic is absent.
+cursor_out=$(printf '%s' '{"file_path":"x.py"}' | "$WORK/fixture-hook.sh" 2>"$WORK/stderr")
+cursor_rc=$?
+if [ "$cursor_rc" != "0" ]; then
+    echo "FAIL: Cursor layout — expected exit 0, got $cursor_rc"
+    fails=$((fails + 1))
+elif ! printf '%s' "$cursor_out" | jq -e . >/dev/null 2>&1; then
+    echo "FAIL: Cursor layout — stdout does not parse as JSON: $cursor_out"
+    fails=$((fails + 1))
+elif printf '%s' "$cursor_out" | grep -q 'TEST DIAGNOSTIC'; then
+    echo "FAIL: Cursor layout — diagnostic leaked as plain text (afterFileEdit has no such field; must degrade to the log, not dead stdout text)"
+    fails=$((fails + 1))
+else
+    echo "ok:   Cursor layout — degrades to documented no-op JSON ({}), finding stays in the log only"
+fi
 
 # format.sh itself must stay silent and fail open when no lint arm matches.
 fmt_out=$(printf '{"tool_input":{"file_path":"%s"}}' "$WORK/nothing.xyz" \

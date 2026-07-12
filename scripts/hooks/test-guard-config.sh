@@ -52,6 +52,13 @@ run 2 "CI workflow edit denied"          "$(payload "$WORK/.github/workflows/ci.
 run 2 "relative path denied"             "$(payload "scripts/hooks/guard-secrets.sh")"
 run 2 "Cursor layout denied"             "$(cursor_payload "$WORK/scripts/sync-agent-skills.sh")"
 
+# --- deny: 2026-07-12 probe-confirmed gaps (harness.conf, local settings, MCP configs) ---
+run 2 "harness.conf edit denied"          "$(payload "$WORK/scripts/harness.conf")"
+run 2 "Claude local settings edit denied" "$(payload "$WORK/.claude/settings.local.json")"
+run 2 ".mcp.json edit denied"             "$(payload "$WORK/.mcp.json")"
+run 2 "Cursor mcp.json edit denied"       "$(payload "$WORK/.cursor/mcp.json")"
+run 2 "Codex config.toml edit denied"     "$(payload "$WORK/.codex/config.toml")"
+
 # --- Codex layout: apply_patch envelopes (paths are repo-relative) ---
 # Builders mirror test-affected-files.sh — one place per file to fix if a
 # captured real payload differs.
@@ -96,6 +103,19 @@ run 2 "Codex bare patch: hook edit denied"       "$(codex_patch_bare '*** Update
 run 2 "Codex bare patch: manifest edit denied"   "$(codex_patch_bare '*** Update File: scripts/.harness-manifest
 @@
 +x')"
+# 2026-07-12 probe-confirmed gaps, both envelope forms — harness.conf via
+# Update (the realistic edit path) and settings.local.json via Add (the
+# realistic new-file attack: it's absent until an agent writes one).
+run 2 "Codex patch: harness.conf edit denied"       "$(codex_patch '*** Update File: scripts/harness.conf
+@@
++x')"
+run 2 "Codex bare patch: harness.conf edit denied"  "$(codex_patch_bare '*** Update File: scripts/harness.conf
+@@
++x')"
+run 2 "Codex patch: local settings add denied"      "$(codex_patch '*** Add File: .claude/settings.local.json
++{"disableAllHooks": true}')"
+run 2 "Codex bare patch: local settings add denied" "$(codex_patch_bare '*** Add File: .claude/settings.local.json
++{"disableAllHooks": true}')"
 run 0 "Codex bare patch: ordinary file allowed"  "$(codex_patch_bare '*** Update File: src/app.php
 @@
 +x')"
@@ -112,10 +132,29 @@ run 0 "Codex patch: escape hatch allows mechanism edit" "$(codex_patch '*** Upda
 @@
 +x')" "HARNESS_ALLOW_MECHANISM_EDITS=1"
 
+# --- 2026-07-12 review: dot-segment normalization ---
+# A crafted `/./` or `/../` must not slip a protected path past the literal
+# globs (`scripts/./harness.conf` resolves to `scripts/harness.conf`). Purely
+# lexical; NOT case-folding — a case variant on a case-insensitive FS stays a
+# documented guardrail limitation caught by the CI manifest layer.
+run 2 "dot-slash harness.conf denied"          "$(payload "$WORK/scripts/./harness.conf")"
+run 2 "dot-dot harness.conf denied"            "$(payload "$WORK/scripts/../scripts/harness.conf")"
+run 2 "dot-slash settings.local denied"        "$(payload "$WORK/.claude/./settings.local.json")"
+run 2 "dot-slash hook script denied"           "$(payload "$WORK/scripts/hooks/./lib.sh")"
+run 2 "Cursor dot-slash mcp.json denied"       "$(cursor_payload "$WORK/.cursor/./mcp.json")"
+run 2 "Codex patch dot-slash mid-path denied"  "$(codex_patch '*** Update File: scripts/./harness.conf
+@@
++x')"
+run 2 "Codex patch dot-dot mid-path denied"    "$(codex_patch '*** Update File: scripts/../scripts/.harness-manifest
+@@
++x')"
+run 0 "dot-slash ordinary file still allowed"  "$(payload "$WORK/src/./app.js")"
+
 # --- allow: ordinary files, escape hatch, fail-open ---
 run 0 "ordinary source file allowed"     "$(payload "$WORK/src/app.php")"
 run 0 "sibling name not protected"       "$(payload "$WORK/src/check-harness.sh.md")"
 run 0 "escape hatch allows mechanism edit" "$(payload "$WORK/scripts/hooks/lib.sh")" "HARNESS_ALLOW_MECHANISM_EDITS=1"
+run 0 "escape hatch allows harness.conf tailoring" "$(payload "$WORK/scripts/harness.conf")" "HARNESS_ALLOW_MECHANISM_EDITS=1"
 run 0 "bare command payload fails open"  "$(jq -cn '{tool_input: {command: "ls"}}')"
 run 0 "empty payload fails open"         '{}'
 

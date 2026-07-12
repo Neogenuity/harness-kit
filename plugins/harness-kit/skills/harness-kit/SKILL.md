@@ -98,7 +98,13 @@ behavior from the repo alone.
      leave it set-but-empty to assert "no MCP servers" strictly.
    - `hooks/guard-config.sh`: extend `PROTECTED_PATHS` with the repo's
      linter/formatter configs — the files an agent could edit to make
-     findings disappear. The harness mechanism is protected by default.
+     findings disappear. The harness mechanism is protected by default, now
+     including `harness.conf`, `.claude/settings.local.json`, and the MCP
+     configs (`.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`);
+     post-init `harness.conf` edits (new `SECRET_PATTERNS`,
+     `MCP_ALLOWED_SERVERS` entries) use the same
+     `HARNESS_ALLOW_MECHANISM_EDITS=1` escape hatch as any other
+     protected-file maintenance.
    - `hooks/guard-project-policy.sh`: implement the invariant check from the
      interview (follow the in-file example), or leave the no-op skeleton.
 

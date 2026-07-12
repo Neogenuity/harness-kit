@@ -20,10 +20,17 @@ nobody mistakes a warning for a wall:
   and it is the only layer that stops a shell command before it runs. Cite the
   [Execution-containment row of the provider matrix](../../plugins/harness-kit/skills/harness-kit/references/provider-matrix.md).
 - **in-turn advisory feedback** — the portable hooks. `guard-config.sh` denies
-  mechanism / lint-config *file edits* (exit 2, mid-turn); `guard-project-policy.sh`
-  warns once at stop time. Advisory: file-edit scope only, the model can reach
-  the same effect another way, and every hook fails open. Never a boundary —
-  see [pattern.md](../../plugins/harness-kit/skills/harness-kit/references/pattern.md).
+  mechanism / lint-config *file edits* (exit 2, mid-turn) — the protected set
+  also covers `harness.conf`, the Claude Code local-settings override, and
+  the per-provider MCP configs; `guard-project-policy.sh` warns once at stop
+  time. Advisory: file-edit scope only, the model can reach the same effect
+  another way, and every hook fails open. Never a boundary — see
+  [pattern.md](../../plugins/harness-kit/skills/harness-kit/references/pattern.md).
+  The kit wires no Cursor pre-edit hook (Cursor's generic `preToolUse` is
+  pre-edit-capable but not yet wired — see the provider-matrix Cursor-hooks
+  note), so these denials fire on Claude Code and Codex only — the CI
+  detection layer (`check-harness.sh` manifest integrity) is the backstop
+  there.
 - **CI detection** — `check-harness.sh` manifest integrity + drift checks.
   Catches an edit that slipped past the other two, *after* the fact: prevents
   merge, not the action in the turn.

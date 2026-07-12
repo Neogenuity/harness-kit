@@ -24,9 +24,15 @@ nobody mistakes a warning for a wall:
   Execution-containment row of the harness-kit provider matrix
   (`references/provider-matrix.md`).
 - **in-turn advisory feedback** — the portable hooks. `guard-config.sh` denies
-  mechanism / lint-config *file edits* (exit 2, mid-turn); `guard-project-policy.sh`
-  warns once at stop time. Advisory: file-edit scope only, the model can reach
-  the same effect another way, and every hook fails open. Never a boundary.
+  mechanism / lint-config *file edits* (exit 2, mid-turn) — the protected set
+  also covers `harness.conf`, the Claude Code local-settings override, and
+  the per-provider MCP configs; `guard-project-policy.sh` warns once at stop
+  time. Advisory: file-edit scope only, the model can reach the same effect
+  another way, and every hook fails open. Never a boundary. The kit wires no
+  Cursor pre-edit hook (Cursor's generic `preToolUse` is pre-edit-capable but
+  not yet wired — see the provider-matrix Cursor-hooks note), so these
+  denials fire on Claude Code and Codex only — on Cursor, CI detection
+  (`check-harness.sh` manifest integrity) is the backstop.
 - **CI detection** — `check-harness.sh` manifest integrity + drift checks.
   Catches an edit that slipped past the other two, *after* the fact: prevents
   merge, not the action in the turn.

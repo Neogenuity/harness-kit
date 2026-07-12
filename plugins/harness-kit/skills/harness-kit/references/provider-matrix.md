@@ -94,8 +94,8 @@ a deny; the same script wires into all three.
 | --- | --- | --- | --- | --- |
 | `session-context.sh` | `SessionStart` | `sessionStart` | `SessionStart` | Plain stdout injected into context. Claude Code fires it for startup/resume/clear/compact (matcher-selectable; no matcher = all — verified 2026-07), so the banner survives compaction. Codex likewise fires on resume/clear/compact. Cursor has reported bugs (`additional_context` not always injected; doesn't re-fire after compaction) |
 | `guard-secrets.sh` | `PreToolUse` matcher `Read\|Grep` | `beforeReadFile` | `PreToolUse` | Exit 2 = deny in all three |
-| `guard-config.sh` | `PreToolUse` matcher `Edit\|Write` | — (no pre-edit event, 2026-07) | `PreToolUse` | Denies harness-mechanism/lint-config edits; where it can't fire, the `check-harness.sh` manifest verification is the backstop |
-| `format.sh` | `PostToolUse` matcher `Edit\|Write` | `afterFileEdit` | `PostToolUse` | Formats, then feeds lint findings back: exit 2 + stderr on Claude Code/Codex (PostToolUse stderr reaches the model; the edit is not undone), plain stdout on the Cursor layout |
+| `guard-config.sh` | `PreToolUse` matcher `Edit\|Write` | — (not wired; generic `preToolUse` is pre-edit-capable — see notes) | `PreToolUse` | Denies harness-mechanism/lint-config edits; where it isn't wired, the `check-harness.sh` manifest verification is the backstop |
+| `format.sh` | `PostToolUse` matcher `Edit\|Write` | `afterFileEdit` | `PostToolUse` | Formats, then feeds lint findings back: exit 2 + stderr on Claude Code/Codex (PostToolUse stderr reaches the model; the edit is not undone); on the Cursor layout the finding reaches only `.harness/log.jsonl` — `afterFileEdit` documents no output field for feedback text, so `hook_feedback` emits the documented no-op (`{}`) there instead of dead plain stdout (verified 2026-07-12) |
 | `guard-project-policy.sh` | `Stop` | `stop` | `Stop` | advise-once protocol (see lib.sh) |
 
 **OpenCode** has no JSON/shell hook config — only JS/TS plugins in
@@ -118,40 +118,101 @@ Policy stays in the portable scripts; the shim is one-time wiring.
   every path). `guard-secrets.sh` additionally token-scans plain shell
   commands, best-effort — on Codex every file read is a shell command.
 - **Stop-loop guard**: Claude Code and Codex send `stop_hook_active` (bool);
-  Cursor sends `loop_count` (int). Codex requires JSON on Stop stdout when
-  the hook exits 0 — plain text is a protocol error there (schema fields
-  `decision`/`reason`/`continue`/`stopReason`; verified 2026-07-10) — so
-  `lib.sh:hook_advise_once` emits `{"decision":"block",...}` on the first
+  Cursor sends `loop_count` (int). `stop_hook_active` is undocumented in
+  current Claude Code docs (Codex's hooks doc does document it), empirically
+  present in Claude Code CLI 2.1.207 (captured
+  payload, 2026-07-12) — it stays the PRIMARY signal (stateless, proven)
+  rather than being replaced outright; see the v0.11.0 hook-hardening
+  plan's Decisions for the reasoning. Codex requires JSON on Stop stdout
+  when the hook exits 0 — plain text is a protocol error there (schema
+  fields `decision`/`reason`/`continue`/`stopReason`; verified 2026-07-10) —
+  so `lib.sh:hook_advise_once` emits `{"decision":"block",...}` on the first
   stop and a structured no-op on the second: `{"continue": true}` for the
   `stop_hook_active` layout (Claude Code and Codex are indistinguishable on
   stdin, and both accept that object) and `{}` for Cursor's `loop_count`
-  layout. Plain text remains only as the unknown-layout fallback.
-- **Deny semantics**: exit code 2 denies in Claude Code, Cursor, and Codex;
-  JSON `{"decision":"block","reason":...}` (Claude Code, Codex) /
-  `{"followup_message":...}` (Cursor) are only needed for the stop-hook
-  continue-the-turn trick. Codex `PreToolUse` additionally supports
-  `"permissionDecision": "deny"`. Reason visibility differs (verified
-  2026-07): Codex surfaces exit-2 stderr to the model as feedback; current
-  Claude Code docs route `PreToolUse` exit-2 stderr to internal logs — a
-  model-visible deny reason there needs the JSON
-  `hookSpecificOutput.permissionDecision` form. The deny itself is enforced
-  either way; the kit keeps the portable exit-2 protocol and treats the
-  reason as best-effort.
+  layout. A payload carrying NEITHER flag but a `.session_id` or
+  `.conversation_id` falls back to `hook_advise_once_seen`'s marker file
+  under `.harness/stop-markers/` (dir overridable via
+  `HARNESS_STOP_MARKER_DIR`; keyed on session id plus a digest of the
+  warning text; markers older than 3 days are pruned) — a FALLBACK so
+  advise-exactly-once survives `stop_hook_active` ever being dropped,
+  without adding statefulness to the common path. Plain text remains only
+  the fallback when no loop-guard flag and no session id are present at
+  all.
+- **Deny semantics**: exit code 2 denies in Claude Code, Cursor, and Codex —
+  `lib.sh:hook_deny` always keeps this as the portable path. On a payload
+  whose `.hook_event_name == "PreToolUse"`, it additionally emits an exit-0
+  JSON deny: `{"hookSpecificOutput":{"hookEventName":"PreToolUse",
+  "permissionDecision":"deny","permissionDecisionReason":"<reason>"}}`,
+  which both Claude Code and Codex parse (verified against the Claude Code
+  and Codex hooks docs, 2026-07-12) — so the reason becomes model-visible.
+  The Claude Code exit-2 table, unlike its PostToolUse row, does not document
+  `PreToolUse` stderr reaching the model, so the plain exit-2 reason there is
+  best-effort; Codex already surfaces exit-2 stderr to the model as feedback
+  (verified 2026-07). The
+  JSON is round-tripped through jq before being trusted, so jq being
+  absent, a JSON build error, or any non-PreToolUse/unrecognized layout
+  (including Cursor's top-level `file_path` shape, which carries no
+  `hook_event_name`) all fall through to the portable exit 2 — a malformed
+  exit-0 "deny" would fail OPEN, the one direction this protocol must never
+  take. `{"decision":"block","reason":...}` (Claude Code, Codex) /
+  `{"followup_message":...}` (Cursor) remain separately for the stop-hook
+  continue-the-turn trick (see Stop-loop guard above) — an unrelated
+  channel from the PreToolUse deny.
 - **Post-tool feedback**: Claude Code `PostToolUse` exit 2 shows stderr to
   the model without undoing the tool (verified 2026-07); Codex `PostToolUse`
   "can provide feedback before Codex continues" the same way. This is the
-  channel `hook_feedback` (format.sh lint loop) uses.
-- **Cursor stdout caveat**: recent Cursor builds have been reported to
-  reject plain-text stdout from hooks with JSON parse errors. The stop-hook
-  second pass now emits `{}` on the Cursor layout; the remaining plain-text
-  paths (unknown-layout fallbacks, `hook_feedback`'s Cursor arm) still need
-  re-testing against a current Cursor build.
+  channel `hook_feedback` (format.sh lint loop) uses on the `tool_input`
+  layout. Cursor's `afterFileEdit` documents no output field for feedback
+  text at all ("No output fields currently supported", verified
+  2026-07-12), and its exit-0 stdout is parsed as JSON, so `hook_feedback`
+  degrades the Cursor layout to the documented no-op (`{}`) rather than
+  emitting dead plain text — the finding still reaches `.harness/log.jsonl` via
+  `hook_log`, which every `hook_feedback` caller invokes first (see
+  format.sh). See the Cursor stdout caveat bullet below.
+- **Cursor stdout caveat**: repaired and re-verified 2026-07-12. Cursor's
+  hooks doc documents exit code 0 as "Hook succeeded, use the JSON output"
+  and gives each event's response as a JSON object — `afterFileEdit`'s is
+  documented as having no output fields at all. There is no explicit
+  "plain text is ignored" sentence in the doc, but plain text is not "the
+  JSON output" the exit-0 contract describes, so it is not a channel this
+  kit relies on. No RECOGNIZED layout emits plain-text stdout on exit 0 as
+  of this pass: the stop-hook second pass emits `{}` on the `loop_count`
+  layout, and `hook_feedback`'s Cursor arm (top-level `file_path`, no
+  `tool_input`) now emits `{}` too instead of the diagnostic text. Plain
+  text remains only the fallback for payloads this kit cannot identify as
+  any known layout (no jq, empty stdin, or a shape matching none of the
+  above) — there is no more specific channel to degrade to there.
 - **Interception is a guardrail, not a boundary**: Codex's docs state that
   PreToolUse "is still a guardrail rather than a complete enforcement
   boundary because Codex can often perform equivalent work through another
   supported tool path" (verified 2026-07-10). The kit treats every pre-tool
   guard that way: native permission/trust layers and the CI manifest check
   are the enforcing layers.
+- **Cursor `beforeShellExecution` for `guard-secrets.sh` — evaluated,
+  deferred (2026-07-12)**: `guard-secrets.sh`'s best-effort shell-token scan
+  (see the File path bullet above) is the natural candidate to reuse
+  Cursor's `beforeShellExecution` event, which carries the pending shell
+  command before it runs. The deny mechanics check out: Cursor documents
+  exit 2 on this event as "Block the action (equivalent to returning
+  `permission: \"deny\"`)", the same portable path `hook_deny` already falls
+  back to for any `.hook_event_name` other than `"PreToolUse"` (verified
+  against the Cursor hooks doc, 2026-07-12). Not wired anyway, because the
+  payload never reaches the scan: `beforeShellExecution` puts `command` at
+  the TOP LEVEL (`{"command": "...", "cwd": "...", "sandbox": false}`, no
+  `tool_input` wrapper — verified against the same doc, 2026-07-12), but
+  `lib.sh:hook_command_string` reads only `.tool_input.command` (the Claude
+  Code Bash-tool / Codex apply_patch shape). On a real `beforeShellExecution`
+  payload that lookup silently returns empty, so the token scan would no-op
+  on every invocation while `hooks.json` implied it was live — worse than
+  not wiring it, since it would read as coverage that doesn't exist. Fixing
+  this needs a `lib.sh` change (a top-level `.command` fallback in
+  `hook_command_string`), which is out of this item's file ownership this
+  round. Deferred, not rejected: once that fallback lands, wiring
+  `guard-secrets.sh` to `beforeShellExecution` becomes sound; `failClosed`
+  should stay unset even then, since the scan is deliberately best-effort /
+  fail-open by design (see Scope in `guard-secrets.sh`) — `failClosed: true`
+  would contradict that.
 
 ## Per-provider notes
 
@@ -164,6 +225,36 @@ Policy stays in the portable scripts; the shim is one-time wiring.
 - **Cursor rules** (`.mdc`) want summarized key points inline, not just a
   pointer — keep the summary short and cite the canonical doc path;
   `check-harness.sh` verifies every cited path exists.
+- **Cursor's hook surface has grown** beyond the four named events this kit
+  wires (`sessionStart`, `beforeReadFile`, `afterFileEdit`, `stop`) —
+  verified 2026-07-12 against the Cursor hooks doc. New named
+  pre-/post-execution events: `beforeShellExecution` (fires before every
+  shell command; top-level `command`/`cwd`/`sandbox` input, `permission:
+  allow|deny|ask` output, exit 2 documented as "Block the action
+  (equivalent to returning `permission: \"deny\"`)") and its
+  `afterShellExecution` counterpart; `beforeMCPExecution` (before any MCP
+  tool call; `tool_name` + `tool_input` + either `url` or `command`, same
+  `permission`/exit-2 contract) and `afterMCPExecution`. Cursor also now
+  ships generic `preToolUse`/`postToolUse` hooks firing before/after tool
+  calls (Shell, Read, Write, MCP, Task, …; the set is broad but not
+  guaranteed to be every tool) — these nest tool params
+  under a `tool_input` object the way Claude Code/Codex do, a different
+  envelope from the named events above (whose fields, e.g.
+  `beforeShellExecution`'s `command`, sit at the top level with no
+  `tool_input` wrapper). Every hook definition also accepts a per-hook
+  `failClosed: true` option: hook failures (crash, timeout, invalid JSON)
+  block the action instead of allowing it through — documented as flipping
+  `beforeReadFile`'s default fail-open to fail-closed, and recommended
+  specifically for security-critical `beforeMCPExecution` hooks. None of
+  this new surface is wired by this kit yet: see the `beforeShellExecution`
+  → `guard-secrets.sh` evaluation under "Payload differences" above for the
+  one candidate this pass considered (deferred, not adopted). Also flagged
+  for a future pass, not resolved here: generic `preToolUse`'s "any tool
+  execution … Read, Write …" scope reads as pre-edit-capable, which is
+  broader than the four NAMED events the "Cursor has no pre-edit hook
+  event" framing (Hook event mapping table's `guard-config.sh` row;
+  risky-actions.md) was written against — revisiting that framing is out of
+  this item's file ownership this round.
 - **Codex** hooks are **GA and enabled by default** (verified 2026-07-10;
   disable with `[features] hooks = false` — `hooks` is the canonical
   feature key and `codex_hooks` survives only as a deprecated alias; an
@@ -209,12 +300,29 @@ Policy stays in the portable scripts; the shim is one-time wiring.
 Primary docs to re-validate each section against (all last consulted
 2026-07):
 
-- Claude Code hooks (events, matchers, exit-code semantics):
+- Claude Code hooks (events, matchers, exit-code semantics; re-verified
+  2026-07-12 for the PreToolUse `hookSpecificOutput.permissionDecision`
+  deny shape, the Stop `hookSpecificOutput.additionalContext` channel, and
+  `stop_hook_active`'s undocumented-but-still-sent status):
   <https://code.claude.com/docs/en/hooks>
 - Claude Code AGENTS.md feature request:
   <https://github.com/anthropics/claude-code/issues/34235>
-- Cursor hooks (event list — note there is no pre-edit event):
-  <https://cursor.com/docs/hooks>
+- Claude Code CLI reference (flag semantics — `-p`/`--print`, `--model`,
+  `--output-format`, `--verbose`, `--dangerously-skip-permissions`; backs
+  the `scripts/eval.sh` header's pinned invocation, re-verified 2026-07-12):
+  <https://code.claude.com/docs/en/cli-reference>
+- Claude Code headless/non-interactive mode (`-p` usage patterns, the
+  `--output-format stream-json` + `--verbose` streaming contract, and the
+  `--bare` recommendation for scripted calls; re-verified 2026-07-12 for the
+  `scripts/eval.sh` invocation — see that script's header for why `--bare`
+  is deliberately not adopted there): <https://code.claude.com/docs/en/headless>
+- Cursor hooks (event list — note there is no pre-edit event; re-verified
+  2026-07-12 for `afterFileEdit`'s empty output schema and the exit-code /
+  JSON-output contract that backs the Cursor stdout caveat and Post-tool
+  feedback bullets): <https://cursor.com/docs/hooks>. Also re-verified
+  2026-07-12 for the full event list and per-hook `failClosed` semantics —
+  see the Per-provider notes Cursor-hooks bullet and the
+  `beforeShellExecution` evaluation under Payload differences.
 - Codex hooks (payload fields, Stop JSON contract, exit codes):
   <https://learn.chatgpt.com/docs/hooks>
   (developers.openai.com/codex/hooks now 308-redirects here)

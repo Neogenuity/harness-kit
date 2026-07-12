@@ -8,7 +8,7 @@
 # Provider invocations were re-verified against the installed toolchain at build
 # time and are stamped here (SKILL update mode re-checks these on a provider
 # shift):
-#   Claude Code 2.1.172:  claude -p <prompt> --model <m> \
+#   Claude Code 2.1.207:  claude -p <prompt> --model <m> \
 #                             --output-format stream-json --verbose \
 #                             --dangerously-skip-permissions        (cwd = workspace)
 #   Codex exec:           codex exec <prompt> --model <m> --cd <ws> \

@@ -56,7 +56,15 @@ not-yet-existing paths are legal — queued plans name future files by design.
 
 ## Roadmap (set 2026-07-10, re-sorted 2026-07-12)
 
-Shipped: **v0.10.0** — execution governance baseline (identity-pinning MCP
+Shipped: **v0.11.0** — hook hardening + feedback repair (probe-confirmed
+guard-coverage gaps closed — `harness.conf`, `.claude/settings.local.json`,
+the MCP configs — plus a dot-segment path-bypass fix; Cursor feedback arm
+repaired to the documented `{}` no-op; advise-once future-proofed with a
+scoped marker guard; model-visible `PreToolUse` deny reasons; provider-matrix
+refresh; triple-reviewed after implementation — 2× Opus 4.8 + Codex
+gpt-5.6-terra, every confirmed finding fixed and fixture-covered)
+([completed/v0.11.0-hook-hardening-and-feedback-repair.md](completed/v0.11.0-hook-hardening-and-feedback-repair.md));
+**v0.10.0** — execution governance baseline (identity-pinning MCP
 trust inventory + check #8c, untrusted-content and risky-actions conventions
 docs, a verified execution-containment matrix section, shipped-CI hardening +
 doctor #10d, `.github/workflows/*` guard widening; design-reviewed before and
@@ -82,13 +90,12 @@ rows + strict Agent Skills validation + matrix stamping
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [hook-hardening-and-feedback-repair.md](hook-hardening-and-feedback-repair.md) | Probe-confirmed guard-coverage gaps closed (harness.conf, settings.local.json, MCP configs), Cursor feedback arm repaired, advise-once future-proofed, model-visible deny reasons, matrix refresh |
-| 2 | [eval-discrimination.md](eval-discrimination.md) | Harder capability tasks, a fuller baseline matrix, a scheduled eval run — makes the bank actually discriminate |
-| 3 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
-| 4 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
-| 5 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
-| 6 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
-| 7 | [launch-readiness.md](launch-readiness.md) | Demo recording, org move, public-repo hygiene, security policy, supported-platforms statement, "what 1.0 promises" — parallel-track, start immediately |
+| 1 | [eval-discrimination.md](eval-discrimination.md) | Harder capability tasks, a fuller baseline matrix, a scheduled eval run — makes the bank actually discriminate |
+| 2 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
+| 3 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
+| 4 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
+| 5 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
+| 6 | [launch-readiness.md](launch-readiness.md) | Demo recording, org move, public-repo hygiene, security policy, supported-platforms statement, "what 1.0 promises" — parallel-track, start immediately |
 
 **Ordering rationale.** Claim-to-implementation gaps went first — plans
 machinery (v0.6.0) closed the space between what the docs promise and what
@@ -97,16 +104,16 @@ ships, then install/update-verification (v0.7.0) put the core product boundary
 largest previously unowned reliability gap. With those shipped, measurement
 (behavioral evals) came next: it landed before every component that must
 prove its value — the reviewer loop is validated by the seeded-defect eval
-the evals plan makes possible. Hook-hardening leads as of 2026-07-12: its
-gaps are probe-confirmed containment failures — one
+the evals plan makes possible. Hook-hardening led the 2026-07-12 re-sort and
+shipped as v0.11.0: its gaps were probe-confirmed containment failures — one
 (`.claude/settings.local.json`, unmanifested and kept out of git in the
 standard Claude Code setup) caught by no layer at all — plus feedback
-channels current provider docs show dead (Cursor ignores plain-text hook
+channels provider docs showed dead (Cursor ignores plain-text hook
 stdout) or at risk (`stop_hook_active` empirically live but undocumented).
-The fix is small, mechanism-only, and consumed by nothing downstream, so it
-displaces no dependency chain; the same combined-controls logic that pulled
-the v0.10.0 baseline forward applies. Eval-discrimination follows
-hook-hardening, still ahead of the reviewer loop because that seeded-defect
+The fix was small, mechanism-only, and consumed by nothing downstream, so it
+displaced no dependency chain; the same combined-controls logic that pulled
+the v0.10.0 baseline forward applied. Eval-discrimination now leads the queue,
+still ahead of the reviewer loop because that seeded-defect
 eval needs a bank capable of showing a catch-rate below 100% — the v0.8.0
 bank saturated at pass^k=1 on 15 of 16 recorded cells, leaving no headroom
 to demonstrate the reviewer catching anything. Execution governance's *baseline* (guidance docs,
@@ -138,7 +145,7 @@ launch-readiness). The 2026-07-12 project review — an independent
 re-verification of the provider matrix against live provider docs, payload
 probes of the installed guards, and a captured live Stop payload from Claude
 Code CLI 2.1.207 — added
-[hook-hardening-and-feedback-repair.md](hook-hardening-and-feedback-repair.md)
+[hook-hardening-and-feedback-repair.md](completed/v0.11.0-hook-hardening-and-feedback-repair.md)
 at #1, re-prioritized launch-readiness to parallel-track immediately (adding
 security-policy and supported-platforms items to its scope), and added the
 per-cell baseline-date backfill to eval-discrimination.

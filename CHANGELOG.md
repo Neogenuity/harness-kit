@@ -3,6 +3,60 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.11.0 — 2026-07-12
+
+Hook hardening + feedback repair — the 2026-07-12 project review re-verified
+the provider matrix against live docs and probed the installed guards with
+real payloads, surfacing self-protection gaps and degraded feedback channels.
+This release closes them. Mechanism-only; no new tailoring required. Scope was
+triple-reviewed after implementation (2× Claude Opus 4.8 + Codex
+gpt-5.6-terra); every confirmed finding was fixed and fixture-covered before
+tagging.
+
+- **Guard-coverage gaps closed.** `guard-config.sh`'s default `PROTECTED_PATHS`
+  now also denies edits to `scripts/harness.conf` (the secret guard's pattern
+  source), `.claude/settings.local.json` (can carry `disableAllHooks: true`;
+  gitignored and unmanifested in the standard Claude Code setup, so no other
+  layer caught it), and the three MCP configs the trust-inventory audit reads
+  (`.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`). Post-init
+  `harness.conf` tailoring rides the existing `HARNESS_ALLOW_MECHANISM_EDITS=1`
+  escape hatch.
+- **Path-normalization bypass fixed.** The guard now collapses `.`/`..`/`//`
+  segments before matching, so a crafted `scripts/./harness.conf` or
+  `scripts/../scripts/harness.conf` can no longer slip a protected path past
+  the literal globs. (Case variants on a case-insensitive filesystem remain a
+  documented guardrail limitation — the CI manifest check is the enforcing
+  layer.)
+- **Deny reasons are model-visible.** On a `PreToolUse` payload, `hook_deny`
+  emits an exit-0 JSON `permissionDecision:deny` carrying the reason (parsed by
+  Claude Code and Codex) instead of an exit-2 stderr the model may not see. The
+  portable exit-2 deny stays as the fallback for every other layout and
+  whenever JSON construction *or the stdout write* fails — a deny never fails
+  open.
+- **Cursor feedback arm repaired.** `afterFileEdit` documents no output field
+  for feedback text and parses exit-0 stdout as JSON, so `hook_feedback` now
+  emits the documented no-op (`{}`) on the Cursor layout instead of dead plain
+  text; the finding still reaches `.harness/log.jsonl`.
+- **Advise-once future-proofed.** A payload-independent marker guard
+  (`.harness/stop-markers/`, keyed on session/conversation id + a warnings
+  digest) keeps the stop advisory firing exactly once even if a future build
+  drops the undocumented-but-still-sent `stop_hook_active` flag. The prune is
+  scoped to the guard's own markers, so a user-pointed `HARNESS_STOP_MARKER_DIR`
+  never loses unrelated files.
+- **Provider matrix refreshed** with Cursor's grown hook surface
+  (`beforeShellExecution`, `beforeMCPExecution`, generic
+  `preToolUse`/`postToolUse`, per-hook `failClosed`), a recorded decision to
+  defer wiring `guard-secrets.sh` to `beforeShellExecution` (its payload puts
+  `command` top-level, which `hook_command_string` doesn't read), and restamped
+  sources; `eval.sh`'s pinned CLI invocation restamped to Claude Code 2.1.207.
+
+**Migration.** Update mode **replaces** `guard-config.sh` and `lib.sh` (both
+non-tailored mechanism files) and adds `scripts/hooks/test-deny-reasons.sh`; it
+**never touches** your tailored `harness.conf` or `verify.sh`. No config
+changes are required. If you tailored `guard-config.sh`'s `PROTECTED_PATHS`
+locally, re-apply your additions after updating — the file is replaced, not
+diffed.
+
 ## 0.10.1 — 2026-07-12
 
 CI fix — the `ci` workflow's "Hook templates are executable" check had failed
