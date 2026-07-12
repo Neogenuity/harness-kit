@@ -35,9 +35,12 @@ append() { warnings="${warnings}$1"$'\n'; }
 # done < <(hook_new_files '^modules/[^/]+/src/Domain/Models/.+\.php$')
 #
 # Advisory verification (fast gates only — keep the stop-hook cheap; the full
-# suite belongs in CI, not on every stop):
+# suite belongs in CI, not on every stop). Skip the run on a CLEAN working tree
+# — nothing uncommitted means nothing new can fail, and this hook fires on
+# EVERY stop, so the git-status guard avoids a multi-second tax on no-op stops:
 #
-# if [ -x scripts/verify.sh ] && ! out=$(bash scripts/verify.sh --fast 2>&1); then
+# if [ -x scripts/verify.sh ] && [ -n "$(git status --porcelain 2>/dev/null)" ] \
+#         && ! out=$(bash scripts/verify.sh --fast 2>&1); then
 #     append "VERIFY WARNING: fast quality gates are failing:"
 #     append "$out"
 #     append "Fix, then run 'bash scripts/verify.sh' before finishing."

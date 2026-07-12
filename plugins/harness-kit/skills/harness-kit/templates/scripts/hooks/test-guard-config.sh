@@ -47,7 +47,9 @@ run 2 "eval-lib edit denied"             "$(payload "$WORK/scripts/eval-lib.sh")
 run 2 "manifest edit denied"             "$(payload "$WORK/scripts/.harness-manifest")"
 run 2 "regression test edit denied"      "$(payload "$WORK/scripts/test-check-harness.sh")"
 run 2 "hook wiring edit denied"          "$(payload "$WORK/.claude/settings.json")"
-run 2 "opencode.json edit denied"        "$(payload "$WORK/opencode.json")"
+run 2 "opencode.json (root) edit denied" "$(payload "$WORK/opencode.json")"
+run 0 "opencode.json template editable (nested copy, not the root install)" "$(payload "$WORK/plugins/harness-kit/skills/harness-kit/templates/providers/opencode/opencode.json")"
+run 2 "opencode.json root denied via dot-slash" "$(payload "$WORK/./opencode.json")"
 run 2 "CI workflow edit denied"          "$(payload "$WORK/.github/workflows/ci.yml")"
 run 2 "relative path denied"             "$(payload "scripts/hooks/guard-secrets.sh")"
 run 2 "Cursor layout denied"             "$(cursor_payload "$WORK/scripts/sync-agent-skills.sh")"
@@ -149,6 +151,33 @@ run 2 "Codex patch dot-dot mid-path denied"    "$(codex_patch '*** Update File: 
 @@
 +x')"
 run 0 "dot-slash ordinary file still allowed"  "$(payload "$WORK/src/./app.js")"
+
+# --- deny-hint: optional GUARD_DENY_HINT is appended to the deny message ------
+# guard-config.sh reads it from harness.conf (empty by default). Assert the FULL
+# deny contract holds with no hint, then that a set hint is appended — via env
+# (the fake repo has no harness.conf, so the env value survives) and via a real
+# harness.conf file (the production source).
+_hintout() { { printf '%s' "$1" | env HARNESS_LOG=0 HARNESS_ALLOW_MECHANISM_EDITS=0 ${2:-_=_} "$HOOK" >/dev/null; } 2>&1; }
+out=$(_hintout "$(payload "$WORK/scripts/harness.conf")")
+if printf '%s' "$out" | grep -q 'guard-config.sh' && printf '%s' "$out" | grep -q 'HARNESS_ALLOW_MECHANISM_EDITS=1'; then
+    echo "ok:   empty hint — full deny contract intact (guard named + escape hatch)"
+else
+    echo "FAIL: empty-hint deny contract"; fails=$((fails+1))
+fi
+out=$(_hintout "$(payload "$WORK/scripts/harness.conf")" 'GUARD_DENY_HINT=EDIT-THE-TEMPLATE')
+if printf '%s' "$out" | grep -q 'EDIT-THE-TEMPLATE'; then
+    echo "ok:   env-provided hint is appended to the deny message"
+else
+    echo "FAIL: env hint not appended"; fails=$((fails+1))
+fi
+printf 'GUARD_DENY_HINT="hint-from-conf-file"\n' > "$WORK/scripts/harness.conf"
+out=$(_hintout "$(payload "$WORK/scripts/hooks/lib.sh")")
+if printf '%s' "$out" | grep -q 'hint-from-conf-file'; then
+    echo "ok:   hint sourced from harness.conf is appended to the deny message"
+else
+    echo "FAIL: harness.conf hint not applied"; fails=$((fails+1))
+fi
+rm -f "$WORK/scripts/harness.conf"
 
 # --- allow: ordinary files, escape hatch, fail-open ---
 run 0 "ordinary source file allowed"     "$(payload "$WORK/src/app.php")"

@@ -27,8 +27,15 @@ if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; th
         state="$dirty uncommitted change(s)"
     fi
     echo "Branch: $branch ($state)"
-    recent=$(git log --oneline -5 2>/dev/null)
-    [ -n "$recent" ] && printf 'Recent commits:\n%s\n' "$recent"
+    # Recent-commits block: OFF by default (BANNER_RECENT_COMMITS=0). The
+    # context-efficiency audit found no in-session consumer across 60+
+    # transcripts, and it costs ~70 tokens on every session and every subagent.
+    # Set BANNER_RECENT_COMMITS=N in harness.conf to include the last N commits.
+    n="${BANNER_RECENT_COMMITS:-0}"
+    if [ "$n" -gt 0 ] 2>/dev/null; then
+        recent=$(git log --oneline -"$n" 2>/dev/null)
+        [ -n "$recent" ] && printf 'Recent commits:\n%s\n' "$recent"
+    fi
 fi
 
 if [ -d "$PLANS_DIR" ]; then

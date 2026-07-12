@@ -32,9 +32,18 @@ files=$(hook_affected_files)
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
+# Optional per-repo hint appended to deny messages (e.g. "edit the template,
+# not the installed copy"). Sourced from harness.conf; empty by default, so the
+# generic deny contract is unchanged for repos that set nothing.
+# shellcheck source=/dev/null
+[ -f "$ROOT/scripts/harness.conf" ] && . "$ROOT/scripts/harness.conf" 2>/dev/null
+DENY_HINT="${GUARD_DENY_HINT:-}"
+
 # -- TAILOR: paths agents may not edit -----------------------------------------
 # Repo-relative globs. Patterns without a slash also match by basename (so
-# nested lint configs are covered). The harness mechanism is protected by
+# nested lint configs are covered); a LEADING SLASH anchors a pattern to the
+# repo root — exact path, no basename fallback — so a same-named file nested
+# elsewhere (e.g. a shipped template copy) stays editable. The harness mechanism is protected by
 # default — including .github/workflows/*, because CI runs the gates and an
 # agent that can edit a workflow can disarm the enforcing layer. Uncomment or
 # extend the second list with the lint and formatter configs an agent could
@@ -51,7 +60,7 @@ scripts/.harness-manifest
 .cursor/hooks.json
 .codex/hooks.json
 .opencode/plugins/*
-opencode.json
+/opencode.json
 .github/workflows/*
 "
 # 2026-07-12 probe found these five writable live, each a cheap way to
@@ -120,15 +129,28 @@ check_file() {
     base=$(basename "$rel")
     for pat in $PROTECTED_PATHS; do
         hit=0
-        # shellcheck disable=SC2254
-        case "$rel" in $pat) hit=1 ;; esac
-        # shellcheck disable=SC2254
         case "$pat" in
-            */*) ;;
-            *) case "$base" in $pat) hit=1 ;; esac ;;
+            /*)
+                # Root-anchored: matched only against the repo-relative path
+                # (leading slash stripped), never by basename — a same-named
+                # file nested elsewhere (e.g. the shipped template
+                # opencode.json) stays editable.
+                # shellcheck disable=SC2254
+                case "$rel" in ${pat#/}) hit=1 ;; esac
+                ;;
+            *)
+                # shellcheck disable=SC2254
+                case "$rel" in $pat) hit=1 ;; esac
+                # A slash-less pattern also matches by basename (nested configs).
+                # shellcheck disable=SC2254
+                case "$pat" in
+                    */*) ;;
+                    *) case "$base" in $pat) hit=1 ;; esac ;;
+                esac
+                ;;
         esac
         if [ "$hit" = "1" ]; then
-            hook_deny "Blocked by scripts/hooks/guard-config.sh: '$rel' is harness mechanism or a protected config. If a check is failing, fix the code it complains about — do not edit the check. Intentional harness maintenance: re-run with HARNESS_ALLOW_MECHANISM_EDITS=1, then re-pin scripts/.harness-manifest (see check-harness.sh)."
+            hook_deny "Blocked by scripts/hooks/guard-config.sh: '$rel' is harness mechanism or a protected config. If a check is failing, fix the code it complains about — do not edit the check. Intentional harness maintenance: re-run with HARNESS_ALLOW_MECHANISM_EDITS=1, then re-pin scripts/.harness-manifest (see check-harness.sh).${DENY_HINT:+ $DENY_HINT}"
         fi
     done
     return 0

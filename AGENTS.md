@@ -33,6 +33,10 @@ any repository. Two facts to know before touching anything:
 
 - [docs/skills/release/SKILL.md](docs/skills/release/SKILL.md) — cut a release: version bump, changelog, manifest re-pin, tag
 
+**When you add a skill or a convention doc, link it from this file.** This
+table of contents is how every agent (and teammate) discovers it — a skill that
+isn't linked here is effectively invisible, even after its stubs are synced.
+
 The per-harness copies (`.claude/skills/`, `.cursor/skills/`,
 `.opencode/skills/`, `.agents/skills/` — Codex reads `.agents/skills/`) are
 **generated** pointer stubs. Edit the canonical file here, then run

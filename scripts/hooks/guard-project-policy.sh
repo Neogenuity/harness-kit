@@ -52,8 +52,11 @@ if [ -n "$changed" ]; then
     fi
 fi
 
-# Advisory verification: fast gates only — the full suite belongs in CI.
-if [ -x scripts/verify.sh ] && ! out=$(bash scripts/verify.sh --fast 2>&1); then
+# Advisory verification: fast gates only — the full suite belongs in CI. Skip
+# it on a clean working tree (nothing uncommitted can newly fail them; saves
+# ~4s on every stop — the audit measured 0 useful fires across 54 clean stops).
+if [ -x scripts/verify.sh ] && [ -n "$(git status --porcelain 2>/dev/null)" ] \
+        && ! out=$(bash scripts/verify.sh --fast 2>&1); then
     append "VERIFY WARNING: fast quality gates are failing:"
     append "$out"
     append "Fix, then run 'bash scripts/verify.sh' before finishing."
