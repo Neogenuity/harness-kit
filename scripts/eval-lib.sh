@@ -238,7 +238,7 @@ eval_usage_json() {
 
 # eval_result_json <task> <provider> <model> <suite> <polarity> <run> \
 #                  <trial> <pass:true|false> <duration_s> <agent_rc> <transcript> \
-#                  <run_started_at> <outcome> [usage_json]
+#                  <run_started_at> <outcome> [usage_json] [variant]
 # Emits one compact JSON object — the results.jsonl schema. The single source for
 # that shape, so eval.sh (writer) and test-eval.sh (shape assertion) can never
 # disagree. Requires jq (the only jq-dependent function in this lib).
@@ -257,18 +257,29 @@ eval_usage_json() {
 #                           row carries the field; legacy rows written without
 #                           it still score (eval-harness.sh reads correctness
 #                           fields only and never reads usage).
+#   arg 15  variant        (optional) "bare" | "plugin-activated" — the
+#                           execution-variant dimension (v0.14.0 item 6): a
+#                           plugin-activated run of the same task/provider/model
+#                           must coexist with its bare counterpart instead of
+#                           colliding on the same baseline cell (see
+#                           eval-harness.sh's group_by and baseline key).
+#                           Omitted/empty => "bare", so every row carries the
+#                           field and legacy rows/callers written before this
+#                           dimension existed still score as bare.
 eval_result_json() {
     local usage="${14:-}"
     [ -n "$usage" ] || usage='{"input_uncached":null,"input_cached_read":null,"input_cache_write":null,"output":null,"cost":null,"tool_calls":0}'
+    local variant="${15:-}"
+    [ -n "$variant" ] || variant="bare"
     jq -cn \
         --arg task "$1" --arg provider "$2" --arg model "$3" \
         --arg suite "$4" --arg polarity "$5" --arg run "$6" \
         --argjson trial "$7" --argjson pass "$8" --argjson duration_s "$9" \
         --argjson agent_rc "${10}" --arg transcript "${11}" \
         --argjson run_started_at "${12}" --arg outcome "${13}" \
-        --argjson usage "$usage" \
-        '{task:$task, provider:$provider, model:$model, suite:$suite,
-          polarity:$polarity, run:$run, trial:$trial, pass:$pass,
+        --argjson usage "$usage" --arg variant "$variant" \
+        '{task:$task, provider:$provider, model:$model, variant:$variant,
+          suite:$suite, polarity:$polarity, run:$run, trial:$trial, pass:$pass,
           duration_s:$duration_s, agent_rc:$agent_rc, transcript:$transcript,
           run_started_at:$run_started_at, outcome:$outcome, usage:$usage}'
 }
