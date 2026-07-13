@@ -74,6 +74,12 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -euo pipefail
+          # Build --model as two argv words (or none). A combined
+          # ${MODEL:+--model "$MODEL"} would pass `--model claude-sonnet` as ONE
+          # argument, which eval.sh rejects — and the trailing `|| true` below
+          # would swallow the error, recording no results for a model run.
+          model_arg=()
+          if [ -n "$MODEL" ]; then model_arg=(--model "$MODEL"); fi
           ran=0
           for d in docs/evals/tasks/*/; do
             slug="$(basename "$d")"
@@ -83,7 +89,7 @@ jobs:
             # A provider-pinned task refuses a mismatched --provider; tolerate it
             # so one non-matching task can't fail the whole scheduled run.
             bash scripts/eval.sh "$slug" --provider "$PROVIDER" \
-              ${MODEL:+--model "$MODEL"} --trials "$TRIALS" || true
+              "${model_arg[@]}" --trials "$TRIALS" || true
             echo "::endgroup::"
             ran=1
           done
