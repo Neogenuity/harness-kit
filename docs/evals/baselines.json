@@ -1,5 +1,5 @@
 {
-  "recorded": "2026-07-11",
+  "recorded": "2026-07-13",
   "tasks": {
     "add-convention-doc": {
       "polarity": "positive",
@@ -9,6 +9,23 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "claude/sonnet": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "codex/gpt-5.6-luna": {
+          "pass_at_k": 1,
+          "pass_hat_k": 0,
+          "pass_rate": 0.67,
+          "passes": 2,
+          "recorded": "2026-07-13",
           "trials": 3
         },
         "codex/gpt-5.6-terra": {
@@ -16,6 +33,7 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
           "trials": 3
         }
       },
@@ -29,6 +47,23 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "claude/sonnet": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "codex/gpt-5.6-luna": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
           "trials": 3
         },
         "codex/gpt-5.6-terra": {
@@ -36,6 +71,7 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
           "trials": 3
         }
       },
@@ -49,6 +85,23 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "claude/sonnet": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "codex/gpt-5.6-luna": {
+          "pass_at_k": 0,
+          "pass_hat_k": 0,
+          "pass_rate": 0,
+          "passes": 0,
+          "recorded": "2026-07-13",
           "trials": 3
         },
         "codex/gpt-5.6-terra": {
@@ -56,6 +109,45 @@
           "pass_hat_k": 0,
           "pass_rate": 0,
           "passes": 0,
+          "recorded": "2026-07-13",
+          "trials": 3
+        }
+      },
+      "suite": "capability"
+    },
+    "hn-add-skill": {
+      "polarity": "positive",
+      "runs": {
+        "claude/haiku": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "claude/sonnet": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "codex/gpt-5.6-luna": {
+          "pass_at_k": 0,
+          "pass_hat_k": 0,
+          "pass_rate": 0,
+          "passes": 0,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "codex/gpt-5.6-terra": {
+          "pass_at_k": 0,
+          "pass_hat_k": 0,
+          "pass_rate": 0,
+          "passes": 0,
+          "recorded": "2026-07-13",
           "trials": 3
         }
       },
@@ -66,9 +158,26 @@
       "runs": {
         "claude/haiku": {
           "pass_at_k": 1,
+          "pass_hat_k": 0,
+          "pass_rate": 0.33,
+          "passes": 1,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "claude/sonnet": {
+          "pass_at_k": 1,
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "codex/gpt-5.6-luna": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
           "trials": 3
         },
         "codex/gpt-5.6-terra": {
@@ -76,6 +185,7 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
           "trials": 3
         }
       },
@@ -89,6 +199,23 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "claude/sonnet": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "codex/gpt-5.6-luna": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
           "trials": 3
         },
         "codex/gpt-5.6-terra": {
@@ -96,6 +223,7 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
           "trials": 3
         }
       },
@@ -109,14 +237,32 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "claude/sonnet": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "codex/gpt-5.6-luna": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
           "trials": 3
         },
         "codex/gpt-5.6-terra": {
           "pass_at_k": 1,
           "pass_hat_k": 1,
           "pass_rate": 1,
-          "passes": 2,
-          "trials": 2
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
         }
       },
       "suite": "regression"
@@ -129,6 +275,23 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "claude/sonnet": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "codex/gpt-5.6-luna": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
           "trials": 3
         },
         "codex/gpt-5.6-terra": {
@@ -136,10 +299,49 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
           "trials": 3
         }
       },
       "suite": "regression"
+    },
+    "tmpl-secret-pattern": {
+      "polarity": "positive",
+      "runs": {
+        "claude/haiku": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "claude/sonnet": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "codex/gpt-5.6-luna": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "codex/gpt-5.6-terra": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        }
+      },
+      "suite": "capability"
     },
     "update-changelog": {
       "polarity": "positive",
@@ -149,6 +351,23 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "claude/sonnet": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
+          "trials": 3
+        },
+        "codex/gpt-5.6-luna": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-13",
           "trials": 3
         },
         "codex/gpt-5.6-terra": {
@@ -156,6 +375,7 @@
           "pass_hat_k": 1,
           "pass_rate": 1,
           "passes": 3,
+          "recorded": "2026-07-13",
           "trials": 3
         }
       },
