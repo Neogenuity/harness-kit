@@ -1,6 +1,7 @@
 # Launch readiness
 
-Status: queued
+Status: **active (partial)** — doc items 3–6 shipped in v0.13.0 (2026-07-13);
+items 1 (demo), 2 (org move), 7 (public flip) remain maintainer actions
 
 ## Objective
 
@@ -36,7 +37,7 @@ into should not track its own launch as an untracked checkbox.
    documented as run with its findings (or "none found"); CONTRIBUTING
    exists and is current; the issue-template decision is recorded.*
 4. **What 1.0 promises** — write an explicit "what 1.0 promises" section into
-   [../../README.md](../../README.md), covering mechanism/update-contract stability
+   [../../../README.md](../../../README.md), covering mechanism/update-contract stability
    guarantees and post-1.0 template semver discipline, so adopters know what
    changes are safe across upgrades before committing to the kit.
    *Acceptance: the section exists, is linked from README.md's Status
@@ -46,7 +47,7 @@ into should not track its own launch as an untracked checkbox.
    vulnerability in the shipped guard machinery, the expected response
    window, which versions receive fixes pre-1.0, and a pointer to the
    enforcement-layer honesty docs
-   ([../conventions/risky-actions.md](../conventions/risky-actions.md)) so
+   ([../../conventions/risky-actions.md](../../conventions/risky-actions.md)) so
    reports are triaged against the boundary the kit actually claims. A
    project whose pitch is agent-safety machinery shipped into other people's
    repos needs a disclosure path at launch. *Acceptance: `SECURITY.md` exists
@@ -89,6 +90,52 @@ link-checks pass on every doc this plan touches.
 
 ## Progress
 
+- 2026-07-13 — Workstream C (parallel-track, isolated worktree) landed items
+  4–6 plus the CONTRIBUTING review, and closed out item 3's content-level
+  sweep (the filename-level git-history sweep already covered by the
+  2026-07-12 entry below):
+  - **Item 3, content-level sweep**: grepped every tracked file outside
+    `plugins/harness-kit/skills/harness-kit/templates/` (the shipped
+    product, already covered by the template-level checklist) for
+    AWS/GitHub/Slack token shapes, private-key headers, JWTs, Bearer
+    tokens, and generic `key`/`secret`/`token`/`password` assignments —
+    **none found**. IP-address and hostname sweep turned up only public
+    provider-doc citations (openai.com, cursor.com, opencode.ai,
+    martinfowler.com, agentskills.io, geminicli.com, arxiv.org) and the
+    maintainer's own already-public `chase@neogenuity.com` (matches
+    `.claude-plugin/marketplace.json`) — no internal/real hostnames.
+    Filenames matching secret patterns (`guard-secrets.sh`,
+    `test-guard-secrets.sh`, the `tmpl-secret-pattern` eval task) are the
+    security tooling itself and its test fixtures, not leaked secrets;
+    checked their contents directly — pattern names only, no real values.
+    `git status --porcelain --ignored` showed nothing untracked or
+    gitignored beyond `.DS_Store`/`.harness/`.
+  - **Item 4**: added a "What 1.0 promises" section to
+    [../../../README.md](../../../README.md#what-10-promises) — what a template
+    version bump never touches (TAILOR blocks, tailored files, target-repo
+    content, untouched mechanism files) and what each semver level means
+    post-1.0 (patch/minor/major), linked from the Status section.
+  - **Item 5**: added root `SECURITY.md` — private reporting (GitHub
+    Security Advisories or email), scope grounded in
+    [../../conventions/risky-actions.md](../../conventions/risky-actions.md) (advisory
+    fail-open hooks are documented behavior, not a vulnerability), a
+    best-effort response window, and a pre-1.0 supported-versions policy
+    (latest tag only, no backports). Linked from README.md and
+    CONTRIBUTING.md.
+  - **Item 6**: added the supported-platforms line to README.md's Install
+    section — bash + `jq` on macOS/Linux/WSL/Git Bash, no native-Windows
+    hook execution, pointing at `provider-matrix.md` for Codex's
+    `commandWindows` override rather than duplicating it.
+  - **CONTRIBUTING review**: read end to end against current `verify.sh`
+    gates and the ADRs; ground rules still accurate, no staleness found;
+    added a Security section linking `SECURITY.md`.
+  - Verified every relative link added in README.md/CONTRIBUTING.md/
+    SECURITY.md resolves to an existing file (manual check — none of these
+    three files are covered by `check-harness.sh`'s link checker, which
+    only scans `AGENTS.md` files and `docs/`). `bash scripts/check-harness.sh`
+    stays green (no mechanism touched).
+  - Left untouched, as scoped: item 1 (demo recording), item 2 (org move),
+    item 7 (flip repo public) — all user actions.
 - 2026-07-12 — Cross-review (gpt-5.6-sol, claims independently re-verified
   in-repo) caught that the launch act itself — flipping the private repo
   public — was never a scope item: items 1–6 all prepare for the launch,

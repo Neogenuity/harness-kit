@@ -43,6 +43,21 @@ The per-harness copies (`.claude/skills/`, `.cursor/skills/`,
 `bash scripts/sync-agent-skills.sh`; `check-harness.sh` (CI-gated) fails if
 stubs drift from the generator output.
 
+## Agents (Personas)
+
+- [docs/agents/code-reviewer.md](docs/agents/code-reviewer.md) — inferential
+  reviewer that runs **after** `verify.sh` passes; checks the four classes
+  deterministic gates can't see (misunderstood scope, over-engineering,
+  brute-force cause-masking, missing/weak tests) and emits machine-parseable
+  findings to `.harness/log.jsonl`. Its catch-rate is the seeded-defect eval
+  (`docs/evals/tasks/seeded-defect-review/`).
+
+Provider agent stubs (`.claude/agents/`, `.cursor/agents/`, `.codex/agents/`,
+`.opencode/agents/`) are **hand-authored** thin pointers to the canonical doc —
+`sync-agent-skills.sh` generates skill stubs, not agent stubs. Edit the
+canonical `docs/agents/` file; keep the stubs' frontmatter description (the
+routing trigger) in sync by hand.
+
 ## Plans
 
 - [docs/plans/README.md](docs/plans/README.md) — execution-plan lifecycle (queued → active → completed) and the ordered roadmap to 1.0; plans in `docs/plans/active/` are announced at session start

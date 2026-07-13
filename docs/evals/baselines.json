@@ -305,6 +305,20 @@
       },
       "suite": "regression"
     },
+    "seeded-defect-review": {
+      "polarity": "negative",
+      "runs": {
+        "claude/sonnet": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 5,
+          "recorded": "2026-07-13",
+          "trials": 5
+        }
+      },
+      "suite": "capability"
+    },
     "tmpl-secret-pattern": {
       "polarity": "positive",
       "runs": {

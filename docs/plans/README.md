@@ -60,7 +60,17 @@ not-yet-existing paths are legal — queued plans name future files by design.
 
 ## Roadmap (set 2026-07-10, re-sorted 2026-07-12)
 
-Shipped: **v0.12.0** — eval discrimination + context efficiency (roadmap #1+#2
+Shipped: **v0.13.0** — reviewer loop + skill split (the canonical `code-reviewer`
+persona with a v1-compatible findings schema and a seeded-defect catch-rate eval
+recorded at claude/sonnet 5/5; the plugin `SKILL.md` split from a ~5.2k-token
+monolith into a ~781-token router + per-mode `references/modes/`, shipped only
+after a paired monolith-vs-split parity run held correctness 3/3=3/3 and
+wall-clock no-worse; launch-readiness doc items — SECURITY.md, "what 1.0
+promises", supported-platforms. Plan reviewed by Codex gpt-5.6-sol;
+implementation by Opus 4.8 subagents, diff-reviewed by Codex gpt-5.6-terra)
+([completed/v0.13.0-reviewer-loop.md](completed/v0.13.0-reviewer-loop.md),
+[completed/v0.13.0-skill-split.md](completed/v0.13.0-skill-split.md));
+**v0.12.0** — eval discrimination + context efficiency (roadmap #1+#2
 as one coordinated release: the first four-model baseline matrix — Claude
 haiku+sonnet, Codex gpt-5.6-terra+gpt-5.6-luna, 40 cells, per-cell dated,
 spanning a cheap and a capable tier on both providers — two discriminating tasks
@@ -101,24 +111,17 @@ rows + strict Agent Skills validation + matrix stamping
 **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
 ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
-**Active:** none — v0.12.0 shipped
-([completed/v0.12.0-eval-discrimination.md](completed/v0.12.0-eval-discrimination.md)
-and
-[completed/v0.12.0-context-efficiency.md](completed/v0.12.0-context-efficiency.md));
-the next plan activates from the queue below.
-
-**Deferred from v0.12.0:** [skill-split.md](skill-split.md) — the plugin
-skill-split (SKILL.md → compact router + per-mode `references/modes/`), gated on
-a fresh paired monolith-vs-split parity run; carried out of v0.12.0 as its own
-plan (A–D shipped without it per that release's cut line), ready to execute.
+**Active:** [launch-readiness.md](active/launch-readiness.md) — parallel-track;
+doc items 3–6 (SECURITY.md, "what 1.0 promises", supported-platforms, content
+hygiene sweep) shipped in v0.13.0, while the demo, the org move, and the public
+flip remain maintainer actions. The next mechanism plan activates from the queue
+below.
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [reviewer-loop.md](reviewer-loop.md) | Canonical reviewer persona, findings schema, seeded-defect eval |
-| 2 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
-| 3 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
-| 4 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
-| 5 | [launch-readiness.md](launch-readiness.md) | Demo recording, org move, public-repo hygiene, security policy, supported-platforms statement, "what 1.0 promises" — parallel-track, start immediately |
+| 1 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
+| 2 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
+| 3 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
 
 **Ordering rationale.** Claim-to-implementation gaps went first — plans
 machinery (v0.6.0) closed the space between what the docs promise and what

@@ -3,6 +3,69 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.13.0 — 2026-07-13
+
+Reviewer loop + skill split — the inferential half of the feedback system lands
+(a canonical code-reviewer persona with a machine-parseable findings schema and a
+seeded-defect catch-rate eval), and the plugin skill is split from a ~5.2k-token
+monolith into a ~780-token router, proven at parity. Launch-readiness docs ship
+alongside. Every gate is eval- or review-backed. Plan reviewed by Codex
+gpt-5.6-sol; implementation reviewed by Codex gpt-5.6-terra.
+
+### Reviewer loop
+
+- **Canonical `code-reviewer` persona** (`templates/docs/agents/code-reviewer.md`,
+  self-installed here at `docs/agents/code-reviewer.md`) — an inferential reviewer
+  that runs only after `verify.sh` passes and checks the four classes deterministic
+  gates can't see: misunderstood scope, over-engineering, cause-masking fixes, and
+  missing/weak tests. Advisory by default; treats the diff as untrusted data.
+  Hand-authored provider stubs for Claude, Cursor, Codex, and OpenCode.
+- **Findings schema** — one v1-compatible `hook_log` line per finding appended to
+  `.harness/log.jsonl`: the five reviewer fields (severity, line, category,
+  evidence, suggested_fix) ride inside `detail`, so the top level stays the exact
+  `{ts, hook, event, file, detail}` shape and every existing audit/log consumer
+  keeps working unchanged.
+- **Seeded-defect catch-rate eval** (`docs/evals/tasks/seeded-defect-review/`) —
+  8 planted defects (2 per class); the grader credits a catch on (file, category)
+  with a fully-formed finding, and `caught == 0` is a false-green violation
+  (exit 3). Ship gate: `pass_rate ≥ 0.60` over 5 trials with zero violations.
+  Recorded baseline: claude/sonnet **5/5** (`baselines.json`, 40 → 41 cells).
+- **Opt-in PR-review CI workflow** (`templates/ci/github-actions-review.yml`) —
+  wires the persona as an advisory PR reviewer: SHA-pinned actions, `pull_request`
+  (never `pull_request_target`), minimal `permissions`, explicit `github_token`,
+  fork-safe, cost-noted. Defines the `Harness-Session-Id:` session→PR trailer.
+
+### Skill split
+
+- **Plugin `SKILL.md` → compact router.** The ~299-line monolith becomes an
+  ~81-line (~780-token) router whose mode table inlines each mode's load-bearing
+  invariants; the full playbooks move verbatim to
+  `references/modes/{init,audit,add,update}.md`. Activation footprint drops ~85%.
+- **Shipped only on parity.** A fresh paired monolith-vs-split run (claude sonnet,
+  3 trials, both discriminating tasks) held correctness 3/3 = 3/3 with wall-clock
+  no worse, and was in fact cheaper (25–46% fewer tokens/cost per success).
+  Evidence: `docs/evals/parity/skill-split.md`. The router surfaces the canonical
+  `code-reviewer` persona and the PR-review workflow in init mode.
+
+### Launch readiness (partial)
+
+- **`SECURITY.md`** — private disclosure path for the shipped guard machinery,
+  grounded in `docs/conventions/risky-actions.md` (advisory/fail-open is documented
+  behavior, not a vulnerability), with a pre-1.0 supported-versions policy.
+- **README** — a "What 1.0 promises" compatibility contract (what a template bump
+  never touches vs. what each semver level means post-1.0) and a supported-platforms
+  line (bash + jq on macOS/Linux/WSL/Git Bash; no native-Windows hook execution).
+- Content-level secrets/hostname hygiene sweep of this repo (none found); the org
+  move, demo, and public-flip remain maintainer actions.
+
+### Upgrade notes
+
+- Update mode **replaces** the plugin skill wholesale (it is distributed content,
+  not tailored); the new `references/modes/` and `templates/` files are additive.
+- No installed `scripts/` mechanism changed, so the dogfood manifest header stays
+  at `0.12.0` by design — it records the mechanism version, and `check-packaging.sh`
+  gates the `VERSION`/plugin-manifest trio, not the header. No re-pin.
+
 ## 0.12.0 — 2026-07-13
 
 Eval discrimination + context efficiency — a joint release that makes the

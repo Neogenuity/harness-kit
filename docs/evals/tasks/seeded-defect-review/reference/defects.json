@@ -1,0 +1,14 @@
+{
+  "_comment": "Ground-truth manifest for the seeded-defect reviewer eval. 8 defects, 2 per failure class, each in a unique (file, category) cell so catch-matching is unambiguous. check.sh matches a reviewer finding to a defect by (file, category) + non-empty evidence; the `line` here is informational (a real reviewer may cite a nearby line, so line is NOT used for matching). See TASK.md for the pinned parameters.",
+  "match_on": ["file", "category"],
+  "defects": [
+    {"id": "d1", "file": "pricing/discount.py",       "category": "misunderstood-scope",  "line": 23, "note": "compute_discount records every call in the module-global _AUDIT list — the spec asked for a pure function with no global state/side effects."},
+    {"id": "d2", "file": "pricing/discount.py",       "category": "over-engineering",     "line": 8,  "note": "DiscountStrategy ABC + PercentStrategy + _REGISTRY is a strategy/registry for the single percent case — indirection for one caller."},
+    {"id": "d3", "file": "pricing/discount.py",       "category": "brute-force-masking",  "line": 29, "note": "bare `except Exception: return order_total` swallows a malformed-coupon error and returns the undiscounted total instead of validating."},
+    {"id": "d4", "file": "pricing/inventory.py",      "category": "over-engineering",     "line": 4,  "note": "speculative `strategy=\"fifo\"` and `hooks=` parameters — premature configurability the spec never asked for and nothing exercises."},
+    {"id": "d5", "file": "pricing/inventory.py",      "category": "misunderstood-scope",  "line": 12, "note": "reserve() mutates the caller's `stock` dict in place; the spec requires operating on a copy so the caller's dict is unchanged."},
+    {"id": "d6", "file": "pricing/inventory.py",      "category": "brute-force-masking",  "line": 15, "note": "clamps to max(0, ...) instead of raising ValueError on over-reservation — masks the error the spec requires surfacing."},
+    {"id": "d7", "file": "tests/test_discount.py",    "category": "weak-tests",           "line": 6,  "note": "asserts only `result is not None` — passes for any non-None return, never checks 10% off 100 == 90, never covers the no-op path."},
+    {"id": "d8", "file": "tests/test_inventory.py",   "category": "weak-tests",           "line": 7,  "note": "re-derives the expected value and compares — tests the stub not the code; the ValueError-on-overdraw path is untested."}
+  ]
+}

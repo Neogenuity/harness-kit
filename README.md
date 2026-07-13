@@ -133,6 +133,14 @@ One soft dependency: the installed hooks use `jq` to parse event payloads
 and **fail open without it** — keep `jq` on PATH wherever agents run, or
 the guards guard nothing.
 
+**Supported platforms:** the installed hooks are bash + `jq`, and run on
+macOS, Linux, WSL, and Git Bash on Windows. There is no native-Windows hook
+execution — the kit's bash hooks assume a POSIX shell. Codex's
+`commandWindows` override and other provider-specific Windows notes are
+tracked per-provider in
+[provider-matrix.md](plugins/harness-kit/skills/harness-kit/references/provider-matrix.md),
+not duplicated here.
+
 ## Use
 
 In any repo: *"set up the agent harness"* (init), *"audit the agent
@@ -158,7 +166,9 @@ scripts/, .claude/ .cursor/ ...   (see "This repo runs on itself")
 Extracted and generalized from a production Laravel modular monolith where
 the pattern is exercised daily across multiple harnesses. Current version
 lives in [`plugins/harness-kit/VERSION`](plugins/harness-kit/VERSION) and
-[`CHANGELOG.md`](CHANGELOG.md). Pre-launch checklist:
+[`CHANGELOG.md`](CHANGELOG.md). See [What 1.0 promises](#what-10-promises)
+for the compatibility contract a version number carries. Pre-launch
+checklist:
 
 - [x] MIT license
 - [x] Self-application (this repo runs its own harness, CI-gated)
@@ -171,6 +181,60 @@ lives in [`plugins/harness-kit/VERSION`](plugins/harness-kit/VERSION) and
       [docs/plans/launch-readiness.md](docs/plans/launch-readiness.md)
 - [ ] Move to the `neogenuity` org and update install commands — tracked in
       [docs/plans/launch-readiness.md](docs/plans/launch-readiness.md)
+
+## What 1.0 promises
+
+Pre-1.0, mechanism behavior changes are already versioned — every change to
+a shipped hook, gate, or script bumps at least a minor version (see
+[docs/skills/release/SKILL.md](docs/skills/release/SKILL.md)) — but no
+compatibility contract exists beyond that. 1.0 is where the contract starts.
+It's stated in the kit's own vocabulary — mechanism, policy (`TAILOR`
+blocks), and content — described in
+[pattern.md](plugins/harness-kit/skills/harness-kit/references/pattern.md).
+
+**Never touched by a template version bump, at any semver level:**
+
+- Anything inside a `# -- TAILOR: ... --` block — the policy filled in at
+  `init` (domain invariants, secret patterns added, provider choices).
+  Update mode diffs tailored files against the new template; it never
+  overwrites them.
+- `harness.conf` and any other file the manifest marks `# tailored` — same
+  diff-never-replace contract.
+- **All content you authored in the target repo** — every file under `docs/`
+  (architecture, conventions, agents, plans, evals, skills), plus `AGENTS.md`
+  and `CLAUDE.md`. Update mode only ever processes the `scripts/` mechanism
+  files the manifest pins, so authored content sits entirely outside its
+  scope — never read, diffed, or overwritten by an upgrade.
+- A mechanism file a release didn't change: update mode is a byte-for-byte
+  no-op, verifiable with `git diff` before committing the bump.
+
+**What each semver level means for a template version, once 1.0 ships:**
+
+- **Patch** — bug fixes and doc-only changes. No installed mechanism file's
+  *behavior* changes, though a checksum may (a fixed typo, a corrected
+  comment) — replaced wholesale like any mechanism file.
+- **Minor** — additive: a new hook, a new `verify.sh` gate, a new TAILOR
+  point, a new provider. Existing non-tailored mechanism files may be
+  replaced with new capability, but nothing that was passing starts failing,
+  and no file left untouched by the target repo changes meaning underneath
+  it without a corresponding new capability.
+- **Major** — a breaking mechanism change: different behavior for the same
+  hook event, a manifest/checksum format change, a shipped file renamed or
+  removed, or any upgrade that needs a manual step beyond running the kit's
+  update mode. Major-version migrations get a step-by-step note in
+  `CHANGELOG.md` (the release skill's changelog step) and, for
+  provider-landscape shifts specifically,
+  [references/migrations.md](plugins/harness-kit/skills/harness-kit/references/migrations.md).
+
+None of this is retroactive. 0.x releases today already treat mechanism
+behavior changes as at least minor, but make no compatibility promise beyond
+that — read the `CHANGELOG.md` entry for any 0.x bump before taking it.
+
+## Security
+
+Found a vulnerability in the shipped guard machinery? See
+[SECURITY.md](SECURITY.md) for how to report it privately, the response
+window, and which versions get fixes pre-1.0.
 
 ## License
 

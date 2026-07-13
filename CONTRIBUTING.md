@@ -38,3 +38,9 @@ back to the agent after each edit.
 ## Releases
 
 Maintainer-driven, via [docs/skills/release/SKILL.md](docs/skills/release/SKILL.md).
+
+## Security
+
+Found a vulnerability in a shipped guard or gate, rather than a bug in this
+PR? Don't open a public issue — see [SECURITY.md](SECURITY.md) for how to
+report it privately.

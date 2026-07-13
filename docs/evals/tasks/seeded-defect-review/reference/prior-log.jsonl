@@ -1,0 +1,2 @@
+{"ts":"2026-07-13T09:00:00Z","hook":"guard-secrets.sh","event":"deny","file":".env","detail":"blocked read of a secret file (.env)"}
+{"ts":"2026-07-13T09:01:00Z","hook":"format.sh","event":"lint-findings","file":"pricing/discount.py","detail":"ruff: E501 line too long"}
