@@ -107,6 +107,37 @@ else
     fi
 fi
 
+# ---- --help completeness (catches a header edit truncating the usage block) -
+# Both eval.sh and eval-harness.sh print their own header comment via
+# `sed -n 'START,ENDp' "$0"` on -h/--help. Growing the header (e.g. this
+# dimension's own doc paragraphs) without moving END silently truncates the
+# printed usage — proven the hard way once already (eval-harness.sh's END
+# was left at its pre-variant value after this dimension's header paragraph
+# was added, so --help stopped before --baseline/--expected-trials).
+# Checking for each script's OWN newest documented flag is the most sensitive
+# canary: it is the first thing to disappear if END is ever short again.
+if [ -f "$ROOT/scripts/eval-harness.sh" ]; then
+    help_out="$(bash "$ROOT/scripts/eval-harness.sh" --help 2>&1)"
+    if printf '%s\n' "$help_out" | grep -q -- '--baseline' \
+            && printf '%s\n' "$help_out" | grep -q -- '--expected-trials'; then
+        ok "eval-harness.sh --help prints its full option block (not truncated by a stale sed range)"
+    else
+        bad "eval-harness.sh --help is missing --baseline/--expected-trials — its usage sed range is likely shorter than its header comment"
+    fi
+else
+    ok "eval-harness.sh --help completeness (skipped: script absent)"
+fi
+if [ -f "$ROOT/scripts/eval.sh" ]; then
+    help_out="$(bash "$ROOT/scripts/eval.sh" --help 2>&1)"
+    if printf '%s\n' "$help_out" | grep -q -- '--variant'; then
+        ok "eval.sh --help prints its full option block, including --variant (not truncated by a stale sed range)"
+    else
+        bad "eval.sh --help is missing --variant — its usage sed range is likely shorter than its header comment"
+    fi
+else
+    ok "eval.sh --help completeness (skipped: script absent)"
+fi
+
 # ---- usage instrumentation: eval_usage_json extraction + row schema --------
 # Exact provider-reported usage per trial (token/cost/tool-call fields), pinned
 # by committed fixtures asserting the EXACT values the extractor pulls from a
@@ -283,7 +314,7 @@ else
             eval_result_json runsel-demo claude haiku capability positive 20260101-000000 2 false 1 0 /tmp/x 1700000000 task_failure
         } > "$rd/results.jsonl"
         out="$(_harness --results-dir "$htmp/results" --baseline "$htmp/no-such-baseline.json" 2>&1)"
-        if printf '%s\n' "$out" | grep -Eq 'runsel-demo[[:space:]]+capability[[:space:]]+haiku[[:space:]]+1/2'; then
+        if printf '%s\n' "$out" | grep -Eq 'runsel-demo[[:space:]]+capability[[:space:]]+haiku[[:space:]]+bare[[:space:]]+1/2'; then
             ok "eval-harness: newer run_started_at wins over a lexicographically-larger legacy run id"
         else
             bad "eval-harness: run selection did not pick the newer run"
@@ -494,8 +525,8 @@ else
             eval_result_json pairsel-demo claude haiku capability positive manual 1 false 1 0 /tmp/x 1700000000 task_failure
         } > "$rd/results.jsonl"
         out="$(_harness --results-dir "$htmp/results" --baseline "$htmp/no-such-baseline.json" 2>&1)"
-        if printf '%s\n' "$out" | grep -Eq 'pairsel-demo[[:space:]]+capability[[:space:]]+haiku[[:space:]]+0/1' \
-                && ! printf '%s\n' "$out" | grep -Eq 'pairsel-demo[[:space:]]+capability[[:space:]]+haiku[[:space:]]+2/3'; then
+        if printf '%s\n' "$out" | grep -Eq 'pairsel-demo[[:space:]]+capability[[:space:]]+haiku[[:space:]]+bare[[:space:]]+0/1' \
+                && ! printf '%s\n' "$out" | grep -Eq 'pairsel-demo[[:space:]]+capability[[:space:]]+haiku[[:space:]]+bare[[:space:]]+2/3'; then
             ok "eval-harness: run selection by (run, run_started_at) pair keeps a same-run-id collision from merging trials"
         else
             bad "eval-harness: expected only the newer run_started_at's 0/1 trials, not a merged 2/3"
@@ -557,6 +588,55 @@ else
             printf '    bare after step 1: %s\n    bare after step 2: %s\n    activated after step 2: %s\n    rc1=%s rc2=%s\n' \
                 "$bare_after_1" "$bare_after_2" "$activated_after_2" "$rc1" "$rc2"
             sed 's/^/    /' "$htmp/out1.log" "$htmp/out2.log"
+        fi
+
+        # The printed scoring table (not --update-baseline) must also let a
+        # human tell the two rows apart: same task/suite/model, different
+        # variant, so a VARIANT column is the only thing distinguishing them.
+        score_out="$(_harness --results-dir "$htmp/results" --baseline "$bl" 2>&1)"
+        if printf '%s\n' "$score_out" | grep -Eq 'variant-demo[[:space:]]+capability[[:space:]]+haiku[[:space:]]+bare[[:space:]]+3/3' \
+                && printf '%s\n' "$score_out" | grep -Eq 'variant-demo[[:space:]]+capability[[:space:]]+haiku[[:space:]]+plugin-activated[[:space:]]+2/3'; then
+            ok "eval-harness: the scoring table labels the bare and plugin-activated rows distinctly (VARIANT column)"
+        else
+            bad "eval-harness: the scoring table should print a VARIANT column distinguishing bare (3/3) from plugin-activated (2/3)"
+            printf '%s\n' "$score_out" | sed 's/^/    /'
+        fi
+        rm -rf "$htmp"
+    fi
+
+    # (x) TOUCHED must be scoped per (task, key=provider/model[/variant]), not
+    # merely per task. A retained BARE cell with a mismatched trial count must
+    # still WARN even when this update touches only the PLUGIN-ACTIVATED
+    # variant of the identical task/provider/model — proving the
+    # retained-cell warning isn't accidentally suppressed just because a
+    # same-task, different-variant cell was touched this run (a regression
+    # that collapsed TOUCHED back to a non-variant-aware task+provider/model
+    # shape would pass fixture (vii) but silently swallow this warning).
+    if ! htmp="$(mktemp -d "${TMPDIR:-/tmp}/test-eval-harness-XXXXXX")" || [ -z "$htmp" ]; then
+        bad "eval-harness fixtures: mktemp failed (per-variant retained-cell scoping)"
+    else
+        rd="$htmp/results/touched-variant-demo"; mkdir -p "$rd"
+        {
+            eval_result_json touched-variant-demo claude haiku capability positive run1 1 true 1 0 /tmp/x 1700000000 pass "" plugin-activated
+            eval_result_json touched-variant-demo claude haiku capability positive run1 2 true 1 0 /tmp/x 1700000000 pass "" plugin-activated
+            eval_result_json touched-variant-demo claude haiku capability positive run1 3 true 1 0 /tmp/x 1700000000 pass "" plugin-activated
+        } > "$rd/results.jsonl"
+        bl="$htmp/baselines.json"
+        # Pre-seed a RETAINED bare cell (2 trials — mismatched vs the default
+        # --expected-trials=3), shaped like a real legacy entry (no "variant"
+        # key of its own — see docs/evals/baselines.json). This update only
+        # touches the plugin-activated variant of the same task/provider/model.
+        printf '%s\n' '{"recorded":"1999-01-01","tasks":{"touched-variant-demo":{"suite":"capability","polarity":"positive","runs":{"claude/haiku":{"trials":2,"passes":2,"pass_at_k":1,"pass_hat_k":1,"pass_rate":1,"recorded":"1999-01-01"}}}}}' > "$bl"
+        _harness --results-dir "$htmp/results" --baseline "$bl" --update-baseline >"$htmp/out.log" 2>&1
+        rc=$?
+        has_activated="$(jq -r '.tasks["touched-variant-demo"].runs["claude/haiku/plugin-activated"] // "MISSING"' "$bl" 2>/dev/null)"
+        bare_intact="$(jq -r '.tasks["touched-variant-demo"].runs["claude/haiku"].trials // "MISSING"' "$bl" 2>/dev/null)"
+        if [ "$rc" -eq 0 ] && [ "$has_activated" != "MISSING" ] && [ "$bare_intact" = 2 ] \
+                && grep -q 'touched-variant-demo' "$htmp/out.log"; then
+            ok "eval-harness --update-baseline: a retained bare cell still warns on trial-count mismatch even when only its plugin-activated sibling was touched"
+        else
+            bad "eval-harness --update-baseline: retained bare cell (untouched) should still warn even though the plugin-activated variant of the same task was touched (rc=$rc, bare_intact=$bare_intact, has_activated=$has_activated)"
+            sed 's/^/    /' "$htmp/out.log"
         fi
         rm -rf "$htmp"
     fi

@@ -65,7 +65,7 @@ while [ $# -gt 0 ]; do
         --update-baseline) UPDATE=1; shift ;;
         --expected-trials) EXPECTED_TRIALS="$2"; shift 2 ;;
         --no-fail) FAIL_ON_REGRESSION=0; shift ;;
-        -h|--help) sed -n '2,35p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,48p' "$0"; exit 0 ;;
         *) die "unknown option: $1" ;;
     esac
 done
@@ -254,8 +254,8 @@ if [ "$UPDATE" -eq 1 ]; then
 fi
 
 base='{}'; [ -f "$BASELINE" ] && base=$(cat "$BASELINE")
-printf '%-26s %-8s %-16s %-6s %-8s %-8s %-7s %s\n' \
-    TASK SUITE MODEL PASS "pass@k" "pass^k" RATE "vs baseline"
+printf '%-26s %-8s %-16s %-18s %-6s %-8s %-8s %-7s %s\n' \
+    TASK SUITE MODEL VARIANT PASS "pass@k" "pass^k" RATE "vs baseline"
 regressions=0
 violations=0
 while IFS= read -r row; do
@@ -298,8 +298,8 @@ while IFS= read -r row; do
     if [ "${viol:-0}" -gt 0 ] 2>/dev/null; then
         flag="$flag ** NEGATIVE VIOLATION"; violations=$((violations+1))
     fi
-    printf '%-26s %-8s %-16s %-6s %-8s %-8s %-7s %s%s\n' \
-        "$task" "$suite" "$model" "$passes/$trials" "$pk" "$phk" "$rate" "$note" "$flag"
+    printf '%-26s %-8s %-16s %-18s %-6s %-8s %-8s %-7s %s%s\n' \
+        "$task" "$suite" "$model" "$variant" "$passes/$trials" "$pk" "$phk" "$rate" "$note" "$flag"
 done <<EOF
 $AGG
 EOF
