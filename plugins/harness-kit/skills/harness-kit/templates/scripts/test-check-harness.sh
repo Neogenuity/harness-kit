@@ -680,6 +680,175 @@ jobs:
 EOF
 assert_ok_without "10d: SHA-pinned actions (bare and single-quoted) and a local ref are clean" "$W" "mutable ref"
 
+# --- check #8d: semantic hook-wiring validation ------------------------------
+# Needs jq (tuple parse) and a sha tool (a hook-wired install is adopted, so the
+# fixture ships a real manifest to keep #9 green). new_hookwired_fixture builds a
+# complete, check-harness-clean install declaring all three hook-wired providers;
+# each case mutates ONE thing and asserts the specific failure class.
+if command -v jq >/dev/null 2>&1 && { command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; }; then
+    hsha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'; else sha256sum "$1" | awk '{print $1}'; fi; }
+    # repin_hookwired <work> — manifest over every mechanism file on disk
+    # (check-harness.sh, harness.conf, every scripts/hooks/*.sh), so #9's
+    # completeness/checksum checks pass after files are added or edited.
+    repin_hookwired() {
+        local w="$1" f
+        { printf '# harness-kit 9.9.9\n'
+          for f in scripts/check-harness.sh scripts/harness.conf; do
+              [ -f "$w/$f" ] && printf '%s  %s\n' "$(hsha "$w/$f")" "$f"
+          done
+          for f in "$w"/scripts/hooks/*.sh; do
+              [ -f "$f" ] && printf '%s  scripts/hooks/%s\n' "$(hsha "$f")" "$(basename "$f")"
+          done
+        } > "$w/scripts/.harness-manifest"
+    }
+    new_hookwired_fixture() {
+        local work s
+        work=$(new_fixture)
+        mkdir -p "$work/scripts/hooks" "$work/.claude" "$work/.cursor" "$work/.codex"
+        printf 'SECRET_PATTERNS=".env"\nHOOK_WIRED_PROVIDERS=".claude .cursor .codex"\n' > "$work/scripts/harness.conf"
+        for s in session-context guard-secrets guard-config format guard-project-policy; do
+            printf '#!/usr/bin/env bash\nexit 0\n' > "$work/scripts/hooks/$s.sh"
+            chmod +x "$work/scripts/hooks/$s.sh"
+        done
+        cat > "$work/.claude/settings.json" <<'JSON'
+{ "permissions": { "deny": ["Read(**/.env)"] },
+  "hooks": {
+    "SessionStart": [ { "hooks": [ { "type": "command", "command": "scripts/hooks/session-context.sh" } ] } ],
+    "PreToolUse": [
+      { "matcher": "Read|Grep", "hooks": [ { "type": "command", "command": "scripts/hooks/guard-secrets.sh" } ] },
+      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "scripts/hooks/guard-config.sh" } ] } ],
+    "PostToolUse": [ { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "scripts/hooks/format.sh" } ] } ],
+    "Stop": [ { "hooks": [ { "type": "command", "command": "scripts/hooks/guard-project-policy.sh" } ] } ] } }
+JSON
+        cat > "$work/.cursor/hooks.json" <<'JSON'
+{ "version": 1, "hooks": {
+    "sessionStart": [ { "command": "scripts/hooks/session-context.sh" } ],
+    "afterFileEdit": [ { "command": "scripts/hooks/format.sh" } ],
+    "beforeReadFile": [ { "command": "scripts/hooks/guard-secrets.sh" } ],
+    "stop": [ { "command": "scripts/hooks/guard-project-policy.sh" } ] } }
+JSON
+        cat > "$work/.codex/hooks.json" <<'JSON'
+{ "hooks": {
+    "SessionStart": [ { "hooks": [ { "type": "command", "command": "scripts/hooks/session-context.sh" } ] } ],
+    "PreToolUse": [ { "hooks": [
+      { "type": "command", "command": "scripts/hooks/guard-secrets.sh" },
+      { "type": "command", "command": "scripts/hooks/guard-config.sh" } ] } ],
+    "PostToolUse": [ { "matcher": "apply_patch", "hooks": [ { "type": "command", "command": "scripts/hooks/format.sh" } ] } ],
+    "Stop": [ { "hooks": [ { "type": "command", "command": "scripts/hooks/guard-project-policy.sh" } ] } ] } }
+JSON
+        repin_hookwired "$work"
+        printf '%s' "$work"
+    }
+
+    W=$(new_hookwired_fixture)
+    assert_ok "8d: a complete hook-wired install passes" "$W"
+
+    W=$(new_hookwired_fixture)
+    jq 'del(.hooks)' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
+    assert_flags "8d: hooks object deleted (headline repro) is flagged" "$W" "guard session-context.sh is not wired in .claude/settings.json"
+
+    W=$(new_hookwired_fixture); rm "$W/.cursor/hooks.json"
+    assert_flags "8d: a declared provider's deleted config is flagged" "$W" "hook config .cursor/hooks.json is missing"
+
+    W=$(new_hookwired_fixture)
+    jq '.hooks.Stop[0].hooks += [{"type":"command","command":"scripts/hooks/guard-secrets.sh"}] | del(.hooks.PreToolUse[0])' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
+    assert_flags "8d: a guard on the wrong event is flagged" "$W" "guard-secrets.sh is wired on event 'Stop'"
+
+    W=$(new_hookwired_fixture)
+    jq '(.hooks.PreToolUse[] | select(.matcher=="Read|Grep") | .matcher) = "Read"' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
+    assert_flags "8d: a weakened matcher is flagged" "$W" "which does not cover the required 'Read|Grep'"
+
+    # A WIDENED or reordered matcher fires on at least every required event, so it
+    # is not a weakening and must pass (config matcher is tailored, not pinned).
+    W=$(new_hookwired_fixture)
+    jq '(.hooks.PreToolUse[] | select(.matcher=="Read|Grep") | .matcher) = "Grep|Read|Fetch"' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
+    assert_ok "8d: a widened/reordered matcher (superset of required) still passes" "$W"
+
+    W=$(new_hookwired_fixture)
+    jq '.hooks.Stop[0].hooks += [{"type":"command","command":"scripts/hooks/ghost.sh"}]' "$W/.codex/hooks.json" > "$W/.codex/s" && mv "$W/.codex/s" "$W/.codex/hooks.json"
+    assert_flags "8d: a command pointing at a missing script is flagged" "$W" "points at 'scripts/hooks/ghost.sh'"
+
+    W=$(new_hookwired_fixture)
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$W/scripts/hooks/project-extra.sh"; chmod +x "$W/scripts/hooks/project-extra.sh"
+    jq '.hooks.PreToolUse += [{"matcher":"Bash","hooks":[{"type":"command","command":"scripts/hooks/project-extra.sh"}]}]' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
+    repin_hookwired "$W"
+    assert_ok "8d: a tailored-but-complete config (extra project guard) still passes" "$W"
+
+    W=$(new_hookwired_fixture)
+    grep -v '^HOOK_WIRED_PROVIDERS=' "$W/scripts/harness.conf" > "$W/scripts/hc" && mv "$W/scripts/hc" "$W/scripts/harness.conf"
+    repin_hookwired "$W"
+    assert_flags "8d: undeclared HOOK_WIRED_PROVIDERS on an adopted harness is flagged" "$W" "declares no HOOK_WIRED_PROVIDERS"
+fi
+
+# --- agent-stub coherence (sync-agent-skills.sh --check, via check #3) --------
+# check #3 delegates to sync-agent-skills.sh --check, which now validates agent
+# stubs too (bidirectional set equality). Needs the generator present — new_fixture
+# copies only check-harness.sh — plus a canonical persona and its generated stubs.
+if [ -f "$SCRIPTS_DIR/sync-agent-skills.sh" ]; then
+    new_agents_fixture() {           # $1 optional AGENT_PROVIDERS value
+        local work provs="${1:-.claude .cursor .codex .opencode}"
+        work=$(new_fixture)
+        cp "$SCRIPTS_DIR/sync-agent-skills.sh" "$work/scripts/"; chmod +x "$work/scripts/sync-agent-skills.sh"
+        printf 'AGENT_PROVIDERS="%s"\n' "$provs" > "$work/scripts/harness.conf"
+        mkdir -p "$work/docs/agents"
+        cat > "$work/docs/agents/code-reviewer.md" <<'MD'
+---
+name: code-reviewer
+description: Inferential reviewer for a completed diff AFTER verify.sh passes. Delegate before opening a PR.
+tools: Read, Grep, Glob, Bash
+---
+
+# Code Reviewer Agent
+
+Body.
+MD
+        ( cd "$work" && bash scripts/sync-agent-skills.sh >/dev/null 2>&1 )
+        printf '%s' "$work"
+    }
+
+    W=$(new_agents_fixture)
+    assert_ok "agent-stubs: canonical persona + generated stubs pass check-harness" "$W"
+
+    W=$(new_agents_fixture)
+    sed 's/^description: .*/description: A completely different routing signal./' "$W/docs/agents/code-reviewer.md" > "$W/docs/agents/c" && mv "$W/docs/agents/c" "$W/docs/agents/code-reviewer.md"
+    assert_flags "agent-stubs: a canonical-description change fails the TOML stub (every provider)" "$W" ".codex/agents/code-reviewer.toml does not match the generator output"
+
+    W=$(new_agents_fixture)
+    sed 's/AFTER/BEFORE/' "$W/.claude/agents/code-reviewer.md" > "$W/.claude/c" && mv "$W/.claude/c" "$W/.claude/agents/code-reviewer.md"
+    assert_flags "agent-stubs: a stale stub description is flagged" "$W" ".claude/agents/code-reviewer.md does not match the generator output"
+
+    W=$(new_agents_fixture); rm "$W/.opencode/agents/code-reviewer.md"
+    assert_flags "agent-stubs: a missing stub is flagged" "$W" ".opencode/agents/code-reviewer.md is missing"
+
+    W=$(new_agents_fixture); printf -- '---\nname: ghost\n---\n' > "$W/.claude/agents/ghost.md"
+    assert_flags "agent-stubs: an orphan stub is flagged" "$W" "ORPHAN: .claude/agents/ghost.md"
+
+    W=$(new_agents_fixture ".claude .cursor")
+    assert_ok "agent-stubs: a legitimate subset declaration passes" "$W"
+
+    W=$(new_agents_fixture); rm -rf "$W/.codex/agents"
+    assert_flags "agent-stubs: deleting a declared provider's entire agents dir fails" "$W" ".codex/agents/code-reviewer.toml is missing"
+
+    # Provider-specific frontmatter: OpenCode marks a subagent with mode:subagent
+    # (provider matrix); the other Markdown providers must NOT carry it.
+    W=$(new_agents_fixture)
+    if grep -qx 'mode: subagent' "$W/.opencode/agents/code-reviewer.md" \
+        && ! grep -q 'mode:' "$W/.claude/agents/code-reviewer.md"; then
+        echo "ok:   agent-stubs: OpenCode stub carries 'mode: subagent'; Claude stub does not"
+    else
+        echo "FAIL: agent-stubs: OpenCode 'mode: subagent' frontmatter not emitted as expected"
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W"
+
+    if grep -q 'CANONICAL_AGENTS' "$SCRIPTS_DIR/sync-agent-skills.sh"; then
+        echo "ok:   agent-stubs: CANONICAL_AGENTS is consumed by mechanism code (sync-agent-skills.sh)"
+    else
+        echo "FAIL: agent-stubs: CANONICAL_AGENTS is not consumed by any mechanism code"
+        fails=$((fails + 1))
+    fi
+fi
+
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails check-harness case(s)"
     exit 1

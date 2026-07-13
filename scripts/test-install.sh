@@ -48,9 +48,67 @@ make_fixture() {
     ( cd "$w" && git init -q && mkdir -p src && printf 'echo hi\n' > src/app.sh )
     harness_install_mechanism "$SCRIPTS_DIR" "$w"
     harness_append_gitignore "$w"
+    # This is a bare install-MECHANICS fixture: no provider hook configs or agent
+    # personas are authored (that is the model-graded half). Declare the validated
+    # provider sets EMPTY so check-harness's #8d hook check and agent-stub check
+    # validate zero providers instead of failing on absent configs. Set BEFORE the
+    # manifest so the harness.conf pin matches. Robust to a source conf that never
+    # had the lines (strip-then-append). The non-empty sets get their own cases.
+    { grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS)=' "$w/scripts/harness.conf"
+      printf 'HOOK_WIRED_PROVIDERS=""\nAGENT_PROVIDERS=""\n'
+    } > "$w/scripts/harness.conf.tmp" && mv "$w/scripts/harness.conf.tmp" "$w/scripts/harness.conf"
     harness_generate_manifest "$w" "$KIT_VERSION" > "$w/scripts/.harness-manifest"
     ( cd "$w" && git_c add -A && git_c commit -qm init >/dev/null )
     printf '%s' "$w"
+}
+
+# repin <root> — regenerate the manifest after a harness.conf edit so check #9's
+# checksum verification keeps passing (only harness.conf is manifest-pinned among
+# the files these migration cases mutate; provider configs are not).
+repin() {
+    harness_repin_manifest "$1" "$KIT_VERSION" > "$1/scripts/.hm" \
+        && mv "$1/scripts/.hm" "$1/scripts/.harness-manifest"
+}
+
+# write_provider_hook_configs <root> — the three shipped-shape hook configs, with
+# .claude's deny list derived from the fixture's SECRET_PATTERNS (so check #8
+# passes) and every guard on its frozen-contract event/matcher (so #8d passes).
+write_provider_hook_configs() {
+    local root="$1" pat sp deny=""
+    sp=$(. "$root/scripts/harness.conf" && printf '%s' "$SECRET_PATTERNS")
+    set -f
+    for pat in $sp; do deny="$deny \"Read($pat)\","; done
+    set +f
+    deny=${deny%,}
+    mkdir -p "$root/.claude" "$root/.cursor" "$root/.codex"
+    cat > "$root/.claude/settings.json" <<JSON
+{ "permissions": { "deny": [$deny ] },
+  "hooks": {
+    "SessionStart": [ { "hooks": [ { "type": "command", "command": "scripts/hooks/session-context.sh" } ] } ],
+    "PreToolUse": [
+      { "matcher": "Read|Grep", "hooks": [ { "type": "command", "command": "scripts/hooks/guard-secrets.sh" } ] },
+      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "scripts/hooks/guard-config.sh" } ] } ],
+    "PostToolUse": [ { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "scripts/hooks/format.sh" } ] } ],
+    "Stop": [ { "hooks": [ { "type": "command", "command": "scripts/hooks/guard-project-policy.sh" } ] } ] } }
+JSON
+    cat > "$root/.cursor/hooks.json" <<'JSON'
+{ "version": 1, "hooks": {
+    "sessionStart": [ { "command": "scripts/hooks/session-context.sh" } ],
+    "afterFileEdit": [ { "command": "scripts/hooks/format.sh" } ],
+    "beforeReadFile": [ { "command": "scripts/hooks/guard-secrets.sh" } ],
+    "stop": [ { "command": "scripts/hooks/guard-project-policy.sh" } ] } }
+JSON
+    # Codex uses the shipped Git-root-resolver wrapper so test-codex-hooks-cwd.sh
+    # (a guard test check #6 runs inside this full-install fixture) is satisfied.
+    cat > "$root/.codex/hooks.json" <<'JSON'
+{ "hooks": {
+    "SessionStart": [ { "hooks": [ { "type": "command", "command": "bash -c 'root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; exec bash \"$root/scripts/hooks/session-context.sh\"'" } ] } ],
+    "PreToolUse": [ { "hooks": [
+      { "type": "command", "command": "bash -c 'root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; exec bash \"$root/scripts/hooks/guard-secrets.sh\"'" },
+      { "type": "command", "command": "bash -c 'root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; exec bash \"$root/scripts/hooks/guard-config.sh\"'" } ] } ],
+    "PostToolUse": [ { "matcher": "apply_patch", "hooks": [ { "type": "command", "command": "bash -c 'root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; exec bash \"$root/scripts/hooks/format.sh\"'" } ] } ],
+    "Stop": [ { "hooks": [ { "type": "command", "command": "bash -c 'root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; exec bash \"$root/scripts/hooks/guard-project-policy.sh\"'" } ] } ] } }
+JSON
 }
 
 # write_mirrored_claude_settings <root> — a .claude/settings.json whose deny list
@@ -235,6 +293,105 @@ else
     fail "migration: update did not add the missing mechanism file"
 fi
 rm -rf "$F"
+
+# --- HOOK_WIRED_PROVIDERS migration for a legacy pre-declaration install -------
+# harness.conf is diff-only on update, so a pre-v0.14 install never grows the
+# declaration on its own. Update/audit must PROPOSE a set and record the user's
+# CONFIRMED choice — never infer it from whichever configs survive. This walks
+# the whole flow: undeclared→loud, a pre-migration deletion that must NOT be
+# silently adopted, confirmation, idempotency, and the post-migration bite.
+if command -v jq >/dev/null 2>&1; then
+    F=$(make_fixture)
+    # Simulate the legacy state: strip the declaration entirely (make_fixture
+    # leaves it set-but-empty; a pre-v0.14 conf had no line at all).
+    grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS)=' "$F/scripts/harness.conf" > "$F/scripts/hc" \
+        && mv "$F/scripts/hc" "$F/scripts/harness.conf"
+    repin "$F"
+    if ! harness_conf_declared "$F" HOOK_WIRED_PROVIDERS; then
+        pass "migration: a pre-declaration harness.conf reads as undeclared"
+    else
+        fail "migration: undeclared conf misreported as declared"
+    fi
+    write_provider_hook_configs "$F"
+    rm "$F/.cursor/hooks.json"            # pre-migration deletion of one config
+    out=$(cd "$F" && bash scripts/check-harness.sh 2>&1); rc=$?
+    if [ "$rc" != "0" ] && printf '%s' "$out" | grep -qF "declares no HOOK_WIRED_PROVIDERS"; then
+        pass "migration: undeclared adopted harness stays a loud error (deletion not silently adopted)"
+    else
+        fail "migration: undeclared adopted harness not flagged (rc=$rc)" "$out"
+    fi
+    # Confirm the FULL wired set (the user's choice) — NOT inferred from the
+    # survivors, which would have blessed the .cursor deletion.
+    harness_conf_declare "$F" HOOK_WIRED_PROVIDERS ".claude .cursor .codex"
+    harness_conf_declare "$F" AGENT_PROVIDERS ""
+    repin "$F"
+    out=$(cd "$F" && bash scripts/check-harness.sh 2>&1); rc=$?
+    if [ "$rc" != "0" ] && printf '%s' "$out" | grep -qF ".cursor/hooks.json is missing"; then
+        pass "migration: after confirming the full set, the deleted .cursor config surfaces as an ERROR"
+    else
+        fail "migration: deleted config not surfaced post-migration (rc=$rc)" "$out"
+    fi
+    # Second update: idempotent — no duplicate line, and it does NOT reset a value
+    # the user has since edited (proves a re-run of the migration is a no-op).
+    harness_conf_declare "$F" HOOK_WIRED_PROVIDERS ".claude"
+    n=$(grep -c '^HOOK_WIRED_PROVIDERS=' "$F/scripts/harness.conf")
+    v=$(grep '^HOOK_WIRED_PROVIDERS=' "$F/scripts/harness.conf")
+    if [ "$n" -eq 1 ] && [ "$v" = 'HOOK_WIRED_PROVIDERS=".claude .cursor .codex"' ]; then
+        pass "migration: second update is idempotent (no duplicate line, no reset)"
+    else
+        fail "migration: not idempotent (n=$n v=$v)"
+    fi
+    # Restore the config → the migrated harness is green.
+    write_provider_hook_configs "$F"
+    out=$(cd "$F" && bash scripts/check-harness.sh 2>&1); rc=$?
+    [ "$rc" = "0" ] && pass "migration: restoring the config makes the migrated harness green" \
+        || fail "migration: restored config still failing (rc=$rc)" "$out"
+    # Legacy-upgrade bite: post-migration, deleting the hooks object is caught.
+    jq 'del(.hooks)' "$F/.claude/settings.json" > "$F/.claude/s" && mv "$F/.claude/s" "$F/.claude/settings.json"
+    out=$(cd "$F" && bash scripts/check-harness.sh 2>&1); rc=$?
+    if [ "$rc" != "0" ] && printf '%s' "$out" | grep -qF "is not wired in .claude/settings.json"; then
+        pass "migration: legacy-upgrade — deleting hooks post-migration is flagged"
+    else
+        fail "migration: post-migration hooks deletion not flagged (rc=$rc)" "$out"
+    fi
+    rm -rf "$F"
+fi
+
+# --- real shipped provider hook configs validate against the frozen contract ---
+# Not synthetic: install the ACTUAL templates/providers/* hook configs and prove
+# every tuple in the provider-matrix hook table holds. Guarded on the templates
+# dir being reachable as a sibling of scripts/ — true when this runs as the
+# template copy (SCRIPTS_DIR = templates/scripts) during verify.sh's template-tests
+# gate; skipped in a user install that ships only scripts/.
+PROVIDERS_TPL="$SCRIPTS_DIR/../providers"
+if command -v jq >/dev/null 2>&1 && [ -d "$PROVIDERS_TPL" ]; then
+    F=$(mktemp -d)
+    ( cd "$F" && git init -q )
+    harness_install_mechanism "$SCRIPTS_DIR" "$F"
+    harness_append_gitignore "$F"
+    { grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS)=' "$F/scripts/harness.conf"
+      printf 'HOOK_WIRED_PROVIDERS=".claude .cursor .codex"\nAGENT_PROVIDERS=""\n'
+    } > "$F/scripts/hc" && mv "$F/scripts/hc" "$F/scripts/harness.conf"
+    mkdir -p "$F/.claude" "$F/.cursor" "$F/.codex"
+    cp "$PROVIDERS_TPL/claude/settings.json" "$F/.claude/settings.json"
+    cp "$PROVIDERS_TPL/cursor/hooks.json" "$F/.cursor/hooks.json"
+    cp "$PROVIDERS_TPL/codex/hooks.json" "$F/.codex/hooks.json"
+    harness_generate_manifest "$F" "$KIT_VERSION" > "$F/scripts/.harness-manifest"
+    out=$(cd "$F" && bash scripts/check-harness.sh 2>&1); rc=$?
+    if [ "$rc" = "0" ]; then
+        pass "real templates: shipped provider hook configs validate all tuples (#8d)"
+    else
+        fail "real templates: shipped hook configs failed check-harness" "$out"
+    fi
+    jq 'del(.hooks)' "$F/.claude/settings.json" > "$F/.claude/s" && mv "$F/.claude/s" "$F/.claude/settings.json"
+    out=$(cd "$F" && bash scripts/check-harness.sh 2>&1); rc=$?
+    if [ "$rc" != "0" ] && printf '%s' "$out" | grep -qF "is not wired in .claude/settings.json"; then
+        pass "real templates: deleting .hooks from the shipped settings.json is flagged"
+    else
+        fail "real templates: #8d did not bite the shipped settings.json (rc=$rc)" "$out"
+    fi
+    rm -rf "$F"
+fi
 
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails install-mechanism case(s)"
