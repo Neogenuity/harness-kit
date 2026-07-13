@@ -147,10 +147,14 @@ agent_fm_field() {
     ' "$1"
 }
 
-# render_agent_md <name> <desc> <tools> <title> <slug>
+# render_agent_md <name> <desc> <tools> <title> <slug> [extra_fm_line]
+# extra_fm_line is an optional frontmatter line appended after tools (OpenCode
+# marks a subagent with `mode: subagent`, per the provider matrix).
 render_agent_md() {
-    printf -- '---\nname: %s\ndescription: %s\ntools: %s\n---\n\n# %s\n\nCanonical source: `%s/%s.md`\n\nRead that file for the full persona before delegating. This stub only registers the agent with the harness — edit the canonical doc, then run `bash scripts/sync-agent-skills.sh`.\n' \
-        "$1" "$2" "$3" "$4" "$CANONICAL_AGENTS" "$5"
+    local extra=""
+    [ -n "${6:-}" ] && extra="$6"$'\n'
+    printf -- '---\nname: %s\ndescription: %s\ntools: %s\n%s---\n\n# %s\n\nCanonical source: `%s/%s.md`\n\nRead that file for the full persona before delegating. This stub only registers the agent with the harness — edit the canonical doc, then run `bash scripts/sync-agent-skills.sh`.\n' \
+        "$1" "$2" "$3" "$extra" "$4" "$CANONICAL_AGENTS" "$5"
 }
 
 # render_agent_toml <name> <desc> <tools> <slug>
@@ -191,6 +195,9 @@ if [ "$agent_providers_declared" -eq 1 ]; then
                 .codex)
                     dest="$ROOT/$provider/agents/$slug.toml"; dest_rel="$provider/agents/$slug.toml"
                     stub=$(render_agent_toml "$a_name" "$a_desc" "$a_tools" "$slug") ;;
+                .opencode)
+                    dest="$ROOT/$provider/agents/$slug.md"; dest_rel="$provider/agents/$slug.md"
+                    stub=$(render_agent_md "$a_name" "$a_desc" "$a_tools" "$a_title" "$slug" "mode: subagent") ;;
                 *)
                     dest="$ROOT/$provider/agents/$slug.md"; dest_rel="$provider/agents/$slug.md"
                     stub=$(render_agent_md "$a_name" "$a_desc" "$a_tools" "$a_title" "$slug") ;;

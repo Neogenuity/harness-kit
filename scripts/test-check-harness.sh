@@ -829,6 +829,18 @@ MD
     W=$(new_agents_fixture); rm -rf "$W/.codex/agents"
     assert_flags "agent-stubs: deleting a declared provider's entire agents dir fails" "$W" ".codex/agents/code-reviewer.toml is missing"
 
+    # Provider-specific frontmatter: OpenCode marks a subagent with mode:subagent
+    # (provider matrix); the other Markdown providers must NOT carry it.
+    W=$(new_agents_fixture)
+    if grep -qx 'mode: subagent' "$W/.opencode/agents/code-reviewer.md" \
+        && ! grep -q 'mode:' "$W/.claude/agents/code-reviewer.md"; then
+        echo "ok:   agent-stubs: OpenCode stub carries 'mode: subagent'; Claude stub does not"
+    else
+        echo "FAIL: agent-stubs: OpenCode 'mode: subagent' frontmatter not emitted as expected"
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W"
+
     if grep -q 'CANONICAL_AGENTS' "$SCRIPTS_DIR/sync-agent-skills.sh"; then
         echo "ok:   agent-stubs: CANONICAL_AGENTS is consumed by mechanism code (sync-agent-skills.sh)"
     else
