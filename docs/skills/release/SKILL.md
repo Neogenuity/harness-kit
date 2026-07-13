@@ -50,9 +50,12 @@ templates being shipped, and an annotated tag pushed.
 
 - `bash scripts/verify.sh` passes on the release commit.
 - `git show v<version>` shows the tag on the release commit.
-- `plugins/harness-kit/VERSION`, both plugin.json versions, the manifest
-  header, and the CHANGELOG heading all state the same version
-  (`check-packaging.sh` enforces the manifest trio).
+- `plugins/harness-kit/VERSION`, both plugin.json versions, and the
+  CHANGELOG heading all state the same version (`check-packaging.sh`
+  enforces the version trio). The `scripts/.harness-manifest` header matches
+  only when step 5 ran — it records the last release that changed
+  `templates/scripts/`, so it legitimately lags on a docs-only release
+  (v0.13.0 shipped with the header at 0.12.0).
 - `grep -nE '\bv?[0-9]+\.[0-9]+\.[0-9]+' README.md` returns no kit-version
   claims that contradict `plugins/harness-kit/VERSION` (install-command
   examples and provider version stamps are fine).

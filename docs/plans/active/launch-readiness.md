@@ -90,6 +90,16 @@ link-checks pass on every doc this plan touches.
 
 ## Progress
 
+- 2026-07-13 — Post-v0.13.0 cross-review (Codex gpt-5.6-sol, claims
+  independently re-verified in-repo, its headline hook-wiring hole reproduced
+  empirically) landed two things here: the README Status-section links to
+  this plan were dead — they pointed at `docs/plans/launch-readiness.md`,
+  the pre-activation path, invisible to `check-harness.sh`'s link checker
+  (which scans only `AGENTS.md` files and `docs/`) — fixed inline; and the
+  review's six mechanism/assurance findings were scoped into a new queued
+  plan, [../provider-wiring-assurance.md](../provider-wiring-assurance.md),
+  per this plan's out-of-scope fence ("that gap becomes its own plan").
+  Root-README link-checking itself stays with the queued doc-gardening plan.
 - 2026-07-13 — Workstream C (parallel-track, isolated worktree) landed items
   4–6 plus the CONTRIBUTING review, and closed out item 3's content-level
   sweep (the filename-level git-history sweep already covered by the

@@ -58,7 +58,7 @@ Repo references that must stay honest belong in markdown links (the CI link
 check walks every doc under `docs/`); prose and backtick mentions of
 not-yet-existing paths are legal — queued plans name future files by design.
 
-## Roadmap (set 2026-07-10, re-sorted 2026-07-12)
+## Roadmap (set 2026-07-10, re-sorted 2026-07-13)
 
 Shipped: **v0.13.0** — reviewer loop + skill split (the canonical `code-reviewer`
 persona with a v1-compatible findings schema and a seeded-defect catch-rate eval
@@ -119,15 +119,22 @@ below.
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
-| 2 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
-| 3 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
+| 1 | [provider-wiring-assurance.md](provider-wiring-assurance.md) | Semantic hook-wiring + agent-stub checks, the unshipped OpenCode/Cursor wiring, init preflight, update recovery for plugin installs, eval acceptance floors |
+| 2 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
+| 3 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
+| 4 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
 
 **Ordering rationale.** Claim-to-implementation gaps went first — plans
 machinery (v0.6.0) closed the space between what the docs promise and what
 ships, then install/update-verification (v0.7.0) put the core product boundary
 (the `init`/`update` workflow) under an automated deterministic test, the
-largest previously unowned reliability gap. With those shipped, measurement
+largest previously unowned reliability gap. The 2026-07-13 re-sort applies the
+same logic: provider-wiring-assurance jumped to the head of the queue because
+a post-v0.13.0 cross-review reproduced a claim-to-implementation gap in the
+wiring itself — `check-harness.sh` reports a coherent harness with every
+Claude Code hook deleted from `.claude/settings.json` — and its scope is
+mostly mechanism checks that displace no dependency chain, the same profile
+that let v0.11.0 jump the queue. With those shipped, measurement
 (behavioral evals) came next: it landed before every component that must
 prove its value — the reviewer loop is validated by the seeded-defect eval
 the evals plan makes possible. Hook-hardening led the 2026-07-12 re-sort and

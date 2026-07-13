@@ -175,12 +175,16 @@ checklist:
 - [x] Re-verify the provider matrix against current harness docs
       (re-validated 2026-07-10; hook event names are still evolving — check
       the per-fact stamps before wiring a provider you haven't used lately)
-- [x] Tag releases — every release is tagged on its release commit; update
-      mode recovers old templates by the tag matching the manifest header
+- [x] Tag releases — every release is tagged on its release commit. Update
+      mode's old-template recovery targets the tag matching the manifest
+      header, but a tested recovery path for installs without the kit repo's
+      git history (plugin cache, plain copies) is still being defined —
+      tracked in
+      [docs/plans/provider-wiring-assurance.md](docs/plans/provider-wiring-assurance.md)
 - [ ] Demo recording of `init` on a fresh repo — tracked in
-      [docs/plans/launch-readiness.md](docs/plans/launch-readiness.md)
+      [docs/plans/active/launch-readiness.md](docs/plans/active/launch-readiness.md)
 - [ ] Move to the `neogenuity` org and update install commands — tracked in
-      [docs/plans/launch-readiness.md](docs/plans/launch-readiness.md)
+      [docs/plans/active/launch-readiness.md](docs/plans/active/launch-readiness.md)
 
 ## What 1.0 promises
 
