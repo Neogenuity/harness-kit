@@ -111,25 +111,30 @@ rows + strict Agent Skills validation + matrix stamping
 **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
 ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
-**Active:** [launch-readiness.md](active/launch-readiness.md) — parallel-track;
-doc items 3–6 (SECURITY.md, "what 1.0 promises", supported-platforms, content
-hygiene sweep) shipped in v0.13.0, while the demo, the org move, and the public
-flip remain maintainer actions. The next mechanism plan activates from the queue
+**Active:** [provider-wiring-assurance.md](active/provider-wiring-assurance.md) —
+the mechanism plan for **v0.14.0** (semantic hook-wiring + agent-stub coherence
+checks, the OpenCode/Cursor wiring descoped with a dated matrix rationale, init
+preflight, update recovery for plugin installs, eval acceptance floors);
+activated 2026-07-13 after a `gpt-5.6-sol` execution review. And
+[launch-readiness.md](active/launch-readiness.md) — parallel-track; doc items
+3–6 (SECURITY.md, "what 1.0 promises", supported-platforms, content hygiene
+sweep) shipped in v0.13.0, while the demo, the org move, and the public flip
+remain maintainer actions. The next mechanism plan activates from the queue
 below.
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [provider-wiring-assurance.md](provider-wiring-assurance.md) | Semantic hook-wiring + agent-stub checks, the unshipped OpenCode/Cursor wiring, init preflight, update recovery for plugin installs, eval acceptance floors |
-| 2 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
-| 3 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
-| 4 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
+| 1 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
+| 2 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
+| 3 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
 
 **Ordering rationale.** Claim-to-implementation gaps went first — plans
 machinery (v0.6.0) closed the space between what the docs promise and what
 ships, then install/update-verification (v0.7.0) put the core product boundary
 (the `init`/`update` workflow) under an automated deterministic test, the
 largest previously unowned reliability gap. The 2026-07-13 re-sort applies the
-same logic: provider-wiring-assurance jumped to the head of the queue because
+same logic: provider-wiring-assurance jumped to the head of the queue (now
+active as v0.14.0) because
 a post-v0.13.0 cross-review reproduced a claim-to-implementation gap in the
 wiring itself — `check-harness.sh` reports a coherent harness with every
 Claude Code hook deleted from `.claude/settings.json` — and its scope is

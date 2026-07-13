@@ -97,7 +97,7 @@ link-checks pass on every doc this plan touches.
   the pre-activation path, invisible to `check-harness.sh`'s link checker
   (which scans only `AGENTS.md` files and `docs/`) — fixed inline; and the
   review's six mechanism/assurance findings were scoped into a new queued
-  plan, [../provider-wiring-assurance.md](../provider-wiring-assurance.md),
+  plan, [provider-wiring-assurance.md](provider-wiring-assurance.md),
   per this plan's out-of-scope fence ("that gap becomes its own plan").
   Root-README link-checking itself stays with the queued doc-gardening plan.
 - 2026-07-13 — Workstream C (parallel-track, isolated worktree) landed items

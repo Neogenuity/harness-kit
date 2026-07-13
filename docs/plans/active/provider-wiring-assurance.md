@@ -1,6 +1,6 @@
 # Provider wiring assurance
 
-Status: queued
+Status: **active** — v0.14.0 (activated 2026-07-13)
 
 ## Objective
 
@@ -149,9 +149,9 @@ roadmap's ordering rationale since v0.6.0.
    capability cells, if any, gate a release — with the rationale either way.
    *Acceptance: a collision test proves a bare and a plugin-activated cell
    for the same task/provider/model coexist in
-   [../evals/baselines.json](../evals/baselines.json); the new cells are
+   [../../evals/baselines.json](../../evals/baselines.json); the new cells are
    recorded at the standard trial count; the decision lands in this plan's
-   Decisions log and in [../evals/README.md](../evals/README.md) if the
+   Decisions log and in [../../evals/README.md](../../evals/README.md) if the
    policy changes.*
 
 ## Out of scope
@@ -165,14 +165,14 @@ roadmap's ordering rationale since v0.6.0.
 - Any change to the guards' fail-open posture (a broken guard must never
   block work — Security Checklist).
 - Root-README dead-link scanning — already owned by the queued
-  [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md).
+  [../outcome-telemetry-and-doc-gardening.md](../outcome-telemetry-and-doc-gardening.md).
 
 ## Dependencies
 
 None hard. Item 6's plugin-activated Codex runs cost real model spend (same
 explicit go-ahead discipline as v0.12.0's baseline recording). Item 3's
 matrix edits follow the citation discipline in
-[../conventions/templates.md](../conventions/templates.md).
+[../../conventions/templates.md](../../conventions/templates.md).
 
 ## Verification
 
@@ -184,6 +184,23 @@ in `baselines.json` with the threshold decision logged.
 
 ## Progress
 
+- 2026-07-13 — **Activated as v0.14.0.** An execution + delegation plan was
+  built on top of this scope and reviewed by Codex `gpt-5.6-sol` (session
+  `019f5d11`), which returned six findings (verdict initially "not sound as
+  written"); all six were verified in-repo and folded in before build. The
+  structural results: a single committed **activation-contract commit** every
+  worktree branches from; **single-writer file ownership** (item 2's
+  hand-authored→generated conversion touches the same doc surfaces as item 3,
+  incl. the shipped `templates/docs/agents/code-reviewer.md:144`, so WS-B
+  serializes after WS-A rather than running parallel); the `.harness-manifest`
+  treated as a **lead-owned integration artifact**; item 6's real key located
+  at `eval-harness.sh:96` (`group_by([.task,.provider,.model])`), not the eval
+  wrapper; and a **mandatory integrated `verify.sh` barrier** before the Terra
+  diff review, adding a real-shipped-templates tuple fixture and a
+  second-update idempotency fixture. Delegation: **WS-A** (Opus 4.8, items 1+2)
+  ∥ **WS-C** (Sonnet 5, item 6 code) in parallel worktrees; then a serial tail
+  — **WS-B** (Sonnet 5, item 3 descope), items 4+5 (lead), item 6 paid runs
+  (lead) — then integrated verify + Codex `gpt-5.6-terra` + release.
 - 2026-07-13 — Adversarial review round five (Codex, same day) confirmed
   round four holds and extended the declared-set contract to item 2: the
   agent-provider set must be its own declaration (`AGENT_PROVIDERS`-style,
@@ -243,6 +260,20 @@ in `baselines.json` with the threshold decision logged.
 
 ## Decisions
 
+- 2026-07-13 — **Item 3: descope** (maintainer). The OpenCode `.opencode/plugins/*.ts`
+  shim and the Cursor `guard-config` wiring are descoped for v0.14.0 with a
+  dated matrix rationale; item 3 becomes doc-only. Keeps the hook-tuple
+  contract (claude/cursor/codex) stable and retires the sol review's finding 4
+  (an untested TS shim on an under-resourced tier). The scope plan already
+  accepts a dated descope as resolving the documented-vs-shipped ambiguity.
+- 2026-07-13 — **Item 6: paid runs approved this cycle** (maintainer). The
+  Codex plugin-activated add-skill recordings and the per-provider
+  acceptance-floor decision ship in v0.14.0, run after the execution-variant
+  dimension lands so they don't key-collide.
+- 2026-07-13 — **Items 1+2 stay in one Opus worktree** (WS-A), internally
+  sequenced: they share `check-harness.sh`, `harness.conf`, `install-lib.sh`,
+  and the agent-generation doc surfaces, so splitting them would only
+  manufacture self-conflict.
 - 2026-07-13 — One plan, not three: the six findings share a theme —
   assurance that documented wiring is real — and splitting the recovery and
   eval-policy items out would recreate the unowned-gap problem the review
@@ -251,6 +282,9 @@ in `baselines.json` with the threshold decision logged.
 
 ## Next action
 
-Design item 1's per-provider required-event table from the provider matrix's
-hook-event rows — it anchors the plan's headline reproduction and the rest
-of the checks follow its shape.
+Activation is committed. Launch **WS-A** (Opus, items 1+2) and **WS-C**
+(Sonnet, item 6 code) in parallel isolated worktrees off the activation commit.
+WS-A's first step: design item 1's per-provider required-event table from the
+now-frozen provider-matrix hook rows (`references/provider-matrix.md:95–99`;
+wired = claude/cursor/codex, cursor's `guard-config` legitimately absent) — it
+anchors the headline reproduction and the rest of the checks follow its shape.
