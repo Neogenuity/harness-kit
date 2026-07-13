@@ -216,8 +216,9 @@ eval_usage_json() {
             jq -sRc '
               [ split("\n")[] | select(length>0) | (fromjson? // empty) ] as $rows
               | ($rows | map(select(.type=="turn.completed")) | last) as $t
-              | ($rows | map(select(.type=="item.completed")
-                    | ((.item.item_type // .item.type // "")) | select(test("message|reasoning")|not)) | length) as $tools
+              | ([ $rows[] | select(.type=="item.started" or .type=="item.completed")
+                    | select(((.item.item_type // .item.type // "")) | test("message|reasoning") | not)
+                    | (.item.id // .id) | select(. != null) ] | unique | length) as $tools
               | if $t != null then
                   ($t.usage.input_tokens // null) as $in
                   | ($t.usage.cached_input_tokens // null) as $cr

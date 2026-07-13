@@ -87,19 +87,22 @@ UEOF
         '{"input_uncached":150,"input_cached_read":125,"input_cache_write":20,"output":40,"cost":null,"tool_calls":2}'
 
     cat > "$utmp/codex.jsonl" <<'UEOF'
-{"type":"item.completed","item":{"item_type":"command_execution"}}
-{"type":"item.completed","item":{"item_type":"command_execution"}}
-{"type":"item.completed","item":{"item_type":"file_change"}}
-{"type":"item.completed","item":{"item_type":"mcp_tool_call"}}
-{"type":"item.completed","item":{"item_type":"web_search"}}
-{"type":"item.completed","item":{"item_type":"agent_message"}}
+{"type":"item.started","item":{"id":"item_1","item_type":"command_execution"}}
+{"type":"item.completed","item":{"id":"item_1","item_type":"command_execution"}}
+{"type":"item.started","item":{"id":"item_2","item_type":"file_change"}}
+{"type":"item.completed","item":{"id":"item_2","item_type":"file_change"}}
+{"type":"item.started","item":{"id":"item_3","item_type":"command_execution"}}
+{"type":"item.completed","item":{"id":"item_4","item_type":"mcp_tool_call"}}
+{"type":"item.completed","item":{"id":"item_5","item_type":"web_search"}}
+{"type":"item.completed","item":{"id":"item_6","item_type":"agent_message"}}
 {"type":"turn.completed","usage":{"input_tokens":2000,"cached_input_tokens":1500,"output_tokens":300,"reasoning_output_tokens":50}}
 UEOF
-    # tool_calls counts every non-message/reasoning item.completed: the two
-    # commands, the file change, AND mcp_tool_call + web_search (the tool types
-    # the old command|file_change|patch allowlist silently dropped). The
-    # agent_message is excluded — so 5, not 3 (and not 6).
-    _uexpect "usage: codex turn.completed extraction (uncached=input-cached; cost null; counts mcp/web tools)" \
+    # tool_calls = distinct tool item ids across started AND completed events,
+    # minus message/reasoning: item_1 + item_2 each fire twice (dedup to one),
+    # item_3 is a command with ONLY an item.started (Codex emits this shape — the
+    # old item.completed-only counter dropped it), and item_4/item_5 are
+    # mcp_tool_call + web_search. item_6 (agent_message) is excluded. So 5.
+    _uexpect "usage: codex turn.completed extraction (uncached=input-cached; cost null; dedup tool ids across started/completed)" \
         "$(eval_usage_json codex "$utmp/codex.jsonl")" \
         '{"input_uncached":500,"input_cached_read":1500,"input_cache_write":null,"output":300,"cost":null,"tool_calls":5}'
 
@@ -761,6 +764,28 @@ else
                     fi
                 done
             fi
+
+            # Any reference/wrongplace*.sh fixture (the template-first "edited
+            # the installed root copy instead of the shipped template" shortcut)
+            # must be REJECTED by check.sh — a non-'pass' outcome. NOT
+            # polarity-gated: a positive task can ship a wrong-place fixture, and
+            # only violate*.sh on negative tasks is exercised above — so without
+            # this that grader branch is never run and could silently rot.
+            for wp in "$td"/reference/wrongplace*.sh; do
+                [ -f "$wp" ] || continue
+                wpname="$(basename "$wp")"
+                ws3="$base/repo-$wpname"; logd3="$base/log-$wpname"
+                if ! eval_prepare_workspace "$ROOT" "$ws3" "$td"; then
+                    bad "$slug: workspace prep ($wpname)"; continue
+                fi
+                if eval_apply_violation "$td" "$ws3" "$wpname" >"$base/$wpname.log" 2>&1; then
+                    v3="$(eval_grade "$td" "$ws3" "$logd3")"
+                    [ "$v3" != pass ] && ok "$slug: $wpname rejected by grader (scored '$v3')" \
+                        || bad "$slug: $wpname must be rejected (wrong-place edit) but scored 'pass' — grader branch unproven"
+                else
+                    bad "$slug: reference/$wpname errored"
+                fi
+            done
             rm -rf "$base"
         done
     fi
