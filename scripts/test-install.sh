@@ -124,6 +124,28 @@ write_mirrored_claude_settings() {
     printf '{ "permissions": { "deny": [%s ] } }\n' "$deny" > "$root/.claude/settings.json"
 }
 
+# --- runtime-prerequisite preflight detection ---------------------------------
+# harness_missing_prereqs is the deterministic core of init/update's early
+# preflight: it NAMES any missing hard dependency so the user can acknowledge
+# that (notably) a jq-less install ships an inert feedback layer — every guard
+# fails open. Detection only; it changes no guard's fail-open posture. jq present
+# on PATH → not reported; jq hidden (empty PATH) → reported. Robust to whatever
+# the ambient env has by gating the present-case assertion on jq being real.
+if command -v jq >/dev/null 2>&1; then
+    if harness_missing_prereqs | grep -qx 'jq'; then
+        fail "preflight: jq reported missing though it is on PATH"
+    else
+        pass "preflight: harness_missing_prereqs stays silent about a present jq"
+    fi
+fi
+EMPTYPATH=$(mktemp -d)
+if PATH="$EMPTYPATH" harness_missing_prereqs | grep -qx 'jq'; then
+    pass "preflight: harness_missing_prereqs names jq when it is off PATH"
+else
+    fail "preflight: jq not reported missing when hidden from PATH"
+fi
+rm -rf "$EMPTYPATH"
+
 # --- (a) clean init -----------------------------------------------------------
 F=$(make_fixture)
 write_mirrored_claude_settings "$F"
@@ -234,6 +256,41 @@ else
     fail "tailored preservation: a tailored file was replaced or its pin drifted"
 fi
 rm -rf "$F" "$NEWKIT"
+
+# --- old-template recovery for copied/plugin installs (no local git) ----------
+# Update mode's tailored-file diff needs the OLD kit version's templates. A git
+# checkout recovers them from the tag matching the manifest header, but plugin
+# installs copy only plugins/harness-kit/ into a cache and copied installs need
+# not keep .git — so the base is PERSISTED at init and recovered with no git in
+# the loop. This drives exactly that no-local-git channel.
+F=$(make_fixture)
+harness_persist_base "$SCRIPTS_DIR" "$F" "$KIT_VERSION"   # the init-time snapshot
+rm -rf "$F/.git"                                          # no local git at all
+REC=$(mktemp -d)
+recv=$(harness_recover_old_templates "$F" "$REC/old"); rc=$?
+# Recovery must (a) succeed with no .git, (b) report the manifest-header version,
+# and (c) reproduce the installed templates byte-for-byte (a faithful diff base)
+# — spot-check a policy file and a hook.
+if [ "$rc" = "0" ] && [ "$recv" = "$KIT_VERSION" ] \
+   && cmp -s "$SCRIPTS_DIR/verify.sh" "$REC/old/verify.sh" \
+   && cmp -s "$SCRIPTS_DIR/hooks/guard-secrets.sh" "$REC/old/hooks/guard-secrets.sh"; then
+    pass "old-template recovery: no-local-git install recovers the version's base byte-for-byte"
+else
+    fail "old-template recovery: no-git recovery failed (rc=$rc version=$recv)"
+fi
+rm -rf "$REC"
+# No persisted base (e.g. a teammate's fresh clone, where the git-ignored base was
+# never checked out) → recovery returns non-zero so update falls back to the
+# git-tag / upstream-fetch channels instead of silently diffing nothing.
+rm -rf "$F/.harness/base"
+REC2=$(mktemp -d)
+harness_recover_old_templates "$F" "$REC2/old" >/dev/null 2>&1; rc=$?
+if [ "$rc" != "0" ]; then
+    pass "old-template recovery: an absent base returns non-zero so update can fall back"
+else
+    fail "old-template recovery: a missing base did not signal fallback"
+fi
+rm -rf "$REC2" "$F"
 
 # --- drift detection ----------------------------------------------------------
 # check-harness.sh is the scripted, model-free core of `audit`. Seed a drift it

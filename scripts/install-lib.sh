@@ -39,6 +39,26 @@ _harness_sha256() {
     fi
 }
 
+# harness_missing_prereqs
+# Prints, one per line, each runtime prerequisite the installed harness needs
+# that is NOT on PATH: `jq` (WITHOUT IT EVERY GUARD HOOK FAILS OPEN — the whole
+# in-turn feedback layer is silently inert, leaving only the native permission
+# deny lists live), `git` (session-context banner + Codex hook Git-root
+# resolution), and a sha256 tool (`shasum`/`sha256sum`, the manifest-integrity
+# check). Empty output = all present. init/update run this as an early PREFLIGHT
+# and ask the user to ACKNOWLEDGE any gap before scaffolding a harness whose
+# feedback layer would be inert; check-harness.sh's doctor keeps WARNing on the
+# same condition afterward (check #10). Detection only — it does NOT change the
+# guards' deliberate fail-open posture (a missing dep must degrade, never block a
+# contributor's turn). No side effects, so a test pins it with no model in loop.
+harness_missing_prereqs() {
+    command -v jq  >/dev/null 2>&1 || printf 'jq\n'
+    command -v git >/dev/null 2>&1 || printf 'git\n'
+    if ! command -v shasum >/dev/null 2>&1 && ! command -v sha256sum >/dev/null 2>&1; then
+        printf 'sha256sum\n'
+    fi
+}
+
 # harness_manifest_paths <repo_root>
 # Prints the sorted, repo-relative paths the manifest pins: the whole
 # scripts/hooks/ tree (matching the producer's `find scripts/hooks -type f`)
@@ -169,6 +189,79 @@ harness_install_mechanism() {
     [ -d "$src/hooks" ] && cp -R "$src/hooks/." "$root/scripts/hooks/"
     chmod +x "$root/scripts/"*.sh "$root/scripts/hooks/"*.sh 2>/dev/null
     return 0
+}
+
+# --- old-template recovery for update's tailored-file diff --------------------
+# Update mode diffs each tailored/policy file old-kit-template → new-kit-template
+# so the user can port upstream changes into their fork. That needs the OLD kit
+# version's TEMPLATES. Recovery differs by INSTALL CHANNEL:
+#   * git checkout of the kit  → `git show v<version>:…templates/scripts/<f>`
+#     (version = manifest header); the diff base is in-repo, no persistence needed.
+#   * plugin install           → the provider cache holds only plugins/harness-kit/
+#     and need not retain .git; recover from the persisted base, else fetch tag
+#     v<version> from the declared upstream repo when it is reachable/public.
+#   * copied ("clone-and-copy")→ need not retain .git either; same persisted-base
+#     path.
+# The persisted base below is the channel-INDEPENDENT path: it needs no .git and
+# no network, so it is the one that always works (the others are optimizations).
+# init writes it right after install; update refreshes it after re-pinning.
+
+# harness_manifest_version <repo_root>
+# Prints the kit version in scripts/.harness-manifest's header
+# ("# harness-kit <version>") — the version whose templates update must recover
+# to diff tailored files, and the tag (v<version>) the git-checkout channel uses.
+# Absent file or header → returns 1.
+harness_manifest_version() {
+    local mf="$1/scripts/.harness-manifest" v
+    [ -f "$mf" ] || return 1
+    v=$(awk '/^# harness-kit /{print $3; exit}' "$mf")
+    [ -n "$v" ] && printf '%s\n' "$v"
+}
+
+# harness_base_dir <repo_root> <kit_version>
+# Prints where the installed mechanism BASE for <kit_version> is persisted:
+# <repo_root>/.harness/base/<kit_version>/scripts. It lives under the git-ignored
+# .harness/ tree, so it is never committed and never manifest-pinned — a
+# per-working-tree recovery cache, not shipped state.
+harness_base_dir() {
+    printf '%s/.harness/base/%s/scripts' "$1" "$2"
+}
+
+# harness_persist_base <src_scripts_dir> <repo_root> <kit_version>
+# Snapshots the kit's mechanism TEMPLATES (the same set harness_install_mechanism
+# copies, taken from the pristine <src_scripts_dir> so the snapshot is the
+# untailored upstream — the correct diff base) into harness_base_dir, so a LATER
+# update can recover them with no local git. Call it at init right after install,
+# and again after each successful update keyed by the version just installed.
+# Idempotent: re-copies over any existing snapshot for that version.
+harness_persist_base() {
+    local src="$1" root="$2" version="$3" dest f
+    dest=$(harness_base_dir "$root" "$version")
+    mkdir -p "$dest/hooks"
+    for f in $_HARNESS_MECHANISM_TOPLEVEL; do
+        [ -f "$src/$f" ] && cp "$src/$f" "$dest/$f"
+    done
+    [ -d "$src/hooks" ] && cp -R "$src/hooks/." "$dest/hooks/"
+    return 0
+}
+
+# harness_recover_old_templates <repo_root> <out_dir>
+# Populates <out_dir> with the OLD kit version's mechanism templates — update's
+# diff base — WITHOUT needing local git, from the locally-persisted base for the
+# version in the manifest header. Prints the recovered version and returns 0 on
+# success. Returns 1 when no persisted base exists for that version (e.g. a
+# teammate's fresh clone, where the git-ignored base was never checked out), so
+# the caller falls back to the git-tag or upstream-fetch channels, or a degraded
+# new-template-only diff — never a silent empty diff.
+harness_recover_old_templates() {
+    local root="$1" out="$2" version base
+    version=$(harness_manifest_version "$root") || return 1
+    [ -n "$version" ] || return 1
+    base=$(harness_base_dir "$root" "$version")
+    [ -d "$base" ] || return 1
+    mkdir -p "$out"
+    cp -R "$base/." "$out/"
+    printf '%s\n' "$version"
 }
 
 # harness_update_decision <repo_root> <manifest_line>

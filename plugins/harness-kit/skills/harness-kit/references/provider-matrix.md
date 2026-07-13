@@ -17,7 +17,7 @@ against live provider docs 2026-07-11 — see Sources.)
 | Instructions <br>_verified 2026-07_ | `CLAUDE.md` (thin → AGENTS.md) | `.cursor/rules/*.mdc` (thin) | `AGENTS.md` (native) | `AGENTS.md` (native) | `AGENTS.md` (native, hierarchical) |
 | Skills <br>_verified 2026-07_ | `.claude/skills/<slug>/SKILL.md` (stub) | `.cursor/skills/` (stub) | reads `.agents/skills/` (no `.codex/skills/`) | `.opencode/skills/` (stub; also reads `.claude/` + `.agents/`) | `.agents/skills/` (stub) |
 | Subagents <br>_verified 2026-07_ | `.claude/agents/*.md` (generated stub) | `.cursor/agents/*.md` (generated stub) | `.codex/agents/*.toml` (generated TOML stub) | `.opencode/agents/*.md` (generated stub, `mode: subagent`) | — |
-| Hooks <br>_verified 2026-07_ | `.claude/settings.json` → `hooks` | `.cursor/hooks.json` | `.codex/hooks.json` (or `config.toml` `[hooks]`; trust-gated) | `.opencode/plugins/*.ts` shim (JS/TS only) | — |
+| Hooks <br>_verified 2026-07_ | `.claude/settings.json` → `hooks` | `.cursor/hooks.json` | `.codex/hooks.json` (or `config.toml` `[hooks]`; trust-gated) | `.opencode/plugins/*.ts` shim (JS/TS only) — documented path, but **no shim template ships** (descoped 2026-07-13); native `opencode.json` denies + CI are the backstop | — |
 | Permissions <br>_verified 2026-07_ | `.claude/settings.json` → `permissions` | (harness UI) | (trust model + `PermissionRequest` hook) | `opencode.json` `permission.read` denies (mirror `harness.conf` `SECRET_PATTERNS`) | — |
 | MCP servers <br>_verified 2026-07_ | `.mcp.json` (project) | `.cursor/mcp.json` | `.codex/config.toml` `[mcp_servers.*]` | `opencode.json` `"mcp"` | `~/.agents/mcp-settings.json` (proposed, user-level) |
 | Distribution | `.claude-plugin/marketplace.json` → `plugins/harness-kit/.claude-plugin/plugin.json`; `/plugin marketplace add <owner>/harness-kit` (verified 2026-07-10) | — (no plugin channel) | `.agents/plugins/marketplace.json` → `plugins/harness-kit/.codex-plugin/plugin.json`; `codex plugin marketplace add <path>` (verified 2026-07-10) | — (no plugin channel) | `.agents/plugins/marketplace.json` (Codex's channel rides the `.agents` tree) |
@@ -94,16 +94,22 @@ a deny; the same script wires into all three.
 | --- | --- | --- | --- | --- |
 | `session-context.sh` | `SessionStart` | `sessionStart` | `SessionStart` | Plain stdout injected into context. Claude Code fires it for startup/resume/clear/compact (matcher-selectable; no matcher = all — verified 2026-07), so the banner survives compaction. Codex likewise fires on resume/clear/compact. Cursor has reported bugs (`additional_context` not always injected; doesn't re-fire after compaction) |
 | `guard-secrets.sh` | `PreToolUse` matcher `Read\|Grep` | `beforeReadFile` | `PreToolUse` | Exit 2 = deny in all three |
-| `guard-config.sh` | `PreToolUse` matcher `Edit\|Write` | — (not wired; generic `preToolUse` is pre-edit-capable — see notes) | `PreToolUse` | Denies harness-mechanism/lint-config edits; where it isn't wired, the `check-harness.sh` manifest verification is the backstop |
+| `guard-config.sh` | `PreToolUse` matcher `Edit\|Write` | — (not wired — deliberate descope 2026-07-13; generic `preToolUse` is pre-edit-capable but unwired) | `PreToolUse` | Denies harness-mechanism/lint-config edits; where it isn't wired (Cursor here, and OpenCode which ships no hook shim — both deliberate descopes, 2026-07-13), the `check-harness.sh` manifest verification is the backstop |
 | `format.sh` | `PostToolUse` matcher `Edit\|Write` | `afterFileEdit` | `PostToolUse` | Formats, then feeds lint findings back: exit 2 + stderr on Claude Code/Codex (PostToolUse stderr reaches the model; the edit is not undone); on the Cursor layout the finding reaches only `.harness/log.jsonl` — `afterFileEdit` documents no output field for feedback text, so `hook_feedback` emits the documented no-op (`{}`) there instead of dead plain stdout (verified 2026-07-12) |
 | `guard-project-policy.sh` | `Stop` | `stop` | `Stop` | advise-once protocol (see lib.sh) |
 
 **OpenCode** has no JSON/shell hook config — only JS/TS plugins in
-`.opencode/plugins/`. To reuse the portable scripts there, ship a small
+`.opencode/plugins/`. Reusing the portable scripts there would take a small
 plugin shim that hooks `tool.execute.before` / `tool.execute.after` /
 session events, shells out to the matching `scripts/hooks/*.sh`, and throws
-an Error when the script exits 2 (throwing is OpenCode's block mechanism).
-Policy stays in the portable scripts; the shim is one-time wiring.
+an Error when the script exits 2 (throwing is OpenCode's block mechanism) —
+policy would stay in the portable scripts, the shim being one-time wiring.
+**The kit does not currently ship this shim template (descoped 2026-07-13):**
+an untested TS shim on an under-resourced tier is deferred, so OpenCode is
+**not** in the hook-wired set (`HOOK_WIRED_PROVIDERS` is `.claude .cursor
+.codex`). Its native `opencode.json` `permission.read` denies plus
+`check-harness.sh` manifest verification are the backstop until a tested shim
+ships.
 
 ## Payload differences the scripts already absorb
 
@@ -283,8 +289,10 @@ Policy stays in the portable scripts; the shim is one-time wiring.
   duplicate loading is benign, but verify OpenCode isn't warning on
   duplicate skill names before adding more providers. Subagents are
   markdown files in `.opencode/agents/` with `mode: subagent` frontmatter.
-  Hooks require the plugin shim described above; native permission denies
-  and CI remain the backstop where the shim isn't installed.
+  Hooks would require the plugin shim described above, which the kit does
+  **not** currently ship (descoped 2026-07-13); native permission denies and
+  CI are the backstop in its absence, and OpenCode stays out of the
+  `HOOK_WIRED_PROVIDERS` set.
 - **`.agents/` standard** has grown from a skills location into a
   hierarchical-AGENTS.md standard with `.agents/skills/` adopted by Codex
   and OpenCode, plus a proposed user-level MCP config
@@ -337,7 +345,8 @@ Primary docs to re-validate each section against (all last consulted
 - OpenCode permissions (`permission.read` pattern rules; also the allow/ask/deny
   layer for the Execution-containment table — OpenCode ships no OS sandbox):
   <https://opencode.ai/docs/permissions/>
-- OpenCode plugins (the hook shim's API):
+- OpenCode plugins (the deferred hook shim's API — documented path; no shim
+  template ships as of the 2026-07-13 descope):
   <https://opencode.ai/docs/plugins/>
 - Claude Code sandboxing (`sandbox.*` settings, Seatbelt/bubblewrap OS
   enforcement, default-deny network proxy — Execution-containment row,
