@@ -3,6 +3,72 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.12.0 — 2026-07-13
+
+Eval discrimination + context efficiency — a joint release that makes the
+behavioral eval bank actually discriminate model/harness behavior, lands the
+measured fixes from the 2026-07-12 context-efficiency audit, and records the
+first full four-model baseline matrix. Every behavior change ships against eval
+evidence, not intuition. Plan reviewed by Codex gpt-5.6-sol; implementation
+reviewed by Codex.
+
+### Eval layer
+
+- **Per-trial provider usage on every results row.** `eval_result_json` now
+  carries a typed `usage` object — uncached / cached-read / cache-write input
+  tokens, output tokens, cost (when the provider reports it), and tool-call
+  count — with JSON `null` (never `0`) for any field a provider does not emit.
+  Claude and Codex transcripts are parsed by provider-specific extractors pinned
+  to committed fixtures; `eval-harness.sh` scoring stays correctness-only and
+  tolerates pre-0.12 rows.
+- **Two discriminating tasks adopted** — `hn-add-skill` (recipe-free add-skill)
+  and `tmpl-secret-pattern` (template-vs-installed secret mirror), each proven by
+  reference and violation fixtures.
+- **First four-model baseline matrix.** `baselines.json` grows 16 → 40 cells:
+  Claude haiku+sonnet and Codex gpt-5.6-terra+gpt-5.6-luna across the full
+  10-task bank, spanning a cheap tier (haiku, luna) and a capable tier (sonnet,
+  terra) on both providers. Every cell carries a per-cell `recorded` date, and
+  the under-trialed regression cell is re-recorded at 3 trials. The bank now
+  discriminates — `hn-add-skill` splits Claude 3/3 vs Codex 0/3, and the negative
+  neuter-check surfaced haiku reward-hacking a gate script (1/3) that a smaller
+  sample had scored a clean 3/3.
+- **Opt-in scheduled eval workflow** (`ci/github-actions-eval-cron.yml`) — weekly
+  cron plus manual dispatch defaulting to the free `mock` provider, scoring-only
+  (never `--update-baseline`), SHA-pinned actions, cost-honesty notes. Copy to
+  `.github/workflows/` and wire a provider credential to run live.
+
+### Harness behavior (context-efficiency audit fixes)
+
+- **AGENTS.md skill-link convention** — one line making "link every new skill and
+  convention doc from AGENTS.md" explicit; the audit measured this single
+  sentence as the difference behind a 0/6 add-skill failure mode.
+- **Guard deny-hint** (`GUARD_DENY_HINT` in `harness.conf`, empty default) — an
+  optional tailorable line appended to the config-guard's deny message so a
+  denied edit can point the agent at the right place.
+- **Protected-path over-match fixed** — the `opencode.json` entry is root-anchored
+  (`/opencode.json`), so the guard still protects the installed root file without
+  denying edits to the shipped `templates/providers/opencode/opencode.json`.
+- **Banner trim** (`BANNER_RECENT_COMMITS`, default 0) — the session-start
+  banner's recent-commits block is now an opt-in tailorable (zero observed
+  in-session consumers across the audit).
+- **Stop-hook clean-tree skip** — `guard-project-policy.sh` skips the
+  `verify.sh --fast` run on a clean tree (which cannot newly fail it), removing a
+  measured stop-time tax; advisory behavior on a dirty tree is unchanged.
+
+### Migration
+
+Mechanism + content release. Update mode replaces the manifest-matching
+`scripts/` files and diffs the tailored ones. Two new `harness.conf` keys
+(`GUARD_DENY_HINT`, `BANNER_RECENT_COMMITS`) arrive with empty/zero defaults — no
+action needed unless you want to set them. The AGENTS.md skill-link line is
+content (`AGENTS.md.tmpl`), applied on re-init or copied by hand.
+
+### Deferred
+
+The plugin skill-split (SKILL.md → compact router + per-mode references), gated
+on fresh paired parity runs, is deferred to a queued `skill-split.md` plan; it
+needs its own parity round and ships only on evidence.
+
 ## 0.11.0 — 2026-07-12
 
 Hook hardening + feedback repair — the 2026-07-12 project review re-verified
@@ -164,7 +230,7 @@ task bank tracked nowhere the plans machinery could see.
 - **Plans, docs, and CI.** New active plan
   [docs/plans/completed/v0.9.0-eval-integrity-and-plan-hygiene.md](docs/plans/completed/v0.9.0-eval-integrity-and-plan-hygiene.md)
   tracks this work; two new queued plans,
-  [docs/plans/eval-discrimination.md](docs/plans/active/v0.12.0-eval-discrimination.md)
+  [docs/plans/eval-discrimination.md](docs/plans/completed/v0.12.0-eval-discrimination.md)
   (a task bank that actually discriminates model behavior) and
   [docs/plans/launch-readiness.md](docs/plans/launch-readiness.md) (the
   launch, previously tracked only as README checkboxes), join the roadmap;

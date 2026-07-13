@@ -1,6 +1,6 @@
 {
   "name": "harness-kit",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Scaffold and maintain a standardized cross-agent harness (canonical docs/, executable quality gates, generated provider skill stubs, portable hooks with lint feedback and observability, shared permissions, CI drift gate with mechanism integrity) in any repository.",
   "author": {
     "name": "Chase",

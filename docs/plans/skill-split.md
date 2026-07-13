@@ -1,0 +1,89 @@
+# Plugin skill split
+
+Status: queued — theme (version assigned on activation)
+
+## Objective
+
+Split the monolithic `plugins/harness-kit/skills/harness-kit/SKILL.md` (~299
+lines, ~5.2k tokens) into a compact router plus per-mode reference files, so an
+activation loads one mode's playbook instead of the whole skill — but ship it
+only if fresh paired parity proves the split does not regress correctness or
+wall-clock. This is v0.12.0's deferred Phase E (context-efficiency item 7),
+carried out of that release as its own gated plan.
+
+## Value
+
+The 2026-07-12 context-efficiency audit measured the monolithic skill costing
+3/3 timeouts when it activates on a long task, and a naive router split saving
+~4.2k tokens per activation. But the same audit caught the failure mode this
+plan must avoid: a naive split **dropped a trial** when the model skipped the
+mode-file hop and acted on the router alone. So the router must inline each
+mode's two or three load-bearing invariants — the split is only worth shipping
+if it holds correctness while cutting activation cost, and that has to be proven,
+not assumed.
+
+## Scope
+
+1. **Router + mode references.** `SKILL.md` becomes a compact router whose mode
+   table *inlines each mode's two or three load-bearing invariants*; the full
+   playbooks move to `references/modes/{init,audit,add,update}.md`; the
+   `pattern.md` read mandate scopes to init/audit. Plugin content only — nothing
+   installs into targets; the stub-resource mirror already ships `references/`
+   verbatim. *Acceptance: activation loads ≤1k tokens of router.*
+2. **Fresh paired parity evidence.** Run the *current monolith* and the *split*
+   back-to-back in one environment (not against the stale July audit cells),
+   pinned trial count and timeout, on the adopted discriminating tasks
+   (`hn-add-skill`, `tmpl-secret-pattern`), using the config-aware audit harness
+   at `.harness/context-efficiency-eval/scripts/` (still on disk as of
+   2026-07-13). Record to a **separate committed artifact**
+   `docs/evals/parity/skill-split.md` — NOT `baselines.json` (which has no
+   configuration dimension). Pair **within tier** (haiku↔luna cheap,
+   sonnet↔terra capable) or note the cross-tier caveat if reusing the audit's
+   `haiku`+`terra` cells. *Gate: router activation ≤1k tokens AND split
+   correctness ≥ monolith on every paired task AND wall-clock no worse.*
+
+## Out of scope
+
+Any change to `baselines.json`'s shape or the scorer (adding a configuration
+dimension is v0.9.0 scorer territory). Rewording the skill *description* for
+self-activation sensitivity (blocked on a stronger-model retest).
+
+## Dependencies
+
+v0.12.0 (shipped) — the two adopted discriminating tasks and their recorded
+baseline cells are the parity comparison's correctness anchor. The config-aware
+audit harness under `.harness/context-efficiency-eval/scripts/` is required for
+the configuration-aware parity run; if it is gone at activation time, rebuilding
+it is in scope for item 2.
+
+## Verification
+
+`bash scripts/verify.sh` green (the split is plugin content; the stub mirror
+must still sync). `docs/evals/parity/skill-split.md` records fresh paired
+monolith-vs-split runs meeting the exact gate, or the revert + deferral trail if
+the gate fails. Ship only on parity — if the gate fails, restore the monolith
+before any version bump and record the failed evidence in the artifact.
+
+## Progress
+
+- 2026-07-13 — Queued, carried out of v0.12.0 as the deferred Phase E. A–D
+  shipped as v0.12.0 without the split per that release plan's own cut line
+  (the split needs its own paired parity round; A–D displaced nothing). See
+  [completed/v0.12.0-context-efficiency.md](completed/v0.12.0-context-efficiency.md)
+  item 7 and its Decisions log for the full design and the Codex `gpt-5.6-sol`
+  refinements (invariants inline in the router table; parity evidence out of
+  `baselines.json`; fresh paired runs, not stale audit cells; single reversible
+  commit).
+
+## Decisions
+
+- 2026-07-13 — Ships gated on C-parity cells, not on token savings: the audit's
+  naive-router probe saved ~4.2k tokens per activation but dropped a trial to a
+  skipped mode-file read. Inlining each mode's invariants in the router table is
+  the fix to validate, and parity is the bar.
+
+## Next action
+
+Author the router + `references/modes/{init,audit,add,update}.md` split as a
+single reversible commit, then run the paired parity via the config-aware audit
+harness and record `docs/evals/parity/skill-split.md`.

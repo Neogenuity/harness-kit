@@ -60,7 +60,16 @@ not-yet-existing paths are legal — queued plans name future files by design.
 
 ## Roadmap (set 2026-07-10, re-sorted 2026-07-12)
 
-Shipped: **v0.11.0** — hook hardening + feedback repair (probe-confirmed
+Shipped: **v0.12.0** — eval discrimination + context efficiency (roadmap #1+#2
+as one coordinated release: the first four-model baseline matrix — Claude
+haiku+sonnet, Codex gpt-5.6-terra+gpt-5.6-luna, 40 cells, per-cell dated,
+spanning a cheap and a capable tier on both providers — two discriminating tasks
+adopted, per-trial usage instrumentation, an opt-in scheduled eval cron, and
+five context-efficiency audit fixes; the plugin skill-split deferred to a queued
+plan behind a paired-parity gate)
+([completed/v0.12.0-eval-discrimination.md](completed/v0.12.0-eval-discrimination.md),
+[completed/v0.12.0-context-efficiency.md](completed/v0.12.0-context-efficiency.md));
+**v0.11.0** — hook hardening + feedback repair (probe-confirmed
 guard-coverage gaps closed — `harness.conf`, `.claude/settings.local.json`,
 the MCP configs — plus a dot-segment path-bypass fix; Cursor feedback arm
 repaired to the documented `{}` no-op; advise-once future-proofed with a
@@ -92,13 +101,16 @@ rows + strict Agent Skills validation + matrix stamping
 **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
 ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
-**Active (v0.12.0):**
-[v0.12.0-eval-discrimination.md](active/v0.12.0-eval-discrimination.md) and
-[v0.12.0-context-efficiency.md](active/v0.12.0-context-efficiency.md) — roadmap
-#1 and #2 activated together as one coordinated release (a bank that actually
-discriminates + the audit-measured context-efficiency fixes). The
-usage-before-baseline coupling made a single release the sound choice; the queued
-work below is renumbered accordingly.
+**Active:** none — v0.12.0 shipped
+([completed/v0.12.0-eval-discrimination.md](completed/v0.12.0-eval-discrimination.md)
+and
+[completed/v0.12.0-context-efficiency.md](completed/v0.12.0-context-efficiency.md));
+the next plan activates from the queue below.
+
+**Deferred from v0.12.0:** [skill-split.md](skill-split.md) — the plugin
+skill-split (SKILL.md → compact router + per-mode `references/modes/`), gated on
+a fresh paired monolith-vs-split parity run; carried out of v0.12.0 as its own
+plan (A–D shipped without it per that release's cut line), ready to execute.
 
 | # | Plan | Theme |
 | --- | --- | --- |
@@ -172,7 +184,7 @@ context-efficiency audit — 72 controlled trials over the installed harness
 and plugin (minimal-baseline vs installed vs plugin-activated vs
 reduced-context configurations, claude-haiku + codex gpt-5.6-terra, exact
 provider-reported usage per trial) — added
-[context-efficiency.md](active/v0.12.0-context-efficiency.md) at #2 and left
+[context-efficiency.md](completed/v0.12.0-context-efficiency.md) at #2 and left
 eval-discrimination two validated donor tasks with recorded
 discrimination-headroom cells (see both plans' Progress logs).
 
