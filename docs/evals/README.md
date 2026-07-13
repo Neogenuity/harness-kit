@@ -137,6 +137,27 @@ silently go unmeasured. It refuses to start when `git status --porcelain` is
 non-empty, naming the count of uncommitted changes; pass `--allow-dirty-head`
 to proceed anyway (a one-line warning is printed instead of a refusal).
 
+## Execution variant: bare vs plugin-activated
+
+Every result row (and baseline cell) carries a `variant`: `bare` (default) or
+`plugin-activated`. It exists because the same task/provider/model can be run
+two meaningfully different ways — the provider CLI on its own vs the same CLI
+with the harness-kit plugin active — and those two runs must never collide on
+one baseline cell (a plugin-activated re-run silently overwriting the bare
+cell it needs to be compared against would erase that comparison). Pass
+`--variant plugin-activated` to `eval.sh` when the run activates the plugin;
+`eval.sh` only tags the row with the value you pass — activating the plugin
+in the trial workspace or invoking environment is the caller's job, not
+`eval.sh`'s.
+
+Baseline keys reflect the dimension without disturbing any cell recorded
+before it existed: `bare` keeps the plain `provider/model` key every existing
+`baselines.json` entry already uses, so no historical cell needed migrating;
+a non-bare variant appends a third segment — e.g.
+`codex/gpt-5.6-terra/plugin-activated` — so it coexists as its own key instead
+of overwriting the bare cell. A row or baseline entry with no `variant` field
+at all (recorded before this dimension existed) is treated as `bare`.
+
 ## Boundaries
 
 - **`mock` is plumbing, not measurement.** It proves the pipeline and the

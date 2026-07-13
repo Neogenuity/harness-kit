@@ -1,8 +1,21 @@
 #!/usr/bin/env bash
 # eval-harness.sh — the regression view over eval.sh's results. Reads the
 # per-trial JSON lines, computes pass@k / pass^k / pass-rate per
-# (task, provider, model) from the *latest* run of each, compares against the
-# recorded baseline (docs/evals/baselines.json), and reports deltas.
+# (task, provider, model, variant) from the *latest* run of each, compares
+# against the recorded baseline (docs/evals/baselines.json), and reports
+# deltas.
+#
+# Execution-variant dimension (v0.14.0 item 6): a row's `variant` (default
+# "bare"; "plugin-activated" when eval.sh was run with --variant
+# plugin-activated) is part of the grouping key, so a plugin-activated run of
+# the same task/provider/model is scored as its OWN cell instead of merging
+# with — or silently overwriting — the bare cell it must be compared against.
+# The STORED baseline key reflects this without disturbing any baseline
+# recorded before this dimension existed: "bare" keeps the plain "provider/model"
+# key every existing baseline.json entry already uses (zero migration), and
+# only a non-bare variant appends a third segment — "provider/model/variant".
+# A results row or baseline entry with no `variant` field at all (recorded
+# before this change) is treated as "bare".
 #
 # Regression-suite tasks carry an ABSOLUTE invariant: the latest run's pass^k
 # must equal 1 (correct on every trial). eval-harness.sh fails whenever that
@@ -52,7 +65,7 @@ while [ $# -gt 0 ]; do
         --update-baseline) UPDATE=1; shift ;;
         --expected-trials) EXPECTED_TRIALS="$2"; shift 2 ;;
         --no-fail) FAIL_ON_REGRESSION=0; shift ;;
-        -h|--help) sed -n '2,35p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,48p' "$0"; exit 0 ;;
         *) die "unknown option: $1" ;;
     esac
 done
@@ -64,10 +77,10 @@ case "$EXPECTED_TRIALS" in ''|*[!0-9]*) die "--expected-trials must be a non-neg
 RESULT_COUNT=$(find "$RESULTS_DIR" -name results.jsonl -type f 2>/dev/null | wc -l | tr -d ' ')
 [ "$RESULT_COUNT" -gt 0 ] || die "no results.jsonl under $RESULTS_DIR — run scripts/eval.sh first"
 
-# Aggregate: one row per (task,provider,model), using only the latest run's
-# trials. Emits compact JSON objects (one per line). A jq failure (malformed or
-# truncated results) must abort loudly — an empty aggregate would otherwise
-# print a misleading "ok" and mask a regression.
+# Aggregate: one row per (task,provider,model,variant), using only the latest
+# run's trials. Emits compact JSON objects (one per line). A jq failure
+# (malformed or truncated results) must abort loudly — an empty aggregate
+# would otherwise print a misleading "ok" and mask a regression.
 #
 # Latest-run selection: max_by([(.run_started_at // 0), .run]) picks the
 # winning ROW by (run_started_at, run) — an array comparison, so
@@ -93,7 +106,7 @@ RESULT_COUNT=$(find "$RESULTS_DIR" -name results.jsonl -type f 2>/dev/null | wc 
 # id strings collide. This also lets run_started_at flow into $latest's own
 # run_started_at below, for --update-baseline's per-cell `recorded` date.
 if ! AGG=$(find "$RESULTS_DIR" -name results.jsonl -type f -exec cat {} + | jq -c -s '
-      group_by([.task,.provider,.model])
+      group_by([.task,.provider,.model,(.variant // "bare")])
       | map(
           . as $g
           | ($g | max_by([(.run_started_at // 0), .run])) as $winner
@@ -103,6 +116,7 @@ if ! AGG=$(find "$RESULTS_DIR" -name results.jsonl -type f -exec cat {} + | jq -
           | ($t | length) as $trials
           | ($t | map(select(.outcome == "negative_violation")) | length) as $violations
           | { task:$t[0].task, provider:$t[0].provider, model:$t[0].model,
+              variant: ($t[0].variant // "bare"),
               suite:$t[0].suite, polarity:$t[0].polarity, run:$latest,
               run_started_at: ($winner.run_started_at // 0),
               trials:$trials, passes:$passes, violations:$violations,
@@ -164,13 +178,20 @@ if [ "$UPDATE" -eq 1 ]; then
         base=$(cat "$BASELINE")
     fi
 
+    # Baseline key: "bare" keeps the plain provider/model key every existing
+    # baseline.json entry already uses (zero migration for the common case);
+    # a non-bare variant appends a third segment so it can never collide with
+    # — or overwrite — its bare counterpart's cell (v0.14.0 item 6).
     updated=$(printf '%s\n' "$LIVE_AGG" | jq -s \
         --argjson base "$base" \
         --arg date "$(date -u +%Y-%m-%d)" '
         reduce .[] as $r ($base;
-            .tasks[$r.task].suite = $r.suite
+            (if (($r.variant // "bare") == "bare") then ($r.provider + "/" + $r.model)
+             else ($r.provider + "/" + $r.model + "/" + ($r.variant // "bare")) end) as $key
+            | .tasks[$r.task].suite = $r.suite
             | .tasks[$r.task].polarity = $r.polarity
-            | .tasks[$r.task].runs[$r.provider + "/" + $r.model] = {
+            | .tasks[$r.task].runs[$key] = {
+                variant: ($r.variant // "bare"),
                 trials:$r.trials, passes:$r.passes,
                 pass_at_k:$r.pass_at_k, pass_hat_k:$r.pass_hat_k, pass_rate:$r.pass_rate,
                 recorded: (if ($r.run_started_at // 0) > 0
@@ -187,8 +208,12 @@ if [ "$UPDATE" -eq 1 ]; then
     # denominators within the SAME update. Retained cells only warn: refusing
     # on them too would mean every partial baseline update is bricked until
     # every historical cell in the file is re-recorded, which defeats the
-    # point of an incremental --update-baseline (design reviewed).
-    TOUCHED=$(printf '%s\n' "$LIVE_AGG" | jq -c -s '[.[] | (.task + "|" + .provider + "/" + .model)]')
+    # point of an incremental --update-baseline (design reviewed). Key shape
+    # mirrors the reducer above so a touched plugin-activated cell is matched
+    # against its OWN key, not its bare counterpart's.
+    TOUCHED=$(printf '%s\n' "$LIVE_AGG" | jq -c -s '[.[] | (.task + "|" +
+        (if ((.variant // "bare") == "bare") then (.provider + "/" + .model)
+         else (.provider + "/" + .model + "/" + (.variant // "bare")) end))]')
     RETAINED_BAD=$(printf '%s\n' "$updated" | jq -c --argjson n "$EXPECTED_TRIALS" --argjson touched "$TOUCHED" '
         .tasks | to_entries[] | . as $te
         | ($te.value.runs // {}) | to_entries[]
@@ -229,8 +254,8 @@ if [ "$UPDATE" -eq 1 ]; then
 fi
 
 base='{}'; [ -f "$BASELINE" ] && base=$(cat "$BASELINE")
-printf '%-26s %-8s %-16s %-6s %-8s %-8s %-7s %s\n' \
-    TASK SUITE MODEL PASS "pass@k" "pass^k" RATE "vs baseline"
+printf '%-26s %-8s %-16s %-18s %-6s %-8s %-8s %-7s %s\n' \
+    TASK SUITE MODEL VARIANT PASS "pass@k" "pass^k" RATE "vs baseline"
 regressions=0
 violations=0
 while IFS= read -r row; do
@@ -239,13 +264,17 @@ while IFS= read -r row; do
     suite=$(printf '%s' "$row"  | jq -r '.suite')
     prov=$(printf '%s' "$row"   | jq -r '.provider')
     model=$(printf '%s' "$row"  | jq -r '.model')
+    variant=$(printf '%s' "$row" | jq -r '.variant // "bare"')
     trials=$(printf '%s' "$row" | jq -r '.trials')
     passes=$(printf '%s' "$row" | jq -r '.passes')
     phk=$(printf '%s' "$row"    | jq -r '.pass_hat_k')
     pk=$(printf '%s' "$row"     | jq -r '.pass_at_k')
     rate=$(printf '%s' "$row"   | jq -r '.pass_rate')
     viol=$(printf '%s' "$row"   | jq -r '.violations // 0')
-    key="$prov/$model"
+    # Same conditional key shape as the --update-baseline reducer: "bare"
+    # looks up the plain provider/model cell every existing baseline uses;
+    # a non-bare variant looks up its own distinct provider/model/variant cell.
+    if [ "$variant" = bare ]; then key="$prov/$model"; else key="$prov/$model/$variant"; fi
     brate=$(printf '%s' "$base" | jq -r --arg t "$task" --arg k "$key" \
         '.tasks[$t].runs[$k].pass_rate // "—"')
     note="baseline $brate"
@@ -269,8 +298,8 @@ while IFS= read -r row; do
     if [ "${viol:-0}" -gt 0 ] 2>/dev/null; then
         flag="$flag ** NEGATIVE VIOLATION"; violations=$((violations+1))
     fi
-    printf '%-26s %-8s %-16s %-6s %-8s %-8s %-7s %s%s\n' \
-        "$task" "$suite" "$model" "$passes/$trials" "$pk" "$phk" "$rate" "$note" "$flag"
+    printf '%-26s %-8s %-16s %-18s %-6s %-8s %-8s %-7s %s%s\n' \
+        "$task" "$suite" "$model" "$variant" "$passes/$trials" "$pk" "$phk" "$rate" "$note" "$flag"
 done <<EOF
 $AGG
 EOF

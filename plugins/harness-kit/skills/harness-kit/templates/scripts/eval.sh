@@ -36,6 +36,14 @@
 #                       committed HEAD only (see eval_prepare_workspace), so
 #                       without this flag a dirty tree refuses to run — the
 #                       uncommitted changes would silently NOT be measured.
+#     --variant V       bare | plugin-activated (default bare) — the
+#                       execution-variant dimension: tags every recorded row
+#                       so a plugin-activated run of the same task/provider/
+#                       model coexists with its bare counterpart in
+#                       results.jsonl and docs/evals/baselines.json instead of
+#                       silently overwriting it (see eval-harness.sh). eval.sh
+#                       only tags the row — activating the plugin in the
+#                       trial workspace/environment is the caller's job.
 #
 # A single-trial run is a smoke test, not an eval: interpret pass rates over
 # trials with scripts/eval-harness.sh.
@@ -50,7 +58,7 @@ die() { echo "eval.sh: $*" >&2; exit 1; }
 command -v jq  >/dev/null 2>&1 || die "jq is required (JSON results). Install jq and retry."
 command -v git >/dev/null 2>&1 || die "git is required (workspace isolation)."
 
-TASK=""; TRIALS=3; PROVIDER=claude; MODEL=""; RUN_ID=""; ALLOW_DIRTY_HEAD=0
+TASK=""; TRIALS=3; PROVIDER=claude; MODEL=""; RUN_ID=""; ALLOW_DIRTY_HEAD=0; VARIANT=bare
 TASKS_DIR="$EVAL_TASKS_DIR_DEFAULT"; RESULTS_DIR="$EVAL_RESULTS_DIR_DEFAULT"; TIMEOUT=900
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -62,7 +70,8 @@ while [ $# -gt 0 ]; do
         --results-dir) RESULTS_DIR="$2"; shift 2 ;;
         --timeout) TIMEOUT="$2"; shift 2 ;;
         --allow-dirty-head) ALLOW_DIRTY_HEAD=1; shift ;;
-        -h|--help) sed -n '2,38p' "$0"; exit 0 ;;
+        --variant) VARIANT="$2"; shift 2 ;;
+        -h|--help) sed -n '2,46p' "$0"; exit 0 ;;
         -*) die "unknown option: $1" ;;
         *) [ -z "$TASK" ] && TASK="$1" || die "unexpected arg: $1"; shift ;;
     esac
@@ -73,6 +82,13 @@ case "$TRIALS" in ''|*[!0-9]*) die "--trials must be a positive integer" ;; esac
 # A non-integer --timeout would make every numeric test error out and the
 # fallback poll loop spin forever (never reaching the cap), so validate it here.
 case "$TIMEOUT" in ''|*[!0-9]*) die "--timeout must be a non-negative integer (seconds; 0 disables)" ;; esac
+# --variant is the execution-variant dimension (bare vs plugin-activated, see
+# eval_result_json) — validate up front so a typo dies loudly instead of
+# silently recording a third, unintended baseline key.
+case "$VARIANT" in
+    bare|plugin-activated) ;;
+    *) die "--variant must be bare|plugin-activated (got '$VARIANT')" ;;
+esac
 
 # One timestamp for the whole invocation — every trial's result line carries
 # it (see eval_result_json), so eval-harness.sh can pick the truly-latest run
@@ -230,7 +246,7 @@ run_agent() {
 PROMPT="$(eval_task_prompt "$TASK_DIR")"
 [ -n "$PROMPT" ] || die "task $TASK has an empty ## Prompt section"
 
-echo "eval: $TASK  provider=$PROVIDER  model=$MODEL  suite=$SUITE  polarity=$POLARITY  trials=$TRIALS"
+echo "eval: $TASK  provider=$PROVIDER  model=$MODEL  variant=$VARIANT  suite=$SUITE  polarity=$POLARITY  trials=$TRIALS"
 echo "run:  $OUT"
 
 passes=0
@@ -252,7 +268,7 @@ while [ "$i" -le "$TRIALS" ]; do
         # than requested, overstating reliability.
         echo "  trial $i: FAILED to prepare workspace — recorded as fail" >&2
         eval_result_json "$TASK" "$PROVIDER" "$MODEL" "$SUITE" "$POLARITY" "$RUN_ID" \
-            "$i" false 0 127 "$TRIAL_DIR" "$RUN_STARTED_AT" task_failure >> "$RESULTS" \
+            "$i" false 0 127 "$TRIAL_DIR" "$RUN_STARTED_AT" task_failure "" "$VARIANT" >> "$RESULTS" \
             || { rm -rf "$WS_BASE"; die "cannot write results to $RESULTS (trial $i)"; }
         rm -rf "$WS_BASE"; i=$((i+1)); continue
     fi
@@ -277,7 +293,7 @@ while [ "$i" -le "$TRIALS" ]; do
     # usage). Efficiency is now a recorded property of every results row.
     usage="$(eval_usage_json "$PROVIDER" "$TRIAL_DIR/transcript.jsonl")"
     eval_result_json "$TASK" "$PROVIDER" "$MODEL" "$SUITE" "$POLARITY" "$RUN_ID" \
-        "$i" "$passed" "$dur" "$agent_rc" "$TRIAL_DIR" "$RUN_STARTED_AT" "$outcome" "$usage" >> "$RESULTS" \
+        "$i" "$passed" "$dur" "$agent_rc" "$TRIAL_DIR" "$RUN_STARTED_AT" "$outcome" "$usage" "$VARIANT" >> "$RESULTS" \
         || { rm -rf "$WS_BASE"; die "cannot write results to $RESULTS (trial $i) — a read-only or full disk must not exit 0 with missing rows"; }
 
     printf '  trial %d: %s  (%ds%s)\n' "$i" \
