@@ -27,12 +27,13 @@ Codex and OpenCode):
 2. Keep `.claude/settings.json` — permissions and hook wiring are separate
    concerns and stay.
 
-**A provider ships native shell hooks** (watch: OpenCode, which today needs
-the TS plugin shim):
+**A provider ships native shell hooks** (watch: OpenCode, whose portable-hook
+reuse would take the TS plugin shim — not shipped, descoped 2026-07-13):
 
 1. Wire the same `scripts/hooks/*.sh` scripts in the provider's hook config
    per the provider matrix conventions (stdin JSON, exit 2 = deny).
-2. Delete the shim (`.opencode/plugins/` for OpenCode).
+2. Delete any hand-rolled shim (`.opencode/plugins/` for OpenCode); the kit
+   ships none by default.
 3. Re-verify payload shapes by piping the provider's real payloads through
    the scripts; extend `lib.sh:hook_affected_files` if a new layout appears.
 

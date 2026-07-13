@@ -266,10 +266,23 @@ in `baselines.json` with the threshold decision logged.
   contract (claude/cursor/codex) stable and retires the sol review's finding 4
   (an untested TS shim on an under-resourced tier). The scope plan already
   accepts a dated descope as resolving the documented-vs-shipped ambiguity.
-- 2026-07-13 — **Item 6: paid runs approved this cycle** (maintainer). The
-  Codex plugin-activated add-skill recordings and the per-provider
-  acceptance-floor decision ship in v0.14.0, run after the execution-variant
-  dimension lands so they don't key-collide.
+- 2026-07-13 — **Item 6 paid recordings DEFERRED** (maintainer; supersedes the
+  same-day "paid runs approved" decision). During integration the lead found the
+  paid phase has an unbuilt prerequisite: `eval.sh` runs each trial **bare**
+  (`codex exec` in a throwaway clone of the task's committed HEAD) and its
+  `--variant` flag only *tags* the row — "activating the plugin in the trial
+  workspace/environment is the caller's job" (`eval.sh` header). Recording
+  `--variant plugin-activated` now would write bare runs mislabeled as
+  plugin-activated, corrupting the very comparison item 6 exists to create. So
+  v0.14.0 ships item 6's **execution-variant dimension + collision test** (WS-C,
+  integrated + verified), and the **paid Codex recordings + per-provider
+  acceptance-floor decision move to a follow-up cycle** — gated on a real
+  activation path (seed the trial's `.codex` config/marketplace with harness-kit
+  when `--variant plugin-activated`). No spend this cycle. Follow-up theme:
+  eval plugin-activation mechanism → then the recordings + floor decision.
+- 2026-07-13 — ~~**Item 6: paid runs approved this cycle**~~ (superseded above):
+  originally approved to record the Codex plugin-activated cells + floor decision
+  in v0.14.0 after the dimension landed.
 - 2026-07-13 — **Items 1+2 stay in one Opus worktree** (WS-A), internally
   sequenced: they share `check-harness.sh`, `harness.conf`, `install-lib.sh`,
   and the agent-generation doc surfaces, so splitting them would only
