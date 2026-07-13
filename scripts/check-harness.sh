@@ -470,6 +470,148 @@ if [ "$mcp_inventory_declared" -eq 0 ] && [ "$mcp_saw_enabled_server" -eq 1 ]; t
     echo "WARNING: MCP servers configured but no trust inventory declared — set MCP_ALLOWED_SERVERS in harness.conf to pin each enabled server's expected identity (name + a command/args or URL substring); until then their identities are unaudited"
 fi
 
+# 8d. Semantic hook-wiring validation. The 8-family checks provider-config
+#     SEMANTICS the manifest deliberately does not byte-pin (they are tailored
+#     policy): #8/#8b the native secret deny lists, #8c MCP server identity, and
+#     here the per-provider hook wiring. For every hook-wired provider, each
+#     required (config path, event, matcher, script) TUPLE from the frozen
+#     provider-matrix hook table must hold — the guard on its correct event and
+#     matcher, its command resolving to an existing executable script. Presence
+#     alone is NOT enough: a guard swapped onto the wrong event, or a matcher
+#     weakened so it no longer covers Grep/Write, passes a presence check while
+#     leaving the guard inert. The empirical hole this closes: deleting the whole
+#     `hooks` object from .claude/settings.json used to leave check-harness green.
+#
+#     Which providers are hook-wired is DECLARED (harness.conf
+#     HOOK_WIRED_PROVIDERS), never inferred from directory presence — a provider
+#     dir also holds generated stubs, so a deleted .cursor/hooks.json would be
+#     indistinguishable from a provider never wired. A declared provider whose
+#     config is missing is an ERROR (mirrors #8's deleted-settings.json stance).
+#     harness.conf is tailored/diff-only on update, so a pre-declaration install
+#     would validate ZERO providers — to keep the headline hole from shipping, an
+#     adopted harness that leaves the set UNSET is a loud ERROR until update/audit
+#     proposes a set and the user confirms it (install-lib.sh harness_conf_declare;
+#     never inferred from surviving configs). Structural validation, never
+#     byte-pinning; the tuple parse is jq-gated like the rest of the 8-family
+#     (guards fail open without jq, and the doctor already WARNs), but the
+#     declared-yet-missing-config and undeclared-yet-adopted ERRORs need no jq.
+hook_tab=$(printf '\t')
+
+# hook_check_provider <provider_dir> — validates one declared hook-wired
+# provider against the frozen tuple table, incrementing the shared ERRORS.
+hook_check_provider() {
+    local prov="$1" cfg shape tuples rows rc script event matcher info path
+    local scriptpath wrongev badm
+    case "$prov" in
+        .claude)
+            cfg=".claude/settings.json"; shape="nested"
+            # "<script> <event> [<matcher>]"; no matcher field = require none;
+            # @any = event pinned, matcher not pinned (the contract for .codex
+            # and .cursor, whose matchers the provider matrix leaves open).
+            tuples='session-context.sh SessionStart
+guard-secrets.sh PreToolUse Read|Grep
+guard-config.sh PreToolUse Edit|Write
+format.sh PostToolUse Edit|Write
+guard-project-policy.sh Stop' ;;
+        .cursor)
+            cfg=".cursor/hooks.json"; shape="flat"
+            tuples='session-context.sh sessionStart @any
+guard-secrets.sh beforeReadFile @any
+format.sh afterFileEdit @any
+guard-project-policy.sh stop @any' ;;
+        .codex)
+            cfg=".codex/hooks.json"; shape="nested"
+            tuples='session-context.sh SessionStart @any
+guard-secrets.sh PreToolUse @any
+guard-config.sh PreToolUse @any
+format.sh PostToolUse @any
+guard-project-policy.sh Stop @any' ;;
+        *)
+            echo "ERROR: HOOK_WIRED_PROVIDERS names '$prov' but check-harness.sh has no hook-tuple contract for it — only .claude, .cursor, .codex are hook-wired; remove it or extend the contract table"
+            ERRORS=$((ERRORS + 1)); return ;;
+    esac
+
+    if [ ! -f "$ROOT/$cfg" ]; then
+        echo "ERROR: hook-wired provider '$prov' is declared (harness.conf HOOK_WIRED_PROVIDERS) but its hook config $cfg is missing — restore it or remove '$prov' from the declaration (mirrors #8's deleted-settings.json stance)"
+        ERRORS=$((ERRORS + 1)); return
+    fi
+
+    # Parsing the wiring needs jq; without it the guards fail open anyway.
+    command -v jq >/dev/null 2>&1 || return 0
+    if [ "$shape" = "nested" ]; then
+        rows=$(jq -r '(.hooks // {}) | to_entries[] | .key as $ev | (.value[]?) | (.matcher // "") as $m | (.hooks[]?.command // empty) as $c | [$ev, $m, $c] | @tsv' "$ROOT/$cfg" 2>/dev/null); rc=$?
+    else
+        rows=$(jq -r '(.hooks // {}) | to_entries[] | .key as $ev | (.value[]?) | [$ev, "", (.command // empty)] | @tsv' "$ROOT/$cfg" 2>/dev/null); rc=$?
+    fi
+    if [ "$rc" -ne 0 ]; then
+        echo "ERROR: hook-wired provider '$prov' config $cfg could not be parsed as JSON — its hook wiring cannot be validated; fix the file"
+        ERRORS=$((ERRORS + 1)); return
+    fi
+
+    # Tuple coverage: each required guard on its correct event (+ matcher). awk
+    # computes the verdict per guard (no subshell touches ERRORS); the heredoc
+    # loop stays in this shell so ERRORS increments persist.
+    while read -r script event matcher; do
+        [ -n "$script" ] || continue
+        scriptpath="scripts/hooks/$script"
+        info=$(printf '%s\n' "$rows" | awk -F"$hook_tab" -v sp="$scriptpath" -v ev="$event" -v m="$matcher" '
+            index($3, sp) { ref=1
+                if ($1==ev) { evok=1; if (m=="@any" || $2==m) full=1; else badm=$2 }
+                else wrongev=$1 }
+            END {
+                if (!ref) { print "NOREF"; exit }
+                if (full) { print "OK"; exit }
+                if (evok) { print "BADM\t" badm; exit }
+                print "BADEV\t" wrongev }')
+        case "$info" in
+            OK) : ;;
+            NOREF)
+                echo "ERROR: guard $script is not wired in $cfg — the frozen provider-matrix contract requires it on event '$event'; every declared hook-wired provider must carry all its required guards"
+                ERRORS=$((ERRORS + 1)) ;;
+            BADEV*)
+                wrongev=${info#BADEV"$hook_tab"}
+                echo "ERROR: guard $script is wired on event '$wrongev' in $cfg but the frozen contract requires '$event' — a guard on the wrong event does not fire when it must"
+                ERRORS=$((ERRORS + 1)) ;;
+            BADM*)
+                badm=${info#BADM"$hook_tab"}
+                echo "ERROR: guard $script on '$event' in $cfg has matcher '$badm', not the required '$matcher' — a weakened matcher narrows the guard's coverage (e.g. dropping Grep or Write)"
+                ERRORS=$((ERRORS + 1)) ;;
+        esac
+    done <<HOOK_TUPLES
+$tuples
+HOOK_TUPLES
+
+    # Command resolvability: every referenced scripts/hooks/*.sh must exist and
+    # be executable — a command repointed at a missing/renamed script is a silent
+    # no-op the tuple table alone would miss. Pull the script paths straight out
+    # of every command (no tab field-split — an empty matcher field collapses
+    # under read's whitespace-IFS), dedup, and check each.
+    while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        if [ ! -x "$ROOT/$path" ]; then
+            echo "ERROR: a hook command in $cfg points at '$path' but that script is missing or not executable — restore it (chmod +x) or fix the command"
+            ERRORS=$((ERRORS + 1))
+        fi
+    done <<HOOK_ROWS
+$(printf '%s\n' "$rows" | grep -oE 'scripts/hooks/[A-Za-z0-9_.-]+\.sh' | sort -u)
+HOOK_ROWS
+}
+
+hook_wired_declared=0
+[ -n "${HOOK_WIRED_PROVIDERS+x}" ] && hook_wired_declared=1
+if [ "$hook_wired_declared" -eq 0 ]; then
+    # Undeclared: only a diagnostic once the harness is adopted (scripts/hooks/
+    # present) — a brand-new repo that has not run init yet still skips, like #9.
+    if [ -d "$ROOT/scripts/hooks" ]; then
+        echo "ERROR: harness is adopted (scripts/hooks/ present) but harness.conf declares no HOOK_WIRED_PROVIDERS — the semantic hook-wiring check would validate ZERO providers, leaving every provider's hooks silently disableable. Declare the hook-wired set (init populates it; update/audit proposes a set to confirm — never inferred from surviving configs; see install-lib.sh harness_conf_declare). Set it to \"\" if this harness wires no hooks."
+        ERRORS=$((ERRORS + 1))
+    fi
+else
+    for hook_prov in $HOOK_WIRED_PROVIDERS; do
+        hook_check_provider "$hook_prov"
+    done
+fi
+
 # 9. Mechanism files must match scripts/.harness-manifest (kit version plus
 #    sha256 per file, written at init). An un-pinned edit — agent, human, or
 #    merge — fails CI, so nobody can quietly rewrite a guard. Lines ending in

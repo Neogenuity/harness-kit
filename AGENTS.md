@@ -52,11 +52,14 @@ stubs drift from the generator output.
   findings to `.harness/log.jsonl`. Its catch-rate is the seeded-defect eval
   (`docs/evals/tasks/seeded-defect-review/`).
 
-Provider agent stubs (`.claude/agents/`, `.cursor/agents/`, `.codex/agents/`,
-`.opencode/agents/`) are **hand-authored** thin pointers to the canonical doc —
-`sync-agent-skills.sh` generates skill stubs, not agent stubs. Edit the
-canonical `docs/agents/` file; keep the stubs' frontmatter description (the
-routing trigger) in sync by hand.
+Provider agent stubs (`.claude/agents/`, `.cursor/agents/`, `.codex/agents/`
+as TOML, `.opencode/agents/`) are **generated** pointer stubs, like the skill
+stubs: `sync-agent-skills.sh` produces one per declared `AGENT_PROVIDERS`
+entry (`harness.conf`) from the canonical doc's `name`/`description`/`tools`
+frontmatter. Edit the canonical `docs/agents/` file, then run
+`bash scripts/sync-agent-skills.sh`; `check-harness.sh` (CI-gated) fails if a
+stub drifts from the generator, is missing from a declared provider, or orphans
+a deleted persona.
 
 ## Plans
 

@@ -24,21 +24,19 @@ A fixed format makes the persona's results consumable by the calling agent.>
 ---
 
 <!--
-Provider wiring (not part of the canonical doc): each harness that supports
-subagents gets a thin stub with its own frontmatter pointing here, e.g.
-.claude/agents/<name>.md:
+Provider wiring (not part of the canonical doc): give this doc `name`,
+`description`, and `tools` frontmatter (the same shape SKILL.md uses — the
+`description` is the routing signal the MAIN agent delegates on), then run
+`bash scripts/sync-agent-skills.sh`. It GENERATES a pointer stub per declared
+`AGENT_PROVIDERS` entry in that provider's dialect (`.claude/agents/<name>.md`,
+`.cursor/agents/<name>.md`, `.opencode/agents/<name>.md`, and
+`.codex/agents/<name>.toml`). Edit the frontmatter here, never a stub —
+`check-harness.sh` fails on any stub that drifts from the generator, is missing
+from a declared provider, or orphans a deleted canonical persona:
 
 ---
 name: <kebab-name>
-description: <when the MAIN agent should delegate to this persona — this is
-  the routing signal>
+description: <when the MAIN agent should delegate to this persona>
 tools: <minimal tool list, e.g. Read, Grep, Glob, Bash>
 ---
-
-# <Agent Name> Agent
-
-Canonical source: `docs/agents/<name>.md`
-
-Read that file first — it defines the checklist and required output format.
-Then perform the requested task against it.
 -->

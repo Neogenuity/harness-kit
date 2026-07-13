@@ -5,8 +5,13 @@ Read [../pattern.md](../pattern.md) first if unread this session.
 Grade an existing repo against the pattern. Check, in order: canonical
 `docs/` presence (or content trapped in provider dirs / duplicated);
 AGENTS.md as TOC with live links; skills canonical + stubs generated
-everywhere `harness.conf` claims; hooks portable, executable, tested; native
-permission deny list mirroring the secret guard; the configured `PLANS_DIR`
+everywhere `harness.conf` claims; agent personas canonical + stubs generated in
+every declared `AGENT_PROVIDERS` dir; `HOOK_WIRED_PROVIDERS` and
+`AGENT_PROVIDERS` declared (an adopted harness that leaves either undeclared
+can't semantically validate its hook wiring or agent stubs — propose the
+confirmed sets, never inferred from surviving configs/stubs); hooks portable,
+executable, tested, and each hook-wired provider's config validating
+tuple-by-tuple; native permission deny list mirroring the secret guard; the configured `PLANS_DIR`
 (`harness.conf`) resolving to a real directory (a dangling one makes
 `session-context.sh` silently announce nothing) and `docs/plans/README.md`
 present (AGENTS.md links it, so a missing README is a dead link); CI running

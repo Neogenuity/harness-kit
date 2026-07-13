@@ -124,6 +124,33 @@ harness_append_gitignore() {
     fi
 }
 
+# harness_conf_declared <repo_root> <VARNAME>
+# Returns 0 if scripts/harness.conf declares VARNAME (an uncommented
+# `VARNAME=` assignment), 1 otherwise. Update/audit uses it to tell a legacy
+# pre-declaration install (needs HOOK_WIRED_PROVIDERS / AGENT_PROVIDERS migrated
+# in) from a current one — check-harness.sh fails loudly on the former.
+harness_conf_declared() {
+    local conf="$1/scripts/harness.conf" var="$2"
+    [ -f "$conf" ] || return 1
+    grep -qE "^[[:space:]]*${var}=" "$conf"
+}
+
+# harness_conf_declare <repo_root> <VARNAME> <value>
+# Idempotently ensure scripts/harness.conf declares VARNAME="value". The value
+# is the CALLER's (the user's confirmed choice from update/audit's proposal),
+# NEVER inferred from whichever provider configs/stubs survive on disk — a config
+# deleted before an upgrade is mechanically indistinguishable from one never
+# wired, so adopting survivors would silently bless the deletion. If VARNAME is
+# already declared this is a NO-OP: migration confirms the set ONCE, and a
+# second update must neither duplicate the line nor reset a value the user has
+# since edited. Appends when absent. Returns 1 if there is no harness.conf.
+harness_conf_declare() {
+    local conf="$1/scripts/harness.conf" var="$2" value="$3"
+    [ -f "$conf" ] || return 1
+    harness_conf_declared "$1" "$var" && return 0
+    printf '%s="%s"\n' "$var" "$value" >> "$conf"
+}
+
 # harness_install_mechanism <src_scripts_dir> <repo_root>
 # Copies the mechanism — the pinned top-level files plus the hooks/ tree — from
 # an existing scripts/ dir into <repo_root>/scripts and sets exec bits. Copies

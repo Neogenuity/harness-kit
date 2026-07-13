@@ -13,11 +13,12 @@ whatever ships next — without maintaining N parallel configurations.
 
 2. **Provider shims are generated or thin.** Each harness needs files in its
    own dialect and location (`.claude/skills/`, `.cursor/rules/`, ...). Those
-   are either *generated pointer stubs* (skills — produced by
-   `scripts/sync-agent-skills.sh`) or *hand-written thin pointers* (agent
-   personas, cursor rules) that carry only the harness-required frontmatter
-   plus a "Canonical source: docs/..." line. Frontmatter is copied verbatim
-   from the canonical file because the `description` is the activation
+   are either *generated pointer stubs* (skills AND agent personas — both
+   produced by `scripts/sync-agent-skills.sh`, in each provider's dialect:
+   `.codex` agent stubs are TOML, the rest Markdown) or *hand-written thin
+   pointers* (cursor rules) that carry only the harness-required frontmatter
+   plus a "Canonical source: docs/..." line. Frontmatter is copied from the
+   canonical file because the `description` is the activation/routing
    trigger — tuning it in `docs/` must propagate to every harness.
 
 3. **Behavior lives in portable executables, not harness config.** Hooks are

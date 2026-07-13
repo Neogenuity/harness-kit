@@ -68,6 +68,15 @@ locations and event mappings are in [../provider-matrix.md](../provider-matrix.m
      configured command+args or URL. `check-harness.sh` ERRORs on a
      configured server missing from the inventory or whose identity drifted;
      leave it set-but-empty to assert "no MCP servers" strictly.
+   - `harness.conf` `HOOK_WIRED_PROVIDERS` / `AGENT_PROVIDERS`: set each to the
+     providers you actually wire in steps 5–6. `HOOK_WIRED_PROVIDERS` is the
+     hook-wired subset (`.claude .cursor .codex`; OpenCode is descoped — no bash
+     hook shim) whose hook config `check-harness.sh` validates tuple-by-tuple;
+     `AGENT_PROVIDERS` is the set that receives generated agent stubs
+     (`.claude .cursor .codex .opencode`). A declared provider missing its
+     config/stubs is an ERROR; leaving either UNSET on an adopted harness is a
+     loud diagnostic. Drop a provider from the set if you don't wire it (set to
+     `""` for none).
    - `hooks/guard-config.sh`: extend `PROTECTED_PATHS` with the repo's
      linter/formatter configs — the files an agent could edit to make
      findings disappear. The harness mechanism is protected by default, now
@@ -103,10 +112,11 @@ locations and event mappings are in [../provider-matrix.md](../provider-matrix.m
      runs after `verify.sh` passes, checks the four classes gates can't see,
      and emits v1-compatible `hook_log` findings to `.harness/log.jsonl` (its
      catch-rate is gated by the `seeded-defect-review` eval). Follow that
-     template (or `templates/docs/agents/_example.md` for a bespoke persona),
-     and add thin stubs in `.claude/agents/`, `.cursor/agents/`,
-     `.codex/agents/<name>.toml`, and `.opencode/agents/` per the wiring
-     comment.
+     template (or `templates/docs/agents/_example.md` for a bespoke persona) —
+     give the canonical doc `name`/`description`/`tools` frontmatter; the
+     provider stubs (`.claude/agents/`, `.cursor/agents/`, `.opencode/agents/`
+     as Markdown, `.codex/agents/<name>.toml` as TOML) are GENERATED from it by
+     `sync-agent-skills.sh` in step 6 — never hand-authored.
    - `docs/plans/README.md` from `templates/docs/plans/README.md` (AGENTS.md
      links it, so `check-harness.sh` needs it to exist), and create the
      `PLANS_DIR` (`docs/plans/active/` by default) with a `.gitkeep` so
@@ -153,7 +163,9 @@ locations and event mappings are in [../provider-matrix.md](../provider-matrix.m
    - Gemini CLI: write `.gemini/settings.json` with
      `{ "context": { "fileName": ["AGENTS.md", "GEMINI.md"] } }` so it loads the
      shared `AGENTS.md` (default reads `GEMINI.md` only; verified 2026-07-11).
-   - Run `bash scripts/sync-agent-skills.sh` to generate all skill stubs.
+   - Run `bash scripts/sync-agent-skills.sh` to generate all skill AND agent
+     stubs (agent stubs come from each `docs/agents/*.md` frontmatter into every
+     `AGENT_PROVIDERS` dir).
 
 7. **CI gate**: install `templates/ci/github-actions-harness-check.yml` as
    `.github/workflows/harness-check.yml` (or add the `check-harness.sh` step

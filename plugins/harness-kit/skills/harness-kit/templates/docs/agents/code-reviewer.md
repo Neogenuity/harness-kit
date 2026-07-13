@@ -1,3 +1,9 @@
+---
+name: code-reviewer
+description: Inferential reviewer for a completed diff AFTER verify.sh passes — checks misunderstood scope, over-engineering, cause-masking fixes, and missing/weak tests, the four classes deterministic gates can't see. Delegate before opening a PR or declaring a task done.
+tools: Read, Grep, Glob, Bash
+---
+
 # Code Reviewer Agent
 
 An inferential reviewer that runs **after** the deterministic gates
@@ -140,34 +146,15 @@ part a target repo customizes.
 ---
 
 <!--
-Provider wiring (not part of the canonical doc): each harness that supports
-subagents gets a thin, hand-authored stub with its own frontmatter pointing
-here — `sync-agent-skills.sh` generates skill stubs, NOT agent stubs, so these
-are authored by hand (see the add-agent flow). Non-blocking by default.
-
-.claude/agents/code-reviewer.md (Cursor .cursor/agents/, OpenCode
-.opencode/agents/ use the same markdown shape):
-
----
-name: code-reviewer
-description: Inferential reviewer for a completed diff AFTER verify.sh passes —
-  checks misunderstood scope, over-engineering, cause-masking fixes, and
-  missing/weak tests, the four classes deterministic gates can't see. Delegate
-  before opening a PR or declaring a task done.
-tools: Read, Grep, Glob, Bash
----
-
-# Code Reviewer Agent
-
-Canonical source: `docs/agents/code-reviewer.md`
-
-Read that file first — it defines the four review classes, the findings schema
-(`.harness/log.jsonl`), and the required output format. Then review the diff the
-caller names. Advisory: report findings, never block.
-
-.codex/agents/code-reviewer.toml carries the same routing as `developer_instructions`:
-
-  name = "code-reviewer"
-  description = "..."
-  developer_instructions = "Canonical source: docs/agents/code-reviewer.md — read it first ..."
+Provider wiring (not part of the canonical doc): the per-provider stubs are
+GENERATED, not hand-authored. `sync-agent-skills.sh` now generates agent stubs
+too (alongside skill stubs) from THIS doc's `name`/`description`/`tools`
+frontmatter — one stub per declared `AGENT_PROVIDERS` entry, in that provider's
+dialect: `.claude/agents/<name>.md`, `.cursor/agents/<name>.md`,
+`.opencode/agents/<name>.md` (Markdown) and `.codex/agents/<name>.toml` (TOML,
+routing carried as `developer_instructions`). Tune the routing `description`
+HERE, then run `bash scripts/sync-agent-skills.sh` — `check-harness.sh` (via
+`--check`) fails on a stub that drifts from the generator, is missing from a
+declared provider, or orphans a deleted canonical persona. Non-blocking review.
 -->
+
