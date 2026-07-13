@@ -90,12 +90,18 @@ UEOF
 {"type":"item.completed","item":{"item_type":"command_execution"}}
 {"type":"item.completed","item":{"item_type":"command_execution"}}
 {"type":"item.completed","item":{"item_type":"file_change"}}
+{"type":"item.completed","item":{"item_type":"mcp_tool_call"}}
+{"type":"item.completed","item":{"item_type":"web_search"}}
 {"type":"item.completed","item":{"item_type":"agent_message"}}
 {"type":"turn.completed","usage":{"input_tokens":2000,"cached_input_tokens":1500,"output_tokens":300,"reasoning_output_tokens":50}}
 UEOF
-    _uexpect "usage: codex turn.completed extraction (uncached=input-cached; cost null)" \
+    # tool_calls counts every non-message/reasoning item.completed: the two
+    # commands, the file change, AND mcp_tool_call + web_search (the tool types
+    # the old command|file_change|patch allowlist silently dropped). The
+    # agent_message is excluded — so 5, not 3 (and not 6).
+    _uexpect "usage: codex turn.completed extraction (uncached=input-cached; cost null; counts mcp/web tools)" \
         "$(eval_usage_json codex "$utmp/codex.jsonl")" \
-        '{"input_uncached":500,"input_cached_read":1500,"input_cache_write":null,"output":300,"cost":null,"tool_calls":3}'
+        '{"input_uncached":500,"input_cached_read":1500,"input_cache_write":null,"output":300,"cost":null,"tool_calls":5}'
 
     _uexpect "usage: missing transcript => all-null object" \
         "$(eval_usage_json claude "$utmp/does-not-exist.jsonl")" \

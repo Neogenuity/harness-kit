@@ -9,7 +9,7 @@ grep -qE '^SECRET_PATTERNS=.*\*\.key' scripts/harness.conf 2>/dev/null && root_h
 
 # Auxiliary (non-gating) mirror completeness — parsed from check.log later.
 m=0
-grep -q 'key' "$TPL/scripts/hooks/test-guard-secrets.sh" 2>/dev/null && m=$((m+1))
+grep -q '\*\.key' "$TPL/scripts/hooks/test-guard-secrets.sh" 2>/dev/null && m=$((m+1))
 grep -q '\*\.key' "$TPL/providers/claude/settings.json" 2>/dev/null && m=$((m+1))
 grep -q '\*\.key' "$TPL/providers/opencode/opencode.json" 2>/dev/null && m=$((m+1))
 echo "MIRRORS:$m/3 (template test-guard-secrets, claude deny tmpl, opencode deny tmpl)"

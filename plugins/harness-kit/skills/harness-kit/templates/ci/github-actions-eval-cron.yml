@@ -80,20 +80,30 @@ jobs:
           # would swallow the error, recording no results for a model run.
           model_arg=()
           if [ -n "$MODEL" ]; then model_arg=(--model "$MODEL"); fi
-          ran=0
+          ran=0; failed=0
           for d in docs/evals/tasks/*/; do
             slug="$(basename "$d")"
             case "$slug" in _*) continue ;; esac
             [ -f "$d/TASK.md" ] || continue
+            # A provider-pinned task refuses a mismatched --provider. Skip that
+            # case EXPLICITLY (mock is exempt) so the eval call below does NOT
+            # need a blanket `|| true` — any OTHER failure (interrupted run,
+            # results-write error, invalid metadata) then surfaces instead of
+            # being silently scored as a clean partial run.
+            pin=$(sed -n 's/^- *provider: *//p' "$d/TASK.md" | awk 'NR==1{print $1}')
+            if [ "$PROVIDER" != mock ] && [ -n "$pin" ] && [ "$pin" != any ] && [ "$pin" != "$PROVIDER" ]; then
+              echo "skip $slug (pinned to $pin, this run is $PROVIDER)"; continue
+            fi
             echo "::group::eval $slug ($PROVIDER)"
-            # A provider-pinned task refuses a mismatched --provider; tolerate it
-            # so one non-matching task can't fail the whole scheduled run.
             bash scripts/eval.sh "$slug" --provider "$PROVIDER" \
-              "${model_arg[@]}" --trials "$TRIALS" || true
+              "${model_arg[@]}" --trials "$TRIALS" || { echo "::error::eval $slug failed unexpectedly"; failed=1; }
             echo "::endgroup::"
             ran=1
           done
           [ "$ran" = 1 ] || { echo "no tasks under docs/evals/tasks/"; exit 1; }
+          # A real failure means the bank is incomplete — fail the step so the
+          # scoring step below does not report a partial run as a clean success.
+          [ "$failed" = 0 ] || { echo "one or more evals failed unexpectedly"; exit 1; }
 
       - name: Score vs baseline (never --update-baseline)
         # --no-fail reports regressions/violations without failing the job, so the

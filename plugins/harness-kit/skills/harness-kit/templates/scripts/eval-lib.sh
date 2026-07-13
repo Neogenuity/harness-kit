@@ -217,7 +217,7 @@ eval_usage_json() {
               [ split("\n")[] | select(length>0) | (fromjson? // empty) ] as $rows
               | ($rows | map(select(.type=="turn.completed")) | last) as $t
               | ($rows | map(select(.type=="item.completed")
-                    | ((.item.item_type // .item.type // "")) | select(test("command|file_change|patch"))) | length) as $tools
+                    | ((.item.item_type // .item.type // "")) | select(test("message|reasoning")|not)) | length) as $tools
               | if $t != null then
                   ($t.usage.input_tokens // null) as $in
                   | ($t.usage.cached_input_tokens // null) as $cr
