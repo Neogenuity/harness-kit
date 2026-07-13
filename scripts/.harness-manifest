@@ -1,5 +1,5 @@
 # harness-kit 0.12.0
-aeab2fa664816dcad95f82fb68a45a01ef2fe4a5d039f16cf72b1c430d425ad4  scripts/check-harness.sh
+24b0b9ef6f3290ddf6b16b80361b203590f8d8efd7d9bc2a7f4cdf21dd1ddf5a  scripts/check-harness.sh
 7b6f0ef248121b10a267c0a53fab98f9ad86458a5970ea3eb3ff99befe9a57e0  scripts/check-packaging.sh # tailored
 2948ed3cc21fe3e47f8119f6f05708caefcd018e5c0e458d8a68b9fdd930312e  scripts/eval-harness.sh
 93190778655d905e930ef1a17fc23878aecf1526aa658f843f985bcc98d3fa10  scripts/eval-lib.sh
@@ -23,7 +23,7 @@ add5a4faeedb2dcdeb4c1571910b5479b0c116131fd8988f65915cb8d486cdfb  scripts/hooks/
 20a98ffc455ac8fd8552c26364d50d21da975ca3aec359adb2099b087a8d3c7d  scripts/hooks/test-session-context.sh
 841808facf5563a598f5bca3db2e26403357a0873e2abd0e8ac0fe9024c8bacc  scripts/install-lib.sh
 49a9ab603bca1c469ea9c813dac3352b720281141870e491f30288c6c9af5dc9  scripts/sync-agent-skills.sh
-9e884df1a77cdc1395ff5bf6699abb61c19e25ac980decf79aabb36c434299b4  scripts/test-check-harness.sh
+d0688f073537b4abc240267089d4e782bbf9d53d356f1f3991d296a7db8a1ebf  scripts/test-check-harness.sh
 90a7463eb9c85ffc53be33fc38ea0fe59732a830a3cb3d5c46dca54e647a6f65  scripts/test-eval.sh
 39eecb8b2f0ce08c2ce8cd288836927de9562e859c5bb128aa20fda978a5c801  scripts/test-install.sh
 ffbe6eeca3ef5a06a39cb085f48a85efff8d2ae99938482714b3dd841327cc1c  scripts/test-template-sync.sh # tailored

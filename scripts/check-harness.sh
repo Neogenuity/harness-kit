@@ -495,6 +495,13 @@ fi
 #     byte-pinning; the tuple parse is jq-gated like the rest of the 8-family
 #     (guards fail open without jq, and the doctor already WARNs), but the
 #     declared-yet-missing-config and undeclared-yet-adopted ERRORs need no jq.
+#     Boundary (as honest as #8/#8c's "detects drift, not equivalence"): this
+#     validates the wiring STRUCTURE — which script is bound to which
+#     event/matcher — by matching the script path inside the command string. It
+#     does not prove the command actually execs that script, so a deliberately
+#     neutered command that only name-drops the path (e.g. `true # .../guard.sh`)
+#     is out of scope here; guard-config.sh (tool-mediated edits) and the
+#     manifest (the scripts themselves) are the layers that defend against that.
 hook_tab=$(printf '\t')
 
 # hook_check_provider <provider_dir> — validates one declared hook-wired
@@ -555,8 +562,21 @@ guard-project-policy.sh Stop @any' ;;
         [ -n "$script" ] || continue
         scriptpath="scripts/hooks/$script"
         info=$(printf '%s\n' "$rows" | awk -F"$hook_tab" -v sp="$scriptpath" -v ev="$event" -v m="$matcher" '
+            # covers(required, configured): true when the configured matcher fires
+            # on at least every event the required one does. Weakening (a missing
+            # required token) fails; widening or reordering passes. Empty = the
+            # universal matcher (fires on all events): a universal config covers any
+            # requirement, but a universal REQUIREMENT (no-matcher guards like
+            # SessionStart/Stop) is only met by a universal config — adding a
+            # matcher there narrows coverage and must fail.
+            function covers(req, got,   a, b, i, j, n, ok) {
+                if (req == "") return (got == "")
+                if (got == "") return 1
+                n = split(req, a, "|"); split(got, b, "|")
+                for (i=1;i<=n;i++){ ok=0; for(j in b) if(b[j]==a[i]){ok=1;break}; if(!ok) return 0 }
+                return 1 }
             index($3, sp) { ref=1
-                if ($1==ev) { evok=1; if (m=="@any" || $2==m) full=1; else badm=$2 }
+                if ($1==ev) { evok=1; if (m=="@any" || covers(m, $2)) full=1; else badm=$2 }
                 else wrongev=$1 }
             END {
                 if (!ref) { print "NOREF"; exit }
@@ -574,7 +594,7 @@ guard-project-policy.sh Stop @any' ;;
                 ERRORS=$((ERRORS + 1)) ;;
             BADM*)
                 badm=${info#BADM"$hook_tab"}
-                echo "ERROR: guard $script on '$event' in $cfg has matcher '$badm', not the required '$matcher' — a weakened matcher narrows the guard's coverage (e.g. dropping Grep or Write)"
+                echo "ERROR: guard $script on '$event' in $cfg has matcher '$badm', which does not cover the required '$matcher' — a weakened matcher narrows the guard's coverage (e.g. dropping Grep or Write). Widening or reordering is fine; a missing required tool is not."
                 ERRORS=$((ERRORS + 1)) ;;
         esac
     done <<HOOK_TUPLES

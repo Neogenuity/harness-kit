@@ -756,7 +756,13 @@ JSON
 
     W=$(new_hookwired_fixture)
     jq '(.hooks.PreToolUse[] | select(.matcher=="Read|Grep") | .matcher) = "Read"' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
-    assert_flags "8d: a weakened matcher is flagged" "$W" "has matcher 'Read', not the required 'Read|Grep'"
+    assert_flags "8d: a weakened matcher is flagged" "$W" "which does not cover the required 'Read|Grep'"
+
+    # A WIDENED or reordered matcher fires on at least every required event, so it
+    # is not a weakening and must pass (config matcher is tailored, not pinned).
+    W=$(new_hookwired_fixture)
+    jq '(.hooks.PreToolUse[] | select(.matcher=="Read|Grep") | .matcher) = "Grep|Read|Fetch"' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
+    assert_ok "8d: a widened/reordered matcher (superset of required) still passes" "$W"
 
     W=$(new_hookwired_fixture)
     jq '.hooks.Stop[0].hooks += [{"type":"command","command":"scripts/hooks/ghost.sh"}]' "$W/.codex/hooks.json" > "$W/.codex/s" && mv "$W/.codex/s" "$W/.codex/hooks.json"
