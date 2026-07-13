@@ -3,6 +3,18 @@
 Read [../pattern.md](../pattern.md) first if unread this session; provider file
 locations and event mappings are in [../provider-matrix.md](../provider-matrix.md).
 
+**Preflight — runtime prerequisites (before scaffolding anything).** Source
+`scripts/install-lib.sh` and run `harness_missing_prereqs`; name every tool it
+prints to the user *before* installing the mechanism. The critical one is
+**`jq`**: without it every guard hook fails OPEN (see the provider matrix), so
+the whole in-turn feedback layer — secret-read denials, the format/lint loop,
+the advisory stop-hook — is silently inert and only the native permission deny
+lists stay live. `git` and a sha256 tool (`shasum`/`sha256sum`) are the other
+hard dependencies. If any are missing, get the user to ACKNOWLEDGE scaffolding a
+harness whose feedback layer is degraded (better: install the dependency first)
+— do not silently proceed. This is a name-and-acknowledge gate ONLY: it does
+**not** change the guards' deliberate fail-open posture, and `check-harness.sh`'s
+doctor keeps WARNing on the same condition on every later run (check #10).
 
 1. **Recon (before asking anything).** Detect: languages and build files
    (composer.json, package.json, pyproject.toml, go.mod, Cargo.toml);
@@ -153,9 +165,12 @@ locations and event mappings are in [../provider-matrix.md](../provider-matrix.m
    - OpenCode: `opencode.json` — its `permission.read` deny block mirrors
      `SECRET_PATTERNS` (keep the two in sync when tailoring; add `"mcp"`
      servers only if needed — each also gets an `MCP_ALLOWED_SERVERS` line,
-     step 4); optionally a TS plugin shim in `.opencode/plugins/` that shells
-     out to the portable hooks (see provider matrix) — otherwise guards
-     degrade to these native permissions + CI.
+     step 4). No hook shim ships (descoped 2026-07-13): a TS plugin shim in
+     `.opencode/plugins/` shelling out to the portable hooks is the documented
+     path (see provider matrix), but the kit provides no template for it, so
+     OpenCode is left out of `HOOK_WIRED_PROVIDERS` and its guards degrade to
+     these native permissions + CI — the intended backstop, not a gap to fill
+     by hand.
    - GitHub Copilot coding agent: nothing to wire — it reads `AGENTS.md`
      natively, including nested files (verified 2026-07-11). Optionally add a
      thin `.github/copilot-instructions.md` pointing at `AGENTS.md` for the
@@ -185,6 +200,11 @@ locations and event mappings are in [../provider-matrix.md](../provider-matrix.m
    ```bash
    . scripts/install-lib.sh
    harness_generate_manifest . <kit-version> > scripts/.harness-manifest
+   # Persist the pristine templates as update mode's channel-independent diff
+   # base — recoverable with NO local git (plugin/copied installs need not keep
+   # .git; see update.md). <src-templates-scripts> is the kit templates/scripts
+   # dir this install copied from.
+   harness_persist_base <src-templates-scripts> . <kit-version>
    ```
    (kit version = `version` in the kit's `.claude-plugin/plugin.json`).
    `check-harness.sh` verifies these checksums from now on, so every later
