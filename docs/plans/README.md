@@ -121,17 +121,18 @@ rows + strict Agent Skills validation + matrix stamping
 **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
 ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
-**Active:** [launch-readiness.md](active/launch-readiness.md) — parallel-track;
+**Active:** [v0.15.0 runtime legibility](active/v0.15.0-runtime-legibility.md) —
+the mechanism plan for the worktree-aware `dev.sh` contract, live verification,
+and app-shaped runtime evidence; activated 2026-07-14 after Terra/Luna execution
+review. And [launch-readiness.md](active/launch-readiness.md) — parallel-track;
 doc items 3–6 (SECURITY.md, "what 1.0 promises", supported-platforms, content
 hygiene sweep) shipped in v0.13.0, while the demo, the org move, and the public
-flip remain maintainer actions. The next mechanism plan activates from the queue
-below.
+flip remain maintainer actions. The remaining mechanism queue follows.
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [runtime-legibility.md](runtime-legibility.md) | The `dev.sh` contract, worktree-safe instances, live verification |
-| 2 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
-| 3 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
+| 1 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
+| 2 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
 
 **Ordering rationale.** Claim-to-implementation gaps went first — plans
 machinery (v0.6.0) closed the space between what the docs promise and what
