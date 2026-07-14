@@ -16,9 +16,19 @@
 #                             --output-last-message <file>
 #                         Tasks declaring `network: required` additionally get
 #                             -c sandbox_workspace_write.network_access=true
-# The workspace is a throwaway clone, which is why the sandbox-bypass flags are
-# acceptable here and only here. Network access is opt-in per task; the default
-# remains the workspace-write sandbox with network disabled.
+#                             -c features.network_proxy.enabled=true
+#                             -c features.network_proxy.allow_local_binding=true
+#                             -c 'features.network_proxy.domains={"localhost"="allow","127.0.0.1"="allow"}'
+#                             -c 'features.network_proxy.unix_sockets={}'
+#                             -c features.network_proxy.dangerously_allow_non_loopback_proxy=false
+#                             -c features.network_proxy.dangerously_allow_all_unix_sockets=false
+# Network access is opt-in per task. The Codex override is an explicit task-only
+# broad local/private weakening; its exact domain map still excludes public
+# hosts. The default remains the workspace-write sandbox with network disabled.
+# A task declaring `execution: provider-config-write` additionally requires the
+# caller's `--allow-provider-config-write` acknowledgment. That maintenance mode
+# gives the provider unrestricted host filesystem and public network access; the
+# disposable workspace does not contain effects elsewhere on the host.
 #
 #   bash scripts/eval.sh <task-slug> [options]
 #     --trials N        independent trials (default 3)
@@ -39,6 +49,10 @@
 #                       committed HEAD only (see eval_prepare_workspace), so
 #                       without this flag a dirty tree refuses to run — the
 #                       uncommitted changes would silently NOT be measured.
+#     --allow-provider-config-write  acknowledge a task whose metadata declares
+#                       `execution: provider-config-write`. For real providers
+#                       only; enables maintenance env and unrestricted execution.
+#                       Prefer running the entire eval inside a container or VM.
 #     --variant V       bare | plugin-activated (default bare) — the
 #                       execution-variant dimension: tags every recorded row
 #                       so a plugin-activated run of the same task/provider/
@@ -52,6 +66,10 @@
 # trials with scripts/eval-harness.sh.
 set -uo pipefail
 
+# Never inherit the mechanism-edit maintenance escape into ordinary trials.
+# The provider-config-write branch reintroduces it only on the provider process.
+unset HARNESS_ALLOW_MECHANISM_EDITS
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 1
 # shellcheck source=/dev/null
@@ -61,7 +79,7 @@ die() { echo "eval.sh: $*" >&2; exit 1; }
 command -v jq  >/dev/null 2>&1 || die "jq is required (JSON results). Install jq and retry."
 command -v git >/dev/null 2>&1 || die "git is required (workspace isolation)."
 
-TASK=""; TRIALS=3; PROVIDER=claude; MODEL=""; RUN_ID=""; ALLOW_DIRTY_HEAD=0; VARIANT=bare
+TASK=""; TRIALS=3; PROVIDER=claude; MODEL=""; RUN_ID=""; ALLOW_DIRTY_HEAD=0; ALLOW_PROVIDER_CONFIG_WRITE=0; VARIANT=bare
 TASKS_DIR="$EVAL_TASKS_DIR_DEFAULT"; RESULTS_DIR="$EVAL_RESULTS_DIR_DEFAULT"; TIMEOUT=900
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -73,8 +91,9 @@ while [ $# -gt 0 ]; do
         --results-dir) RESULTS_DIR="$2"; shift 2 ;;
         --timeout) TIMEOUT="$2"; shift 2 ;;
         --allow-dirty-head) ALLOW_DIRTY_HEAD=1; shift ;;
+        --allow-provider-config-write) ALLOW_PROVIDER_CONFIG_WRITE=1; shift ;;
         --variant) VARIANT="$2"; shift 2 ;;
-        -h|--help) sed -n '2,46p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,66p' "$0"; exit 0 ;;
         -*) die "unknown option: $1" ;;
         *) [ -z "$TASK" ] && TASK="$1" || die "unexpected arg: $1"; shift ;;
     esac
@@ -138,6 +157,7 @@ POLARITY="$(eval_task_meta "$TASK_DIR" polarity)"; POLARITY="${POLARITY:-positiv
 GRADE_META="$(eval_task_meta "$TASK_DIR" grade)"
 TASK_PROVIDER="$(eval_task_meta "$TASK_DIR" provider)"
 TASK_NETWORK="$(eval_task_meta "$TASK_DIR" network)"; TASK_NETWORK="${TASK_NETWORK:-none}"
+TASK_EXECUTION="$(eval_task_meta "$TASK_DIR" execution)"; TASK_EXECUTION="${TASK_EXECUTION:-default}"
 
 # Metadata validation: a typo here would otherwise silently bypass scorer
 # behavior (e.g. "suite: regresion" quietly scored as capability) instead of
@@ -162,6 +182,13 @@ case "$TASK_NETWORK" in
     none|required) ;;
     *) die "task $TASK: invalid network metadata '$TASK_NETWORK' (want none|required)" ;;
 esac
+case "$TASK_EXECUTION" in
+    default|provider-config-write) ;;
+    *) die "task $TASK: invalid execution metadata '$TASK_EXECUTION' (want default|provider-config-write)" ;;
+esac
+if [ "$TASK_EXECUTION" = provider-config-write ] && [ "$TASK_NETWORK" = required ]; then
+    die "task $TASK: execution metadata 'provider-config-write' cannot be combined with network metadata 'required'"
+fi
 
 # Provider gate: a task pinned to one provider (its prompt or grader assumes
 # that CLI's quirks) must not silently run under another. mock is exempt so a
@@ -169,6 +196,22 @@ esac
 # the pinned CLI installed.
 if [ -n "$TASK_PROVIDER" ] && [ "$TASK_PROVIDER" != any ] && [ "$PROVIDER" != mock ] && [ "$TASK_PROVIDER" != "$PROVIDER" ]; then
     die "task $TASK is pinned to provider '$TASK_PROVIDER' — refusing to run under --provider $PROVIDER (use --provider $TASK_PROVIDER, or --provider mock for plumbing)"
+fi
+
+if [ "$PROVIDER" != mock ]; then
+    if [ "$TASK_EXECUTION" = provider-config-write ] && [ "$ALLOW_PROVIDER_CONFIG_WRITE" -ne 1 ]; then
+        die "task $TASK declares execution metadata 'provider-config-write' — pass --allow-provider-config-write to acknowledge unrestricted provider execution"
+    fi
+    if [ "$TASK_EXECUTION" = default ] && [ "$ALLOW_PROVIDER_CONFIG_WRITE" -eq 1 ]; then
+        die "--allow-provider-config-write is only valid when task $TASK declares execution metadata 'provider-config-write'"
+    fi
+fi
+
+if [ "$PROVIDER" = codex ] && [ "$TASK_NETWORK" = required ]; then
+    echo "WARNING: Codex network: required applies an explicit task-only broad local/private weakening (allow_local_binding=true); the exact proxy domain map still excludes public hosts" >&2
+fi
+if [ "$PROVIDER" != mock ] && [ "$TASK_EXECUTION" = provider-config-write ]; then
+    echo "WARNING: execution: provider-config-write gives the provider process unrestricted host filesystem and public network access. The disposable trial workspace does not contain effects elsewhere on the host; run this eval inside an external container or VM." >&2
 fi
 
 OUT="$RESULTS_DIR/$TASK/$RUN_ID"
@@ -232,17 +275,37 @@ run_agent() {
         claude)
             # claude has no --cwd, so cd inside a bash -c and exec so the polled
             # pid IS claude (a kill on expiry reaches it directly).
-            _eval_capped "$td/transcript.jsonl" "$td/agent.stderr" \
-                bash -c 'cd "$1" && exec claude -p "$2" --model "$3" \
-                    --output-format stream-json --verbose --dangerously-skip-permissions' \
-                _ "$ws" "$prompt" "$MODEL"
+            if [ "$TASK_EXECUTION" = provider-config-write ]; then
+                _eval_capped "$td/transcript.jsonl" "$td/agent.stderr" \
+                    env HARNESS_ALLOW_MECHANISM_EDITS=1 \
+                    bash -c 'cd "$1" && exec claude -p "$2" --model "$3" \
+                        --output-format stream-json --verbose --dangerously-skip-permissions' \
+                    _ "$ws" "$prompt" "$MODEL"
+            else
+                _eval_capped "$td/transcript.jsonl" "$td/agent.stderr" \
+                    bash -c 'cd "$1" && exec claude -p "$2" --model "$3" \
+                        --output-format stream-json --verbose --dangerously-skip-permissions' \
+                    _ "$ws" "$prompt" "$MODEL"
+            fi
             ;;
         codex)
-            if [ "$TASK_NETWORK" = required ]; then
+            if [ "$TASK_EXECUTION" = provider-config-write ]; then
+                _eval_capped "$td/transcript.jsonl" "$td/agent.stderr" \
+                    env HARNESS_ALLOW_MECHANISM_EDITS=1 \
+                    codex exec "$prompt" --model "$MODEL" --cd "$ws" \
+                        --sandbox danger-full-access --skip-git-repo-check --json \
+                        --output-last-message "$td/last-message.txt"
+            elif [ "$TASK_NETWORK" = required ]; then
                 _eval_capped "$td/transcript.jsonl" "$td/agent.stderr" \
                     codex exec "$prompt" --model "$MODEL" --cd "$ws" \
                         --sandbox workspace-write \
                         -c sandbox_workspace_write.network_access=true \
+                        -c features.network_proxy.enabled=true \
+                        -c features.network_proxy.allow_local_binding=true \
+                        -c 'features.network_proxy.domains={"localhost"="allow","127.0.0.1"="allow"}' \
+                        -c 'features.network_proxy.unix_sockets={}' \
+                        -c features.network_proxy.dangerously_allow_non_loopback_proxy=false \
+                        -c features.network_proxy.dangerously_allow_all_unix_sockets=false \
                         --skip-git-repo-check --json \
                         --output-last-message "$td/last-message.txt"
             else
@@ -263,7 +326,7 @@ run_agent() {
 PROMPT="$(eval_task_prompt "$TASK_DIR")"
 [ -n "$PROMPT" ] || die "task $TASK has an empty ## Prompt section"
 
-echo "eval: $TASK  provider=$PROVIDER  model=$MODEL  variant=$VARIANT  suite=$SUITE  polarity=$POLARITY  network=$TASK_NETWORK  trials=$TRIALS"
+echo "eval: $TASK  provider=$PROVIDER  model=$MODEL  variant=$VARIANT  suite=$SUITE  polarity=$POLARITY  network=$TASK_NETWORK  execution=$TASK_EXECUTION  provider_config_write_ack=$ALLOW_PROVIDER_CONFIG_WRITE  trials=$TRIALS"
 echo "run:  $OUT"
 
 passes=0

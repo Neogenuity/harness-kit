@@ -799,6 +799,371 @@ JSON
     assert_flags "8d: undeclared HOOK_WIRED_PROVIDERS on an adopted harness is flagged" "$W" "declares no HOOK_WIRED_PROVIDERS"
 fi
 
+# --- check #8e: declared stable execution-profile validation -----------------
+# Profiles are optional: unset/empty is unadopted and must not inspect whatever
+# provider files happen to survive. Once declared, exact semantic floors apply
+# per provider while unrelated project config and legitimate subsets stay valid.
+if command -v jq >/dev/null 2>&1; then
+    write_execution_configs() {
+        local work="$1"
+        mkdir -p "$work/.claude" "$work/.cursor" "$work/.codex"
+        cat > "$work/.claude/settings.json" <<'JSON'
+{
+  "unrelated": {"projectOwned": true},
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {"allowWrite": []},
+    "network": {
+      "allowedDomains": [],
+      "deniedDomains": ["blocked.example", "*"],
+      "allowLocalBinding": false,
+      "allowAllUnixSockets": false
+    },
+    "credentials": {
+      "files": [
+        {"mode": "deny", "path": "~/.ssh"},
+        {"path": "~/.aws/credentials", "mode": "deny"}
+      ],
+      "envVars": [
+        {"mode": "deny", "name": "NPM_TOKEN"},
+        {"name": "GITHUB_TOKEN", "mode": "deny"}
+      ]
+    }
+  }
+}
+JSON
+        cat > "$work/.cursor/sandbox.json" <<'JSON'
+{
+  "unrelated": true,
+  "networkPolicy": {"deny": [], "allow": [], "default": "deny"},
+  "enableSharedBuildCache": false,
+  "disableTmpWrite": false,
+  "additionalReadonlyPaths": [],
+  "additionalReadwritePaths": [],
+  "type": "workspace_readwrite"
+}
+JSON
+        cat > "$work/.codex/config.toml" <<'TOML'
+# Required top-level keys may be reordered and use either TOML quote style.
+allow_login_shell = false
+approvals_reviewer = 'user'
+approval_policy = "on-request"
+sandbox_mode = 'workspace-write'
+
+[unrelated]
+project_owned = true
+
+[sandbox_workspace_write]
+exclude_slash_tmp = false # inline comments do not change the value
+writable_roots = [ ]
+network_access = false
+exclude_tmpdir_env_var = false
+
+[mcp_servers.demo]
+command = "demo"
+args = ["--safe"]
+
+[shell_environment_policy]
+ignore_default_excludes = false
+inherit = 'core'
+TOML
+        cat > "$work/opencode.json" <<'JSON'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": {"**/.env": "deny"},
+    "websearch": "deny",
+    "external_directory": "deny",
+    "webfetch": "deny",
+    "bash": "ask"
+  },
+  "mcp": {"demo": {"command": ["demo"]}},
+  "unrelated": true
+}
+JSON
+    }
+    new_execution_fixture() {        # $1 optional declaration, __UNSET__ omits it
+        local work declaration
+        if [ "$#" -eq 0 ]; then declaration=".claude .cursor .codex .opencode"; else declaration="$1"; fi
+        work=$(new_fixture)
+        write_execution_configs "$work"
+        if [ "$declaration" != "__UNSET__" ]; then
+            printf 'EXECUTION_PROFILE_PROVIDERS="%s"\n' "$declaration" > "$work/scripts/harness.conf"
+        fi
+        printf '%s' "$work"
+    }
+    assert_execution_json_weakening() { # $1 description, $2 provider, $3 config, $4 jq edit, $5 diagnostic
+        local desc="$1" provider="$2" cfg="$3" edit="$4" diagnostic="$5" work
+        work=$(new_execution_fixture "$provider")
+        jq "$edit" "$work/$cfg" > "$work/execution-profile.tmp" \
+            && mv "$work/execution-profile.tmp" "$work/$cfg"
+        assert_flags "$desc" "$work" "$diagnostic"
+    }
+    enable_codex_local_private_compat() { # $1 fixture; exact rules intentionally reordered/spaced
+        local work="$1"
+        sed 's/^network_access = false/network_access = true/' "$work/.codex/config.toml" > "$work/.codex/c" \
+            && mv "$work/.codex/c" "$work/.codex/config.toml"
+        cat >> "$work/.codex/config.toml" <<'TOML'
+
+[features.network_proxy]
+domains={ "127.0.0.1" = 'allow',   "localhost"="allow" }
+dangerously_allow_all_unix_sockets = false
+unix_sockets = { }
+allow_local_binding=true
+dangerously_allow_non_loopback_proxy = false
+enabled = true
+TOML
+    }
+
+    W=$(new_execution_fixture)
+    assert_ok "8e: all four valid stable execution profiles pass with unrelated config/order" "$W"
+
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    assert_ok "8e: explicit Codex broad local/private compatibility proxy passes independent of key/rule order and spacing" "$W"
+
+    # A declared Codex profile fails closed when the complete-file TOML parser
+    # is unavailable; the narrow tuple reader alone must never approve it.
+    W=$(new_execution_fixture ".codex")
+    pyshim=$(mktemp -d)
+    printf '#!/bin/sh\nexit 1\n' > "$pyshim/python3"
+    chmod +x "$pyshim/python3"
+    out=$(PATH="$pyshim:$PATH" bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
+    if [ "$rc" = "1" ] && printf '%s' "$out" | grep -qF "Python 3.11+ with tomllib"; then
+        echo "ok:   8e: declared Codex profile without a TOML parser is unverifiable"
+    else
+        echo "FAIL: 8e: declared Codex profile without a TOML parser should fail as unverifiable"
+        printf '%s\n' "$out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W" "$pyshim"
+
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed '/^domains=/d' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    cat >> "$W/.codex/config.toml" <<'TOML'
+
+[features.network_proxy.domains]
+"127.0.0.1" = "allow"
+localhost = 'allow'
+TOML
+    assert_ok "8e: exact Codex local/private compatibility domains pass in equivalent child-table form" "$W"
+
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed '/^unix_sockets[[:space:]]*=/d' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    printf '\n[features.network_proxy.unix_sockets]\n' >> "$W/.codex/config.toml"
+    assert_ok "8e: empty Codex compatibility Unix sockets pass in equivalent child-table form" "$W"
+
+    W=$(new_execution_fixture ".claude .codex")
+    rm -f "$W/.cursor/sandbox.json" "$W/opencode.json"
+    assert_ok "8e: a legitimate declared provider subset passes" "$W"
+
+    W=$(new_execution_fixture ".cursor")
+    jq '.networkPolicy.deny = ["telemetry.example", "*.tracking.example"]' "$W/.cursor/sandbox.json" > "$W/.cursor/s" && mv "$W/.cursor/s" "$W/.cursor/sandbox.json"
+    assert_ok "8e: stricter Cursor project-specific deny entries pass" "$W"
+
+    # Unset/empty means unadopted. Malformed surviving files prove the check does
+    # not infer adoption from presence and does not silently create a declaration.
+    W=$(new_execution_fixture "__UNSET__"); printf '{' > "$W/.claude/settings.json"
+    assert_ok "8e: unset declaration is unadopted and does not infer from surviving configs" "$W"
+    W=$(new_execution_fixture ""); printf '{' > "$W/.cursor/sandbox.json"
+    assert_ok "8e: empty declaration is unadopted and passes" "$W"
+
+    W=$(new_execution_fixture ".claude .future")
+    assert_flags "8e: an unknown provider id is rejected" "$W" "unknown provider '.future'"
+    W=$(new_execution_fixture ".codex .codex")
+    assert_flags "8e: a duplicate provider id is rejected" "$W" "duplicate provider '.codex'"
+
+    # Claude: missing/malformed plus each privilege-expansion class. Every
+    # negative pins the required-key diagnostic so an incidental failure cannot
+    # make the test pass.
+    W=$(new_execution_fixture ".claude"); rm "$W/.claude/settings.json"
+    assert_flags "8e: declared Claude config missing is rejected" "$W" ".claude/settings.json is missing"
+    W=$(new_execution_fixture ".claude"); printf '{' > "$W/.claude/settings.json"
+    assert_flags "8e: declared Claude malformed JSON is rejected" "$W" ".claude' config .claude/settings.json is malformed JSON"
+    assert_execution_json_weakening "8e: disabled Claude sandbox is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.enabled = false' "sandbox.enabled = true"
+    assert_execution_json_weakening "8e: Claude sandbox-unavailable fallback is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.failIfUnavailable = false' "sandbox.failIfUnavailable = true"
+    assert_execution_json_weakening "8e: Claude unsandboxed-command fallback is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.allowUnsandboxedCommands = true' "sandbox.allowUnsandboxedCommands = false"
+    assert_execution_json_weakening "8e: Claude excluded-command sandbox bypass is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.excludedCommands = ["company-runner"]' "sandbox.excludedCommands is absent or []"
+    assert_execution_json_weakening "8e: null Claude excluded-command policy is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.excludedCommands = null' "sandbox.excludedCommands is absent or []"
+    assert_execution_json_weakening "8e: extra Claude write roots are rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.filesystem.allowWrite = ["/tmp/project-cache"]' "sandbox.filesystem.allowWrite = []"
+    assert_execution_json_weakening "8e: public Claude network allow-list is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.network.allowedDomains = ["registry.example"]' "sandbox.network.allowedDomains = []"
+    assert_execution_json_weakening "8e: Claude network deny-list without wildcard is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.network.deniedDomains = ["blocked.example"]' "sandbox.network.deniedDomains contains *"
+    assert_execution_json_weakening "8e: Claude local network binding is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.network.allowLocalBinding = true' "sandbox.network.allowLocalBinding = false"
+    assert_execution_json_weakening "8e: Claude unrestricted Unix sockets are rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.network.allowAllUnixSockets = true' "sandbox.network.allowAllUnixSockets = false"
+    assert_execution_json_weakening "8e: Claude Docker Unix-socket allow-list is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.network.allowUnixSockets = ["/var/run/docker.sock"]' "sandbox.network.allowUnixSockets is absent or []"
+    assert_execution_json_weakening "8e: Claude Mach service lookup allow-list is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.network.allowMachLookup = ["com.example.helper"]' "sandbox.network.allowMachLookup is absent or []"
+    assert_execution_json_weakening "8e: Claude weaker network isolation is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.enableWeakerNetworkIsolation = true' "sandbox.enableWeakerNetworkIsolation is absent or false"
+    assert_execution_json_weakening "8e: Claude weaker nested sandbox is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.enableWeakerNestedSandbox = true' "sandbox.enableWeakerNestedSandbox is absent or false"
+    assert_execution_json_weakening "8e: missing Claude AWS credential deny is rejected" ".claude" ".claude/settings.json" \
+        'del(.sandbox.credentials.files[] | select(.path == "~/.aws/credentials"))' "sandbox.credentials.files denies ~/.aws/credentials"
+    assert_execution_json_weakening "8e: missing Claude credential-file deny is rejected" ".claude" ".claude/settings.json" \
+        'del(.sandbox.credentials.files[] | select(.path == "~/.ssh"))' "sandbox.credentials.files denies ~/.ssh"
+    assert_execution_json_weakening "8e: missing Claude credential-env deny is rejected" ".claude" ".claude/settings.json" \
+        'del(.sandbox.credentials.envVars[] | select(.name == "GITHUB_TOKEN"))' "sandbox.credentials.envVars denies GITHUB_TOKEN"
+    assert_execution_json_weakening "8e: missing Claude npm credential deny is rejected" ".claude" ".claude/settings.json" \
+        'del(.sandbox.credentials.envVars[] | select(.name == "NPM_TOKEN"))' "sandbox.credentials.envVars denies NPM_TOKEN"
+
+    # Cursor: missing/malformed plus filesystem and network expansion classes.
+    W=$(new_execution_fixture ".cursor"); rm "$W/.cursor/sandbox.json"
+    assert_flags "8e: declared Cursor config missing is rejected" "$W" ".cursor/sandbox.json is missing"
+    W=$(new_execution_fixture ".cursor"); printf '{' > "$W/.cursor/sandbox.json"
+    assert_flags "8e: declared Cursor malformed JSON is rejected" "$W" ".cursor' config .cursor/sandbox.json is malformed JSON"
+    assert_execution_json_weakening "8e: full-access Cursor sandbox type is rejected" ".cursor" ".cursor/sandbox.json" \
+        '.type = "danger-full-access"' "type = workspace_readwrite"
+    assert_execution_json_weakening "8e: extra Cursor write roots are rejected" ".cursor" ".cursor/sandbox.json" \
+        '.additionalReadwritePaths = ["../shared"]' "additionalReadwritePaths = []"
+    assert_execution_json_weakening "8e: extra Cursor read roots are rejected" ".cursor" ".cursor/sandbox.json" \
+        '.additionalReadonlyPaths = ["~/.config"]' "additionalReadonlyPaths = []"
+    assert_execution_json_weakening "8e: Cursor temporary-directory write removal is rejected" ".cursor" ".cursor/sandbox.json" \
+        '.disableTmpWrite = true' "disableTmpWrite = false"
+    assert_execution_json_weakening "8e: Cursor shared build cache is rejected" ".cursor" ".cursor/sandbox.json" \
+        '.enableSharedBuildCache = true' "enableSharedBuildCache = false"
+    assert_execution_json_weakening "8e: permissive Cursor network default is rejected" ".cursor" ".cursor/sandbox.json" \
+        '.networkPolicy.default = "allow"' "networkPolicy.default = deny"
+    assert_execution_json_weakening "8e: nonempty Cursor network allow-list is rejected" ".cursor" ".cursor/sandbox.json" \
+        '.networkPolicy.allow = ["registry.example"]' "networkPolicy.allow = []"
+    assert_execution_json_weakening "8e: malformed Cursor network deny-list is rejected" ".cursor" ".cursor/sandbox.json" \
+        '.networkPolicy.deny = "*"' "networkPolicy.deny is an array"
+
+    # Codex: semantic TOML checks cover malformed/duplicate required values and
+    # every high-impact execution, write, network, login, and env-filter floor.
+    W=$(new_execution_fixture ".codex"); rm "$W/.codex/config.toml"
+    assert_flags "8e: declared Codex config missing is rejected" "$W" ".codex/config.toml is missing"
+    W=$(new_execution_fixture ".codex")
+    sed 's/^sandbox_mode = .*/sandbox_mode = [/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: malformed required Codex TOML value is rejected" "$W" "malformed TOML"
+    W=$(new_execution_fixture ".codex")
+    printf '\nthis is not valid TOML\n' >> "$W/.codex/config.toml"
+    assert_flags "8e: unrelated invalid Codex TOML syntax is rejected" "$W" "malformed TOML"
+    W=$(new_execution_fixture ".codex")
+    printf '\n[sandbox_workspace_write]\n' >> "$W/.codex/config.toml"
+    assert_flags "8e: duplicate Codex TOML table is rejected" "$W" "malformed TOML"
+    W=$(new_execution_fixture ".codex")
+    sed 's/^approval_policy = .*/approval_policy = "never"/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: weakened Codex approval policy is rejected" "$W" "approval_policy = on-request"
+    W=$(new_execution_fixture ".codex")
+    sed 's/^approvals_reviewer = .*/approvals_reviewer = "agent"/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: non-user Codex approval reviewer is rejected" "$W" "approvals_reviewer = user"
+    W=$(new_execution_fixture ".codex")
+    awk '{ print } /^sandbox_mode[[:space:]]*=/{ print "sandbox_mode = \"workspace-write\"" }' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: duplicate required Codex TOML key is rejected" "$W" "malformed TOML"
+    W=$(new_execution_fixture ".codex")
+    sed 's/^sandbox_mode = .*/sandbox_mode = "danger-full-access"/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: danger-full Codex sandbox is rejected" "$W" "sandbox_mode = workspace-write"
+    W=$(new_execution_fixture ".codex")
+    sed 's/^network_access = .*/network_access = true/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: Codex network access without the local/private compatibility proxy is rejected" "$W" "features.network_proxy.enabled = true"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed 's/^enabled = true/enabled = false/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: disabled Codex local/private compatibility proxy is rejected" "$W" "features.network_proxy.enabled = true"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed '/^domains=/d' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: missing Codex local/private compatibility domains are rejected" "$W" "features.network_proxy.domains = exactly localhost/127.0.0.1 allow"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed 's/"localhost"="allow"/"localhost"="allow", "public.example"="allow"/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: public Codex compatibility proxy domain is rejected" "$W" "features.network_proxy.domains = exactly localhost/127.0.0.1 allow"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed 's/"localhost"="allow"/"localhost"="allow", "*"="allow"/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: wildcard Codex compatibility proxy domain is rejected" "$W" "features.network_proxy.domains = exactly localhost/127.0.0.1 allow"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed '/^domains=/d' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    cat >> "$W/.codex/config.toml" <<'TOML'
+
+[features.network_proxy.domains]
+localhost = "allow"
+"127.0.0.1" = "allow"
+
+[features.network_proxy.domains.public]
+extra = "allow"
+TOML
+    assert_flags "8e: nested Codex public domain table is rejected" "$W" "features.network_proxy.domains = exactly localhost/127.0.0.1 allow"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed '/^domains=/d' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    cat >> "$W/.codex/config.toml" <<'TOML'
+
+[features.network_proxy.domains]
+localhost = "allow"
+127.0.0.1 = "allow"
+TOML
+    assert_flags "8e: bare dotted Codex IP is not accepted as a literal compatibility domain" "$W" "features.network_proxy.domains = exactly localhost/127.0.0.1 allow"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed 's/^allow_local_binding=true/allow_local_binding = false/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: nonfunctional narrow Codex binding is rejected for the compatibility variant" "$W" "features.network_proxy.allow_local_binding = true"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed 's/^dangerously_allow_non_loopback_proxy = false/dangerously_allow_non_loopback_proxy = true/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: dangerous Codex non-loopback proxy is rejected" "$W" "features.network_proxy.dangerously_allow_non_loopback_proxy"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed 's/^dangerously_allow_all_unix_sockets = false/dangerously_allow_all_unix_sockets = true/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: dangerous Codex Unix-socket bypass is rejected" "$W" "features.network_proxy.dangerously_allow_all_unix_sockets"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed '/^dangerously_allow_non_loopback_proxy = false/d' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    printf '\n[features.network_proxy.dangerously_allow_non_loopback_proxy]\n' >> "$W/.codex/config.toml"
+    assert_flags "8e: dangerous Codex binding bypass with table type is rejected" "$W" "features.network_proxy.dangerously_allow_non_loopback_proxy"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed '/^dangerously_allow_all_unix_sockets = false/d' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    printf '\n[features.network_proxy.dangerously_allow_all_unix_sockets]\n' >> "$W/.codex/config.toml"
+    assert_flags "8e: dangerous Codex socket bypass with table type is rejected" "$W" "features.network_proxy.dangerously_allow_all_unix_sockets"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed 's|^unix_sockets = { }|unix_sockets = { "/var/run/docker.sock" = "allow" }|' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: Codex compatibility Unix-socket allow rule is rejected" "$W" "features.network_proxy.unix_sockets = absent or empty"
+    W=$(new_execution_fixture ".codex"); enable_codex_local_private_compat "$W"
+    sed '/^unix_sockets[[:space:]]*=/d' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    cat >> "$W/.codex/config.toml" <<'TOML'
+
+[features.network_proxy.unix_sockets.extra]
+socket = "allow"
+TOML
+    assert_flags "8e: nested Codex Unix-socket table is rejected" "$W" "features.network_proxy.unix_sockets = absent or empty"
+    W=$(new_execution_fixture ".codex")
+    sed 's/^writable_roots = .*/writable_roots = ["..\/shared"]/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: extra Codex writable roots are rejected" "$W" "sandbox_workspace_write.writable_roots = []"
+    W=$(new_execution_fixture ".codex")
+    sed 's/^exclude_tmpdir_env_var = .*/exclude_tmpdir_env_var = true/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: Codex tmpdir-env exclusion drift is rejected" "$W" "sandbox_workspace_write.exclude_tmpdir_env_var = false"
+    W=$(new_execution_fixture ".codex")
+    sed 's/^exclude_slash_tmp = .*/exclude_slash_tmp = true/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: Codex /tmp exclusion drift is rejected" "$W" "sandbox_workspace_write.exclude_slash_tmp = false"
+    W=$(new_execution_fixture ".codex")
+    sed 's/^allow_login_shell = .*/allow_login_shell = true/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: Codex login-shell inheritance is rejected" "$W" "allow_login_shell = false"
+    W=$(new_execution_fixture ".codex")
+    sed 's/^inherit = .*/inherit = "all"/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: broad Codex environment inheritance is rejected" "$W" "shell_environment_policy.inherit = core"
+    W=$(new_execution_fixture ".codex")
+    sed 's/^ignore_default_excludes = .*/ignore_default_excludes = true/' "$W/.codex/config.toml" > "$W/.codex/c" && mv "$W/.codex/c" "$W/.codex/config.toml"
+    assert_flags "8e: disabled Codex environment filters are rejected" "$W" "shell_environment_policy.ignore_default_excludes = false"
+
+    # OpenCode: missing/malformed and each external/shell/web permission class.
+    # Existing secret-read and MCP maps stay accepted as unrelated content.
+    W=$(new_execution_fixture ".opencode"); rm "$W/opencode.json"
+    assert_flags "8e: declared OpenCode config missing is rejected" "$W" "opencode.json is missing"
+    W=$(new_execution_fixture ".opencode"); printf '{' > "$W/opencode.json"
+    assert_flags "8e: declared OpenCode malformed JSON is rejected" "$W" ".opencode' config opencode.json is malformed JSON"
+    assert_execution_json_weakening "8e: OpenCode external-directory access is rejected" ".opencode" "opencode.json" \
+        '.permission.external_directory = "allow"' "permission.external_directory = deny"
+    assert_execution_json_weakening "8e: permissive OpenCode shell access is rejected" ".opencode" "opencode.json" \
+        '.permission.bash = "allow"' "permission.bash = ask"
+    assert_execution_json_weakening "8e: permissive OpenCode webfetch is rejected" ".opencode" "opencode.json" \
+        '.permission.webfetch = "allow"' "permission.webfetch = deny"
+    assert_execution_json_weakening "8e: permissive OpenCode websearch is rejected" ".opencode" "opencode.json" \
+        '.permission.websearch = "allow"' "permission.websearch = deny"
+fi
+
 # --- agent-stub coherence (sync-agent-skills.sh --check, via check #3) --------
 # check #3 delegates to sync-agent-skills.sh --check, which now validates agent
 # stubs too (bidirectional set equality). Needs the generator present — new_fixture
@@ -827,6 +1192,22 @@ MD
 
     W=$(new_agents_fixture)
     assert_ok "agent-stubs: canonical persona + generated stubs pass check-harness" "$W"
+
+    W=$(new_agents_fixture)
+    if grep -Fxq 'name = "code-reviewer"' "$W/.codex/agents/code-reviewer.toml" \
+        && grep -Fxq 'description = "Inferential reviewer for a completed diff AFTER verify.sh passes. Delegate before opening a PR."' "$W/.codex/agents/code-reviewer.toml" \
+        && grep -Fxq 'developer_instructions = """' "$W/.codex/agents/code-reviewer.toml" \
+        && grep -Fq 'Canonical source: docs/agents/code-reviewer.md' "$W/.codex/agents/code-reviewer.toml" \
+        && ! grep -Eq '^[[:space:]]*tools[[:space:]]*=' "$W/.codex/agents/code-reviewer.toml" \
+        && grep -Fxq 'tools: Read, Grep, Glob, Bash' "$W/.claude/agents/code-reviewer.md" \
+        && grep -Fxq 'tools: Read, Grep, Glob, Bash' "$W/.cursor/agents/code-reviewer.md" \
+        && grep -Fxq 'tools: Read, Grep, Glob, Bash' "$W/.opencode/agents/code-reviewer.md"; then
+        echo "ok:   agent-stubs: Codex schema omits tools while retaining identity/instructions; Markdown providers keep tools"
+    else
+        echo "FAIL: agent-stubs: provider-specific Codex/Markdown tool mappings were not generated as expected"
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W"
 
     W=$(new_agents_fixture)
     sed 's/^description: .*/description: A completely different routing signal./' "$W/docs/agents/code-reviewer.md" > "$W/docs/agents/c" && mv "$W/docs/agents/c" "$W/docs/agents/code-reviewer.md"

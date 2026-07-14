@@ -128,15 +128,18 @@ rows + strict Agent Skills validation + matrix stamping
 **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
 ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
-**Active:** [launch-readiness.md](active/launch-readiness.md) — parallel-track;
-doc items 3–6 (SECURITY.md, "what 1.0 promises", supported-platforms, content
-hygiene sweep) shipped in v0.13.0, while the demo, the org move, and the public
-flip remain maintainer actions. The remaining mechanism queue follows.
+**Active:**
+[v0.16.0 execution sandbox profiles](active/v0.16.0-execution-sandbox-profiles.md)
+— opt-in declared provider profiles, semantic drift checks, an explicitly
+weakened local/private-network compatibility variant, an authored devcontainer
+recipe, and truthful provider-observability guidance. [Launch readiness](active/launch-readiness.md) remains a parallel
+maintainer track; its demo, org move, and public flip are still open.
+
+The remaining mechanism queue follows.
 
 | # | Plan | Theme |
 | --- | --- | --- |
-| 1 | [execution-sandbox-profiles.md](execution-sandbox-profiles.md) | Per-provider sandbox/network/approval profiles, optional devcontainer, audit-log export — the advanced half split from the v0.10.0 baseline |
-| 2 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
+| 1 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
 
 **Ordering rationale.** Claim-to-implementation gaps went first — plans
 machinery (v0.6.0) closed the space between what the docs promise and what
@@ -177,10 +180,10 @@ MCP inventory, CI hardening — near-zero tailoring cost) moved ahead of the
 reviewer and runtime work per current combined-controls guidance, which treats
 containment as non-optional rather than finishing work — it shipped as
 v0.10.0; its *advanced*
-per-provider sandbox profiles were split into their own queued plan
-(execution-sandbox-profiles) that keeps the high tailoring cost arguing for a
-later slot and trails runtime-legibility — depending only on that plan's
-`dev.sh` boot contract, since runtime-legibility ships no devcontainer of its
+per-provider sandbox profiles were split into their own plan, now active as
+[v0.16.0](active/v0.16.0-execution-sandbox-profiles.md). Its high tailoring
+cost kept it behind runtime-legibility, and it depends only on that plan's
+`dev.sh` boot contract because runtime-legibility ships no devcontainer of its
 own.
 Outcome telemetry is last among the mechanism plans because outcome metrics
 are only worth collecting once gates, reviews, and evals emit outcomes worth

@@ -56,7 +56,8 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    Never present a silent empty diff.
 3. Never auto-overwrite policy files (`verify.sh`, `format.sh`,
    `guard-secrets.sh`, `guard-project-policy.sh`, `harness.conf`, provider
-   configs, or an app repo's authored `dev.sh`) — diff only. Never auto-add or
+   configs, `.cursor/sandbox.json`, `.devcontainer/*`, or an app repo's authored
+   `dev.sh`) — diff only. Never auto-add or
    overwrite content files, including conventions, skills, AGENTS links, and
    generated stubs; mechanism update and content adoption are separate acts.
 4. Rewrite the manifest with the new version/checksums — `harness_repin_manifest`
@@ -65,7 +66,7 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    `harness_persist_base <new_src_scripts> <repo_root> <new_version>` (prune the
    superseded `.harness/base/<old_version>/`), and re-run `check-harness.sh` and
    all hook tests.
-5. **Migrate the declared provider sets if a pre-v0.14 install lacks them.**
+5. **Migrate the declared provider sets if an older install lacks them.**
    `check-harness.sh` now fails when an adopted harness leaves
    `HOOK_WIRED_PROVIDERS` (semantic hook-wiring validation) or `AGENT_PROVIDERS`
    (agent-stub coherence) undeclared, and `harness.conf` is diff-only here so the
@@ -81,6 +82,15 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    with `harness_conf_declare` (idempotent — a second update neither duplicates
    the line nor resets an edited value), then re-pin the manifest so the new
    `harness.conf` checksum is captured.
+
+   `EXECUTION_PROFILE_PROVIDERS` is different because profiles are optional.
+   If it is absent, leave it unset and report **unadopted**; never infer
+   adoption from provider configs already on disk. Offer the stable tuples
+   after mechanism update, and declare only the provider subset the user
+   explicitly confirms. An empty declaration is also valid.
+   Before declaring `.codex`, verify Python 3.11+ `tomllib` with
+   `python3 -I -c 'import tomllib'`; without a complete TOML parser, classify
+   that profile as unverifiable and do not adopt it.
 6. **Offer existing application repos explicit runtime adoption.** Use init's
    app detection and recon to propose boot, health, deterministic seed/reset,
    port, log, and trace mappings. Non-app repos report N/A. For an app without
@@ -93,7 +103,25 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    ` # tailored`. If any of these files already exists, preserve it and show a
    proposed diff — never silently replace local content. Re-run the v1 contract
    checks and manifest/stub checks after approved adoption.
-7. When the request is really a *standards* shift — a provider newly reads
+7. **Offer execution profiles and devcontainer adoption as separate content
+   changes.** Read `templates/docs/conventions/execution-profiles.md`, compare
+   each wired provider's existing config tuple-by-tuple, and present a merge
+   diff for only the providers the user chooses. Preserve hooks, MCP servers,
+   permission rules, secret-deny mirrors, and unknown local keys. Never replace
+   a whole config. Copy/tailor the self-contained convention and add its AGENTS
+   link after at least one provider is declared **or** the devcontainer is
+   separately adopted; run the semantic checks. Claude's credential profile
+   requires Claude Code 2.1.187 or later.
+
+   Offer an authored `.devcontainer/devcontainer.json` only when recon confirms
+   a real image, Dockerfile, or Compose source and the user separately opts in.
+   Preserve existing `.devcontainer/` content, use a non-root user, mount no
+   host credentials or container-engine socket, auto-run no repo code, build
+   the result, and use an existing app's `scripts/dev.sh` inside the container.
+   A devcontainer-only adoption still installs/tailors the combined convention
+   and its AGENTS link, without adding a provider declaration.
+   Otherwise defer it explicitly; there is no placeholder template to copy.
+8. When the request is really a *standards* shift — a provider newly reads
    `.agents/skills/` natively, Claude Code ships AGENTS.md support, a new
    harness appears — follow the matching playbook in
    [migrations.md](../migrations.md) instead of

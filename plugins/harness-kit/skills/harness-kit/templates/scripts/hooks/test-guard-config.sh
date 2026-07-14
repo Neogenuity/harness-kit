@@ -122,6 +122,12 @@ run 2 "Codex patch: dev-instance edit denied"       "$(codex_patch '*** Update F
 run 2 "Codex bare patch: project dev.sh edit denied" "$(codex_patch_bare '*** Update File: scripts/dev.sh
 @@
 +x')"
+run 2 "Codex patch: Cursor sandbox edit denied" "$(codex_patch '*** Update File: .cursor/sandbox.json
+@@
++x')"
+run 2 "Codex bare patch: devcontainer edit denied" "$(codex_patch_bare '*** Update File: .devcontainer/devcontainer.json
+@@
++x')"
 run 2 "Codex patch: local settings add denied"      "$(codex_patch '*** Add File: .claude/settings.local.json
 +{"disableAllHooks": true}')"
 run 2 "Codex bare patch: local settings add denied" "$(codex_patch_bare '*** Add File: .claude/settings.local.json
@@ -158,6 +164,8 @@ run 2 "dot-dot harness.conf denied"            "$(payload "$WORK/scripts/../scri
 run 2 "dot-slash settings.local denied"        "$(payload "$WORK/.claude/./settings.local.json")"
 run 2 "dot-slash hook script denied"           "$(payload "$WORK/scripts/hooks/./lib.sh")"
 run 2 "Cursor dot-slash mcp.json denied"       "$(cursor_payload "$WORK/.cursor/./mcp.json")"
+run 2 "Cursor dot-slash sandbox denied"        "$(cursor_payload "$WORK/.cursor/./sandbox.json")"
+run 2 "dot-slash devcontainer denied"          "$(payload "$WORK/.devcontainer/./devcontainer.json")"
 run 2 "Codex patch dot-slash mid-path denied"  "$(codex_patch '*** Update File: scripts/./harness.conf
 @@
 +x')"

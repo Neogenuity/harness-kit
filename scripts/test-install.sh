@@ -54,8 +54,8 @@ make_fixture() {
     # validate zero providers instead of failing on absent configs. Set BEFORE the
     # manifest so the harness.conf pin matches. Robust to a source conf that never
     # had the lines (strip-then-append). The non-empty sets get their own cases.
-    { grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS)=' "$w/scripts/harness.conf"
-      printf 'HOOK_WIRED_PROVIDERS=""\nAGENT_PROVIDERS=""\n'
+    { grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS|EXECUTION_PROFILE_PROVIDERS)=' "$w/scripts/harness.conf"
+      printf 'HOOK_WIRED_PROVIDERS=""\nAGENT_PROVIDERS=""\nEXECUTION_PROFILE_PROVIDERS=""\n'
     } > "$w/scripts/harness.conf.tmp" && mv "$w/scripts/harness.conf.tmp" "$w/scripts/harness.conf"
     harness_generate_manifest "$w" "$KIT_VERSION" > "$w/scripts/.harness-manifest"
     ( cd "$w" && git_c add -A && git_c commit -qm init >/dev/null )
@@ -495,8 +495,8 @@ if command -v jq >/dev/null 2>&1 && [ -d "$PROVIDERS_TPL" ]; then
     ( cd "$F" && git init -q )
     harness_install_mechanism "$SCRIPTS_DIR" "$F"
     harness_append_gitignore "$F"
-    { grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS)=' "$F/scripts/harness.conf"
-      printf 'HOOK_WIRED_PROVIDERS=".claude .cursor .codex"\nAGENT_PROVIDERS=""\n'
+    { grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS|EXECUTION_PROFILE_PROVIDERS)=' "$F/scripts/harness.conf"
+      printf 'HOOK_WIRED_PROVIDERS=".claude .cursor .codex"\nAGENT_PROVIDERS=""\nEXECUTION_PROFILE_PROVIDERS=""\n'
     } > "$F/scripts/hc" && mv "$F/scripts/hc" "$F/scripts/harness.conf"
     mkdir -p "$F/.claude" "$F/.cursor" "$F/.codex"
     cp "$PROVIDERS_TPL/claude/settings.json" "$F/.claude/settings.json"

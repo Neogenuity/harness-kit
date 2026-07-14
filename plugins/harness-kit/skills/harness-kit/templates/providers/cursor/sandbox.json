@@ -1,0 +1,12 @@
+{
+  "type": "workspace_readwrite",
+  "additionalReadwritePaths": [],
+  "additionalReadonlyPaths": [],
+  "disableTmpWrite": false,
+  "enableSharedBuildCache": false,
+  "networkPolicy": {
+    "default": "deny",
+    "allow": [],
+    "deny": []
+  }
+}

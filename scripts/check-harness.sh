@@ -632,6 +632,266 @@ else
     done
 fi
 
+# 8e. Stable execution-profile validation. Adoption is OPTIONAL and DECLARED
+#     through EXECUTION_PROFILE_PROVIDERS; unset/empty means unadopted and is a
+#     clean pass. Never infer adoption from surviving provider configs: a config
+#     deleted before audit is indistinguishable from a provider never adopted.
+#     Once declared, however, the provider's native config is a security policy:
+#     missing, malformed, or weakened required values are ERRORs. Extra provider
+#     settings remain project-owned and are ignored by this floor check.
+execution_json_require() {
+    local provider="$1" cfg="$2" key="$3" filter="$4"
+    if ! jq -e "$filter" "$ROOT/$cfg" >/dev/null 2>&1; then
+        echo "ERROR: $provider stable execution profile requires '$key' in $cfg; restore the declared profile floor or remove $provider from EXECUTION_PROFILE_PROVIDERS"
+        ERRORS=$((ERRORS + 1))
+    fi
+}
+
+execution_check_json_config() {
+    local provider="$1" cfg="$2"
+    if [ ! -f "$ROOT/$cfg" ]; then
+        echo "ERROR: execution-profile provider '$provider' is declared (harness.conf EXECUTION_PROFILE_PROVIDERS) but $cfg is missing — restore it or remove '$provider' from the declaration"
+        ERRORS=$((ERRORS + 1))
+        return 1
+    fi
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "ERROR: execution-profile provider '$provider' is declared but jq is unavailable, so $cfg cannot be semantically validated"
+        ERRORS=$((ERRORS + 1))
+        return 1
+    fi
+    if ! jq -e . "$ROOT/$cfg" >/dev/null 2>&1; then
+        echo "ERROR: execution-profile provider '$provider' config $cfg is malformed JSON — its declared security profile cannot be validated"
+        ERRORS=$((ERRORS + 1))
+        return 1
+    fi
+    return 0
+}
+
+execution_check_claude() {
+    local cfg=".claude/settings.json" provider=".claude"
+    execution_check_json_config "$provider" "$cfg" || return
+    execution_json_require "$provider" "$cfg" "sandbox.enabled = true" '.sandbox.enabled? == true'
+    execution_json_require "$provider" "$cfg" "sandbox.failIfUnavailable = true" '.sandbox.failIfUnavailable? == true'
+    execution_json_require "$provider" "$cfg" "sandbox.allowUnsandboxedCommands = false" '.sandbox.allowUnsandboxedCommands? == false'
+    execution_json_require "$provider" "$cfg" "sandbox.excludedCommands is absent or []" '(.sandbox | (has("excludedCommands") | not) or (.excludedCommands == []))'
+    execution_json_require "$provider" "$cfg" "sandbox.filesystem.allowWrite = []" '.sandbox.filesystem.allowWrite? == []'
+    execution_json_require "$provider" "$cfg" "sandbox.network.allowedDomains = []" '.sandbox.network.allowedDomains? == []'
+    execution_json_require "$provider" "$cfg" "sandbox.network.deniedDomains contains *" '((.sandbox.network.deniedDomains? | type) == "array") and ((.sandbox.network.deniedDomains | index("*")) != null)'
+    execution_json_require "$provider" "$cfg" "sandbox.network.allowLocalBinding = false" '.sandbox.network.allowLocalBinding? == false'
+    execution_json_require "$provider" "$cfg" "sandbox.network.allowAllUnixSockets = false" '.sandbox.network.allowAllUnixSockets? == false'
+    execution_json_require "$provider" "$cfg" "sandbox.network.allowUnixSockets is absent or []" '(.sandbox.network | (has("allowUnixSockets") | not) or (.allowUnixSockets == []))'
+    execution_json_require "$provider" "$cfg" "sandbox.network.allowMachLookup is absent or []" '(.sandbox.network | (has("allowMachLookup") | not) or (.allowMachLookup == []))'
+    execution_json_require "$provider" "$cfg" "sandbox.enableWeakerNetworkIsolation is absent or false" '(.sandbox | (has("enableWeakerNetworkIsolation") | not) or (.enableWeakerNetworkIsolation == false))'
+    execution_json_require "$provider" "$cfg" "sandbox.enableWeakerNestedSandbox is absent or false" '(.sandbox | (has("enableWeakerNestedSandbox") | not) or (.enableWeakerNestedSandbox == false))'
+    execution_json_require "$provider" "$cfg" "sandbox.credentials.files denies ~/.aws/credentials" 'any(.sandbox.credentials.files[]?; .path == "~/.aws/credentials" and .mode == "deny")'
+    execution_json_require "$provider" "$cfg" "sandbox.credentials.files denies ~/.ssh" 'any(.sandbox.credentials.files[]?; .path == "~/.ssh" and .mode == "deny")'
+    execution_json_require "$provider" "$cfg" "sandbox.credentials.envVars denies GITHUB_TOKEN" 'any(.sandbox.credentials.envVars[]?; .name == "GITHUB_TOKEN" and .mode == "deny")'
+    execution_json_require "$provider" "$cfg" "sandbox.credentials.envVars denies NPM_TOKEN" 'any(.sandbox.credentials.envVars[]?; .name == "NPM_TOKEN" and .mode == "deny")'
+}
+
+execution_check_cursor() {
+    local cfg=".cursor/sandbox.json" provider=".cursor"
+    execution_check_json_config "$provider" "$cfg" || return
+    execution_json_require "$provider" "$cfg" "type = workspace_readwrite" '.type? == "workspace_readwrite"'
+    execution_json_require "$provider" "$cfg" "additionalReadwritePaths = []" '.additionalReadwritePaths? == []'
+    execution_json_require "$provider" "$cfg" "additionalReadonlyPaths = []" '.additionalReadonlyPaths? == []'
+    execution_json_require "$provider" "$cfg" "disableTmpWrite = false" '.disableTmpWrite? == false'
+    execution_json_require "$provider" "$cfg" "enableSharedBuildCache = false" '.enableSharedBuildCache? == false'
+    execution_json_require "$provider" "$cfg" "networkPolicy.default = deny" '.networkPolicy.default? == "deny"'
+    execution_json_require "$provider" "$cfg" "networkPolicy.allow = []" '.networkPolicy.allow? == []'
+    # Extra deny entries only tighten a default-deny profile; require the
+    # documented array shape without rejecting project-specific denials.
+    execution_json_require "$provider" "$cfg" "networkPolicy.deny is an array" '(.networkPolicy.deny? | type) == "array"'
+}
+
+# toml_profile_value <file> <semantic-key>
+# Dependency-free, narrow TOML reader for the stable Codex floor. It reads keys
+# semantically within their table (order/spacing/comments/quote style do not
+# matter), normalizes strings, booleans, and empty arrays, and rejects duplicate
+# or malformed required values. Unrelated tables and multiline values are left
+# alone rather than pretending this portable bash+jq harness ships a TOML parser.
+toml_profile_value() {
+    awk -v want="$2" '
+        function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+        function uncomment(s,    i,c,q,esc,out) {
+            q=""; esc=0; out=""
+            for (i=1; i<=length(s); i++) {
+                c=substr(s,i,1)
+                if (esc) { out=out c; esc=0; continue }
+                if (q=="\"" && c=="\\") { out=out c; esc=1; continue }
+                if (q=="") {
+                    if (c=="#") break
+                    if (c=="\"" || c=="\047") q=c
+                } else if (c==q) q=""
+                out=out c
+            }
+            return out
+        }
+        function normalized(v,    first,last) {
+            v=trim(v); first=substr(v,1,1); last=substr(v,length(v),1)
+            if (length(v)>=2 && ((first=="\"" && last=="\"") || (first=="\047" && last=="\047"))) return substr(v,2,length(v)-2)
+            if (v=="true" || v=="false") return v
+            if (v ~ /^\[[[:space:]]*\]$/) return "[]"
+            if (v ~ /^\{[[:space:]]*\}$/) return "{}"
+            return "!malformed"
+        }
+        {
+            line=trim(uncomment($0)); if (line=="") next
+            if (line ~ /^\[[[:space:]]*[A-Za-z0-9_.-]+[[:space:]]*\]$/) {
+                section=line; sub(/^\[[[:space:]]*/, "", section); sub(/[[:space:]]*\]$/, "", section)
+                if (section==want) table_count++
+                next
+            }
+            eq=index(line,"="); if (!eq) next
+            key=trim(substr(line,1,eq-1)); value=substr(line,eq+1)
+            path=(section=="" ? key : section "." key)
+            # Dotted keys at the root are already their full semantic path.
+            if (path==want || (section=="" && key==want)) { count++; result=normalized(value) }
+        }
+        END {
+            if (count==0) {
+                if (table_count>0) { print "!malformed"; exit }
+                exit 1
+            }
+            if (count>1) { print "!duplicate"; exit }
+            print result
+        }
+    ' "$1"
+}
+
+execution_codex_require() {
+    local cfg="$1" key="$2" expected="$3" value rc
+    value=$(toml_profile_value "$cfg" "$key"); rc=$?
+    if [ "$rc" -ne 0 ] || [ "$value" != "$expected" ]; then
+        echo "ERROR: .codex declared execution profile requires '$key = $expected' in .codex/config.toml; the key is missing, malformed, duplicated, or outside the accepted profile tuple"
+        ERRORS=$((ERRORS + 1))
+    fi
+}
+
+execution_codex_optional_false() {
+    local cfg="$1" key="$2" value rc
+    value=$(toml_profile_value "$cfg" "$key"); rc=$?
+    [ "$rc" -eq 1 ] && return
+    if [ "$rc" -ne 0 ] || [ "$value" != "false" ]; then
+        echo "ERROR: .codex experimental local/private compatibility profile requires optional '$key' to be absent or false in .codex/config.toml"
+        ERRORS=$((ERRORS + 1))
+    fi
+}
+
+execution_check_codex() {
+    local cfg="$ROOT/.codex/config.toml" network_access network_rc proxy_state domains_exact unix_sockets_empty
+    if [ ! -f "$cfg" ]; then
+        echo "ERROR: execution-profile provider '.codex' is declared (harness.conf EXECUTION_PROFILE_PROVIDERS) but .codex/config.toml is missing — restore it or remove '.codex' from the declaration"
+        ERRORS=$((ERRORS + 1))
+        return
+    fi
+    # The semantic floor below deliberately stays dependency-light and focused,
+    # but it must never bless a file Codex itself cannot parse. Python's stdlib
+    # TOML parser is a conditional prerequisite only for a declared Codex
+    # profile; isolated mode prevents the target repo from shadowing tomllib.
+    if ! command -v python3 >/dev/null 2>&1 \
+            || ! python3 -I -c 'import tomllib' >/dev/null 2>&1; then
+        echo "ERROR: execution-profile provider '.codex' requires Python 3.11+ with tomllib to validate complete .codex/config.toml — the declared profile is unverifiable"
+        ERRORS=$((ERRORS + 1))
+        return
+    fi
+    if ! proxy_state=$(python3 -I - "$cfg" <<'PY'
+import sys
+import tomllib
+
+try:
+    with open(sys.argv[1], "rb") as config:
+        data = tomllib.load(config)
+except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+    raise SystemExit(1)
+
+features = data.get("features", {})
+if not isinstance(features, dict):
+    features = {}
+proxy = features.get("network_proxy", {})
+if not isinstance(proxy, dict):
+    proxy = {}
+domains_exact = proxy.get("domains") == {
+    "localhost": "allow",
+    "127.0.0.1": "allow",
+}
+unix_sockets_empty = proxy.get("unix_sockets", {}) == {}
+print(f"{int(domains_exact)} {int(unix_sockets_empty)}")
+PY
+    ); then
+        echo "ERROR: execution-profile provider '.codex' config .codex/config.toml is malformed TOML — its declared security profile cannot be validated"
+        ERRORS=$((ERRORS + 1))
+        return
+    fi
+    domains_exact=${proxy_state%% *}
+    unix_sockets_empty=${proxy_state#* }
+    execution_codex_require "$cfg" "sandbox_mode" "workspace-write"
+    execution_codex_require "$cfg" "approval_policy" "on-request"
+    execution_codex_require "$cfg" "approvals_reviewer" "user"
+    execution_codex_require "$cfg" "allow_login_shell" "false"
+    execution_codex_require "$cfg" "sandbox_workspace_write.writable_roots" "[]"
+    execution_codex_require "$cfg" "sandbox_workspace_write.exclude_tmpdir_env_var" "false"
+    execution_codex_require "$cfg" "sandbox_workspace_write.exclude_slash_tmp" "false"
+    execution_codex_require "$cfg" "shell_environment_policy.inherit" "core"
+    execution_codex_require "$cfg" "shell_environment_policy.ignore_default_excludes" "false"
+
+    network_access=$(toml_profile_value "$cfg" "sandbox_workspace_write.network_access"); network_rc=$?
+    case "$network_rc:$network_access" in
+        0:false) ;;
+        0:true)
+            execution_codex_require "$cfg" "features.network_proxy.enabled" "true"
+            execution_codex_require "$cfg" "features.network_proxy.allow_local_binding" "true"
+            if [ "$domains_exact" != "1" ]; then
+                echo "ERROR: .codex experimental local/private compatibility profile requires 'features.network_proxy.domains = exactly localhost/127.0.0.1 allow' in .codex/config.toml; public, wildcard, extra, denied, or duplicate entries are not accepted"
+                ERRORS=$((ERRORS + 1))
+            fi
+            if [ "$unix_sockets_empty" != "1" ]; then
+                echo "ERROR: .codex experimental local/private compatibility profile requires 'features.network_proxy.unix_sockets = absent or empty' in .codex/config.toml"
+                ERRORS=$((ERRORS + 1))
+            fi
+            execution_codex_optional_false "$cfg" "features.network_proxy.dangerously_allow_non_loopback_proxy"
+            execution_codex_optional_false "$cfg" "features.network_proxy.dangerously_allow_all_unix_sockets"
+            ;;
+        *)
+            echo "ERROR: .codex declared execution profile requires 'sandbox_workspace_write.network_access = false' or the exact experimental broad local/private compatibility variant in .codex/config.toml; the key is missing, malformed, or duplicated"
+            ERRORS=$((ERRORS + 1))
+            ;;
+    esac
+}
+
+execution_check_opencode() {
+    local cfg="opencode.json" provider=".opencode"
+    execution_check_json_config "$provider" "$cfg" || return
+    execution_json_require "$provider" "$cfg" "permission.external_directory = deny" '.permission.external_directory? == "deny"'
+    execution_json_require "$provider" "$cfg" "permission.bash = ask" '.permission.bash? == "ask"'
+    execution_json_require "$provider" "$cfg" "permission.webfetch = deny" '.permission.webfetch? == "deny"'
+    execution_json_require "$provider" "$cfg" "permission.websearch = deny" '.permission.websearch? == "deny"'
+}
+
+execution_seen=" "
+for execution_provider in ${EXECUTION_PROFILE_PROVIDERS:-}; do
+    case "$execution_provider" in
+        .claude|.cursor|.codex|.opencode) ;;
+        *)
+            echo "ERROR: EXECUTION_PROFILE_PROVIDERS names unknown provider '$execution_provider' — allowed values: .claude .cursor .codex .opencode"
+            ERRORS=$((ERRORS + 1))
+            continue ;;
+    esac
+    case "$execution_seen" in
+        *" $execution_provider "*)
+            echo "ERROR: EXECUTION_PROFILE_PROVIDERS contains duplicate provider '$execution_provider' — declare each adopted provider once"
+            ERRORS=$((ERRORS + 1))
+            continue ;;
+    esac
+    execution_seen="$execution_seen$execution_provider "
+    case "$execution_provider" in
+        .claude) execution_check_claude ;;
+        .cursor) execution_check_cursor ;;
+        .codex) execution_check_codex ;;
+        .opencode) execution_check_opencode ;;
+    esac
+done
+
 # 9. Mechanism files must match scripts/.harness-manifest (kit version plus
 #    sha256 per file, written at init). An un-pinned edit — agent, human, or
 #    merge — fails CI, so nobody can quietly rewrite a guard. Lines ending in

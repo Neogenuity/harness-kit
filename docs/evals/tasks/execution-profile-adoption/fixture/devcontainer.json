@@ -1,0 +1,5 @@
+{
+  "name": "existing-company-container",
+  "image": "company.invalid/dev:local-fixture",
+  "remoteUser": "developer"
+}

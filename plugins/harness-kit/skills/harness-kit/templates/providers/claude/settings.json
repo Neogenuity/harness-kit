@@ -30,6 +30,49 @@
       "Read(**/id_ed25519)"
     ]
   },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": [],
+    "enableWeakerNetworkIsolation": false,
+    "enableWeakerNestedSandbox": false,
+    "filesystem": {
+      "allowWrite": []
+    },
+    "network": {
+      "allowedDomains": [],
+      "deniedDomains": [
+        "*"
+      ],
+      "allowLocalBinding": false,
+      "allowUnixSockets": [],
+      "allowAllUnixSockets": false,
+      "allowMachLookup": []
+    },
+    "credentials": {
+      "files": [
+        {
+          "path": "~/.aws/credentials",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.ssh",
+          "mode": "deny"
+        }
+      ],
+      "envVars": [
+        {
+          "name": "GITHUB_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "NPM_TOKEN",
+          "mode": "deny"
+        }
+      ]
+    }
+  },
   "hooks": {
     "SessionStart": [
       {

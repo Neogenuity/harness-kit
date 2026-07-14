@@ -24,7 +24,10 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    config (`CLAUDE.md`, `AGENTS.md`, `.claude/`, `.cursor/`, `.codex/`,
    `.opencode/`, `.agents/`); MCP server configs (`.mcp.json`,
    `.cursor/mcp.json`, `opencode.json` `mcp`, `.codex/config.toml`
-   `[mcp_servers.*]`); secret-file patterns present (`.env*`,
+   `[mcp_servers.*]`); existing execution policy (`sandbox` in Claude settings,
+   `.cursor/sandbox.json`, Codex sandbox/approval/network keys, OpenCode
+   `permission`); any `.devcontainer/` plus the concrete image, Dockerfile, or
+   Compose service it uses; secret-file patterns present (`.env*`,
    `auth.json`, key files); docs already written. Also classify the repo as an
    **application** (a local service/site/API with meaningful running state) or
    **non-app** (library, docs, static data, or another repo with no running app
@@ -47,6 +50,22 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      toolchain; slow static analysis stays in `verify.sh`.
    - Which providers to wire beyond Claude Code + `AGENTS.md` (Cursor?
      Codex? OpenCode? `.agents`? — cheap to include, default to all five).
+   - **Execution-profile adoption is a separate explicit choice.** For each
+     wired provider, offer the stable tuple from
+     `templates/docs/conventions/execution-profiles.md`, name that provider's
+     temp roots and enforcement limits, and ask which providers to declare.
+     Existing config gets a proposed merge diff only. For an app, offer the
+     experimental Codex broad local/private-network compatibility variant only
+     when local command access is confirmed. State that it is not
+     localhost-only and does not prove ownership-safe teardown. Report a strict
+     repo-local localhost-only variant as unavailable on the observed Codex
+     build, and do not broaden the other three providers to imitate one.
+     Claude's credential tuple requires Claude
+     Code 2.1.187 or later.
+   - **Devcontainer adoption is another separate opt-in.** Offer it only when
+     recon proved a real image, Dockerfile, or Compose source. Confirm the
+     non-root user, mounts, ports, and explicit verification steps; if those
+     cannot be proven, defer it. Never offer a placeholder container.
    - Each MCP server recon found: approve it (name + what it runs or connects
      to) or defer it. The approved set becomes the trust inventory (step 4);
      a deferred server is left out and will surface as drift until listed.
@@ -112,6 +131,12 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      config/stubs is an ERROR; leaving either UNSET on an adopted harness is a
      loud diagnostic. Drop a provider from the set if you don't wire it (set to
      `""` for none).
+   - `harness.conf` `EXECUTION_PROFILE_PROVIDERS`: set it to exactly the
+     provider subset explicitly confirmed in step 2. Unset/empty means
+     unadopted; never infer this declaration from configs that happen to exist.
+     A declared provider makes its accepted profile a semantic drift gate:
+     fixed stable tuples, with only the accepted Codex experimental broad
+     local/private-network compatibility disjunction as an alternative.
    - `hooks/guard-config.sh`: extend `PROTECTED_PATHS` with the repo's
      linter/formatter configs — the files an agent could edit to make
      findings disappear. The harness mechanism is protected by default, now
@@ -148,6 +173,15 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      real defaults, delete inapplicable sections (production environment, MCP)
      and, for the enforcement facts, keep only what the wired providers' rows
      in the provider matrix prove.
+   - **Adopted execution profiles or devcontainer:** copy
+     `templates/docs/conventions/execution-profiles.md` into
+     `docs/conventions/execution-profiles.md` after at least one provider
+     profile is adopted **or** the devcontainer is separately adopted. Tailor
+     it to the confirmed provider subset, any named weakening, and/or the
+     authored devcontainer, then keep its conditional AGENTS link. The
+     installed file is self-contained: never point it back into this skill.
+     Repos adopting neither boundary omit the file and link. Devcontainer-only
+     adoption does not add an `EXECUTION_PROFILE_PROVIDERS` declaration.
    - **Application repos only:** copy
      `templates/docs/conventions/dev-runtime.md` to
      `docs/conventions/dev-runtime.md` and tailor its runtime map; copy the
@@ -185,27 +219,48 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      proves scores as a fail).
 
 6. **Wire providers** (for each provider chosen in the interview):
-   - Claude Code: `templates/providers/claude/settings.json` →
-     `.claude/settings.json`. Extend `permissions.allow` with the quality-gate
+   - Claude Code: merge the `permissions` and `hooks` subtrees from
+     `templates/providers/claude/settings.json` into `.claude/settings.json`.
+     Extend `permissions.allow` with the quality-gate
      commands and `permissions.deny` with `Read(...)` entries covering every
      tailored `SECRET_PATTERNS` glob — `check-harness.sh` fails when the deny
-     list misses one. Merge, don't clobber, an existing file.
+     list misses one. When `.claude` is in `EXECUTION_PROFILE_PROVIDERS`, merge
+     the template's `sandbox` object too; otherwise omit that optional subtree
+     even on a fresh install. Stop if the installed Claude Code is older than
+     2.1.187. Merge, don't clobber, an existing file.
    - Cursor: `templates/providers/cursor/hooks.json` → `.cursor/hooks.json`;
      one `.cursor/rules/<topic>.mdc` per convention doc from
-     `templates/providers/cursor/rules/_example.mdc`.
+     `templates/providers/cursor/rules/_example.mdc`. When `.cursor` is
+     declared for execution profiles, merge
+     `templates/providers/cursor/sandbox.json` into
+     `.cursor/sandbox.json`; say that effective closed egress also needs the
+     **sandbox.json Only** UI mode or admin policy.
    - Codex: `templates/providers/codex/hooks.json` → `.codex/hooks.json`
      (hooks are GA and on by default, but project-local configs load only
      when the project is trusted — see provider matrix). Codex payloads
      carry no file path: the guards parse apply_patch envelopes and
      token-scan shell commands via `lib.sh:hook_affected_files` — best
      effort, so keep Codex's native trust/permission layer as a second
-     guard. `config.toml` only if MCP servers are needed — and every server
-     added to `[mcp_servers.*]` gets a matching `MCP_ALLOWED_SERVERS` line
-     (step 4). Skills come from `.agents/skills/` — no Codex skill dir.
+     guard. Install or merge `config.toml` when MCP servers are needed **or**
+     `.codex` is declared for execution profiles. Preserve every existing MCP
+     table; every new `[mcp_servers.*]` server gets a matching
+     `MCP_ALLOWED_SERVERS` line (step 4). For an MCP-only, unadopted install,
+     write only the MCP tables/comments and omit the active profile keys from
+     the combined template. Before declaring `.codex`, require Python 3.11+
+     with `tomllib` (`python3 -I -c 'import tomllib'`); otherwise report the
+     profile as unverifiable and leave it undeclared. The local/private-network
+     compatibility variant is explicit and experimental, keeps exact
+     localhost/127.0.0.1 domain rules, and requires broad local binding; it is
+     not localhost-only or full runtime-lifecycle compatibility. Skills come
+     from `.agents/skills/` — no Codex skill dir.
    - OpenCode: `opencode.json` — its `permission.read` deny block mirrors
      `SECRET_PATTERNS` (keep the two in sync when tailoring; add `"mcp"`
      servers only if needed — each also gets an `MCP_ALLOWED_SERVERS` line,
-     step 4). No hook shim ships (descoped 2026-07-13): a TS plugin shim in
+     step 4). The base install omits the template's other permission fields.
+     When `.opencode` is declared for execution profiles, merge the
+     `external_directory`, `bash`, `webfetch`, and `websearch` permission
+     tuples; state that they are prompts/denials, not an OS/network sandbox.
+     No hook shim ships (descoped 2026-07-13): a TS plugin shim in
      `.opencode/plugins/` shelling out to the portable hooks is the documented
      path (see provider matrix), but the kit provides no template for it, so
      OpenCode is left out of `HOOK_WIRED_PROVIDERS` and its guards degrade to
@@ -222,6 +277,17 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      stubs (agent stubs come from each `docs/agents/*.md` frontmatter into every
      `AGENT_PROVIDERS` dir). In app repos this generates the `verify-live`
      provider stubs only after the canonical skill and AGENTS link exist.
+
+   **Optional devcontainer, after provider wiring:** author
+   `.devcontainer/devcontainer.json` only from the confirmed source in step 2.
+   Preserve every existing devcontainer file and show a proposed diff. Require
+   a non-root user; mount no host credentials, SSH/GPG agent, or container-engine
+   socket; and do not auto-run repo code in lifecycle hooks. Build it before
+   acceptance. For an app, explicitly exercise the existing `scripts/dev.sh`
+   contract inside the container instead of creating another launcher. Even
+   when no provider profile is adopted, copy/tailor the combined
+   `execution-profiles.md` convention and keep its AGENTS link for this
+   devcontainer boundary.
 
 7. **CI gate**: install `templates/ci/github-actions-harness-check.yml` as
    `.github/workflows/harness-check.yml` (or add the `check-harness.sh` step
@@ -273,5 +339,9 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    `health` is read-only and exits zero iff ready; `down` stops only this
    worktree and is idempotent. Exercise cleanup only if that validation's
    initial `up` reported `started: true`. Report results honestly, including
-   anything left unwired. To rehearse the whole flow on a disposable repo
+   anything left unwired. For each declared execution profile, run the semantic
+   checks and report effective-policy caveats (especially Cursor UI/admin scope
+   and OpenCode's missing OS boundary). If a devcontainer was adopted, build it
+   and run the confirmed gates inside it before reporting success. To rehearse
+   the whole flow on a disposable repo
    first, follow [fixture-recipe.md](../fixture-recipe.md).

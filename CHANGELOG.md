@@ -3,6 +3,120 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.16.0 — 2026-07-14
+
+Declared execution profiles — repositories can explicitly adopt and verify the
+strongest honest repo-local execution posture each supported provider exposes.
+The release adds stable profiles for Claude Code, Cursor, Codex, and OpenCode;
+an experimental Codex local/private-network compatibility variant; semantic
+drift checks; an authored devcontainer contract; and a provider-observability
+map that stays separate from the harness hook log. Terra implemented the
+mechanism and deterministic fixtures, Luna implemented the provider/content
+surface and behavioral task, and both workstreams were reciprocally reviewed.
+
+### Provider-native profiles
+
+- **Claude Code** enables the OS sandbox, fails closed when it is unavailable,
+  disables unsandboxed fallback and excluded-command bypasses, adds no writable
+  roots, denies command egress, rejects Unix-socket/Mach allowlists and both
+  weaker-isolation modes, and protects named credential files/environment
+  variables. The credential block requires Claude Code 2.1.187 or later;
+  project settings are not an administrator lock.
+- **Cursor** adds `.cursor/sandbox.json` with workspace-plus-temp writes, no
+  extra read/write roots or shared build cache, and a deny-by-default network
+  file. Effective closed egress still requires **sandbox.json Only** UI mode or
+  administrator policy; repo configuration alone cannot prove that state.
+- **Codex** adds `workspace-write`, user-reviewed on-request approvals, filtered
+  core environment inheritance, declared temp roots, and network-off defaults.
+  Applications may explicitly choose the experimental local/private-network
+  compatibility disjunction: command networking behind exact
+  `localhost`/`127.0.0.1` public-domain proxy rules, empty Unix-socket rules,
+  disabled dangerous bypasses, and `allow_local_binding = true`. The latter is
+  an admitted broad loopback/private-network weakening, not a localhost-only
+  boundary. Native Windows elevated/unelevated sandbox behavior is documented
+  separately from the kit's Bash-hook platform support.
+- **OpenCode** denies external-directory and web-tool access and asks for shell
+  commands. The docs state the actual limit: this is permission policy, not an
+  OS/filesystem/network sandbox, and an approved shell can still reach the host
+  and network.
+
+### Adoption and drift assurance
+
+- **Explicit `EXECUTION_PROFILE_PROVIDERS` declaration** is independent from
+  hook and agent wiring. Unset/empty remains a clean unadopted state for legacy
+  installs; the adopted subset is never inferred from surviving config files.
+- **Semantic check #8e** parses declared provider configs, accepts unrelated
+  local keys/order and additive deny hardening, and fails specifically on a
+  missing, malformed, disabled, full-access, broadened-write, approval-off, or
+  unrestricted-network tuple. Codex accepts only network-off or the exact
+  experimental local/private compatibility disjunction; declared Codex
+  validation uses Python 3.11+ `tomllib` to reject malformed content anywhere
+  in the file, compare domain/socket maps as parsed objects so nested descendant
+  tables cannot evade exactness, and report the profile unverifiable when that
+  conditional parser is absent.
+- **Guard coverage** now protects `.cursor/sandbox.json` and `.devcontainer/*`
+  in direct, Cursor, and Codex edit payloads while retaining the documented
+  fail-open behavior and maintenance escape hatch.
+- **Codex custom-agent stubs** now follow the current standalone-agent schema:
+  name, description, and developer instructions only. The generic canonical
+  `tools` list remains in the Markdown-provider stubs but is omitted from Codex
+  TOML, where CLI 0.144.1 interpreted it as an incompatible config value and
+  ignored the entire reviewer role.
+- Init/update/audit merge only explicitly chosen profiles, preserve hooks,
+  permissions, MCP servers, secret mirrors, and local keys, and classify each
+  provider as adopted, unadopted, drifted, unavailable, or unverifiable.
+
+### Containers, observability, and evidence
+
+- **Devcontainers are authored from confirmed repo evidence**, never copied as
+  placeholders: explicit opt-in, non-root user, no host credential/agent/socket
+  mounts, no automatic repo-code lifecycle command, and build plus existing
+  `scripts/dev.sh` lifecycle verification. This non-app repository has no
+  confirmed image/Dockerfile/Compose source, so no dogfood container is emitted.
+- **Provider observability stays separate** from `.harness/log.jsonl`. The
+  dated map records each provider's signal, configuration scope, export path,
+  and privacy limitation without shipping collectors, endpoints, headers,
+  credentials, raw-prompt opt-ins, or automatic session joins.
+- **Behavioral adoption task** requires a non-clobbering Claude/Codex subset
+  merge, the exact Codex compatibility tuple plus an explicit account of its
+  broad local/private reach and teardown limit, preserved local/MCP/runtime
+  state, a substantive self-contained convention, and no provider telemetry.
+  Its reference passes and clobber/telemetry/thin-doc shortcuts are rejected by
+  the offline grader. The corrected paid Codex run passed 2/3 on
+  `gpt-5.6-luna` (`pass@k=1`, rate 0.67; run
+  `20260714-v016-provider-config`) and is recorded as the baseline. One
+  quota-conservative Claude Haiku smoke failed the external grader after it
+  changed forbidden OpenCode policy and missed required Claude/convention
+  content; the 0/1 smoke is retained as evidence but is not baselined.
+- **Explicit eval execution authorization** keeps ordinary trials unchanged.
+  A task must declare `execution: provider-config-write` *and* the caller must
+  independently pass `--allow-provider-config-write`; either half alone is
+  refused before a real provider CLI starts. The accepted pair receives the
+  mechanism-maintenance escape and, for Codex, `danger-full-access` because
+  `workspace-write` protects `.codex/config.toml`. The runner states that this
+  grants unrestricted host filesystem and public-network access, that a
+  disposable clone does not contain host effects, and that an external
+  container/VM is preferred; it also rejects combining the mode with
+  `network: required`.
+- **Live Codex evidence** on CLI 0.144.1 under macOS showed why the tuple is
+  labeled as a weakening: `allow_local_binding = false` blocked concurrent
+  local startup despite exact localhost rules; `true` allowed the two-worktree
+  fixture through health, seed, HTTP, and log checks while a tested
+  `example.com` request was proxy-blocked. The workspace-write sandbox also
+  blocked `ps`, so ownership-safe `scripts/dev.sh down` could not complete.
+  v0.16.0 therefore does not claim localhost-only containment or full lifecycle
+  compatibility for this experimental variant.
+
+### Migration
+
+- Update mode replaces pristine `check-harness.sh`,
+  `test-check-harness.sh`, `guard-config.sh`, and its regression test, then
+  re-pins them. Existing tailored `harness.conf` is diff-only: leave
+  `EXECUTION_PROFILE_PROVIDERS` unset/empty to remain unadopted, or explicitly
+  declare only the provider subset whose proposed config merge you approve.
+- Provider configs, conventions, AGENTS links, and devcontainer files are
+  policy/content and are never auto-added or overwritten during update.
+
 ## 0.15.0 — 2026-07-14
 
 Runtime legibility — application repositories can expose one deterministic,
@@ -387,7 +501,7 @@ fixture-covered).
   hardening from the template if you've tailored them.
 - **Plans.** The governance plan's advanced half (per-provider sandbox
   profiles, devcontainer, audit-log export) split into its own queued plan
-  ([docs/plans/execution-sandbox-profiles.md](docs/plans/execution-sandbox-profiles.md));
+  ([docs/plans/active/v0.16.0-execution-sandbox-profiles.md](docs/plans/active/v0.16.0-execution-sandbox-profiles.md));
   completed plan at
   [docs/plans/completed/v0.10.0-execution-governance-baseline.md](docs/plans/completed/v0.10.0-execution-governance-baseline.md).
 

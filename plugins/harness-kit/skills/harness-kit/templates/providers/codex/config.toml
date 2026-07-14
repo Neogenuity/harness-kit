@@ -3,10 +3,44 @@
 # Codex reads AGENTS.md natively for instructions and .agents/skills/ for the
 # generated skill stubs — nothing to configure for those. Hooks wire via
 # .codex/hooks.json (see the template next to this file); subagents are TOML
-# files in .codex/agents/. This file exists to declare project-scoped MCP
-# servers, mirroring the servers wired for the other harnesses. Keep secrets
-# out: pass tokens via env_vars and document the expected variables in an
-# .env.mcp.example.
+# files in .codex/agents/. The active values below are the stable execution
+# profile. Keep MCP secrets out: pass tokens via env_vars and document the
+# expected variables in an .env.mcp.example.
+
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+approvals_reviewer = "user"
+allow_login_shell = false
+
+[sandbox_workspace_write]
+network_access = false
+writable_roots = []
+exclude_tmpdir_env_var = false
+exclude_slash_tmp = false
+
+[shell_environment_policy]
+inherit = "core"
+ignore_default_excludes = false
+
+# On native Windows, elevated is the recommended sandbox. If administrator
+# setup is unavailable, explicitly tailor this to the reduced-assurance
+# "unelevated" fallback and record that limitation in the installed convention.
+# [windows]
+# sandbox = "elevated"
+
+# LOCAL/PRIVATE-NETWORK COMPATIBILITY VARIANT (experimental, explicit opt-in): change
+# sandbox_workspace_write.network_access to true, then uncomment this table.
+# Keep the exact domain rules and never add a public host or wildcard.
+# allow_local_binding = true admits broader loopback, link-local, and private
+# network reach; this is not a localhost-only boundary or full dev lifecycle.
+# See the installed execution-profile convention for the Codex 0.144.1 macOS
+# live evidence and ownership-safe down limitation.
+# Leave unix_sockets unset. Keep dangerously_allow_non_loopback_proxy and
+# dangerously_allow_all_unix_sockets unset or false.
+# [features.network_proxy]
+# enabled = true
+# allow_local_binding = true
+# domains = { "localhost" = "allow", "127.0.0.1" = "allow" }
 #
 # [mcp_servers.<name>]
 # command = "npx"

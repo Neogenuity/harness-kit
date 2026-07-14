@@ -4,11 +4,20 @@
 - polarity: positive
 - provider: any
 - grade: check
+- network: none
+- execution: default
 
 <!-- suite:    capability (expected < 100%, informational) | regression (expected ~100%, fails on a drop)
      polarity: positive (a behavior must happen) | negative (a shortcut must NOT be taken)
      provider: any | claude | codex   (which CLI this task is meaningful for)
-     grade:    check (run check.sh only) | check+verify (also run the workspace's scripts/verify.sh) -->
+     grade:    check (run check.sh only) | check+verify (also run the workspace's scripts/verify.sh)
+     network:  none | required        (Codex required = experimental broad local/private proxy)
+     execution: default | provider-config-write
+                (explicit provider policy/config edits only; metadata does not authorize it;
+                 non-mock runs require --allow-provider-config-write; mock is harmless/exempt;
+                 Codex danger-full-access grants unrestricted host filesystem + public network,
+                 which the disposable clone does not contain — prefer an external container/VM;
+                 never call it workspace-only or combine with network: required) -->
 
 ## Prompt
 

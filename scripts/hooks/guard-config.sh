@@ -2,8 +2,9 @@
 # Agent hook (before file edit/write): deny agent edits to the files that
 # define the harness itself — hook scripts, the sync/check/verify machinery,
 # the manifest, hook wiring, CI gates, harness.conf, the Claude Code local
-# settings override, and the per-provider MCP configs — plus (TAILOR) the
-# linter/formatter configs. An agent that can edit the guard can silence it;
+# settings override, the per-provider MCP / execution-profile configs, and an
+# adopted devcontainer boundary — plus (TAILOR) the linter/formatter configs.
+# An agent that can edit the guard can silence it;
 # "fix the code, not the lint config" must be mechanical, not aspirational.
 #
 # Provider-agnostic via lib.sh:hook_affected_files — Cursor/Claude Code file
@@ -60,9 +61,11 @@ scripts/test-*.sh
 scripts/.harness-manifest
 .claude/settings.json
 .cursor/hooks.json
+.cursor/sandbox.json
 .codex/hooks.json
 .opencode/plugins/*
 /opencode.json
+.devcontainer/*
 .github/workflows/*
 "
 # 2026-07-12 probe found these five writable live, each a cheap way to

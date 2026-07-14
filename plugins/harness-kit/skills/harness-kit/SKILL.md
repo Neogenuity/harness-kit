@@ -7,8 +7,9 @@ description: >-
     provider skill stubs, provider-agnostic hook scripts with lint feedback
     and observability logging, shared permissions, and a CI drift gate with
     mechanism integrity checks, plus an app-only development-runtime contract
-    and live-verification workflow. Activates when asked to set up or
-    standardize an agent/AI harness in a repo, audit an existing harness,
+    and live-verification workflow, optional declared provider execution
+    profiles, and an authored devcontainer contract. Activates when asked to
+    set up or standardize an agent/AI harness in a repo, audit an existing harness,
     add a skill/subagent/hook to the harness, sync provider stubs, or
     upgrade/migrate harness machinery ("harness init", "harness audit").
 ---
@@ -46,6 +47,20 @@ misfire on the router alone, but the reference carries the steps.
   `dev-runtime`/`verify-live` docs, AGENTS links, and generated skill stubs.
   Non-app repos report runtime support as N/A; there is no generic `dev.sh`
   template.
+- **Execution profiles are a separate explicit opt-in.** Declare only the
+  confirmed provider subset in `EXECUTION_PROFILE_PROVIDERS`; unset/empty means
+  unadopted. Merge provider tuples without clobbering hooks, permissions, MCP,
+  or local keys, and name provider limits. Install the self-contained combined
+  execution-profiles/devcontainer convention after at least one profile is
+  adopted or the devcontainer is separately adopted. Claude's credentials
+  tuple needs Claude Code 2.1.187 or later; declared Codex validation
+  conditionally needs Python 3.11+ `tomllib` to parse the complete TOML file.
+- **A devcontainer is authored, never placeholder-copied.** Offer it only from
+  a confirmed image/Dockerfile/Compose source and a separate opt-in; non-root,
+  no host credentials/socket mounts, no automatic repo-code lifecycle command,
+  and build verification are required. Devcontainer-only adoption still gets
+  the combined convention and its AGENTS link; it does not add a provider
+  declaration.
 - **Author from the real codebase** (this is authoring, not copying templates),
   and **write the manifest AFTER tailoring** (step 8) so its checksums pin the
   tailored state.
@@ -60,6 +75,13 @@ misfire on the router alone, but the reference carries the steps.
 - **Check the native permission deny-list mirrors the secret guard**, and report
   the MCP trust-inventory state, the governance docs, eval-bank health, and the
   age of the oldest `baselines.json` cell.
+- **Grade declared execution profiles provider-by-provider** as adopted,
+  drifted, unavailable, or unverifiable; unset/empty is unadopted. Keep the
+  provider observability availability table separate from
+  `.harness/log.jsonl`, and audit devcontainer files statically unless the user
+  separately authorizes a build/run verification. Require the combined
+  convention/link for an adopted profile or devcontainer, while treating a
+  merely pre-existing devcontainer as an offerable, unadopted boundary.
 - **App runtime audit is read-only.** Invoke only `scripts/dev.sh health` after
   it is executable and manifest-pinned; classify missing, non-executable,
   unpinned, invalid JSON, stopped, unhealthy, or ready. Existing apps opt in to
@@ -80,11 +102,12 @@ misfire on the router alone, but the reference carries the steps.
   or the manifest line is ` # tailored` → diff only**, never auto-overwrite.
 - **Never auto-overwrite policy files** (`verify.sh`, `format.sh`,
   `guard-secrets.sh`, `guard-project-policy.sh`, `harness.conf`, provider
-  configs).
+  configs, `.cursor/sandbox.json`, or `.devcontainer/*`).
 - **Run the NEW kit's `templates/scripts/install-lib.sh`**, not the target's
   old copy, so update discovers mechanism files introduced by the new version.
   Runtime convention/skill/script adoption is a separate explicit opt-in for
-  existing apps; content is never auto-added or overwritten.
+  existing apps; execution profiles and a devcontainer are separate explicit
+  opt-ins too; content is never auto-added or overwritten.
 - **Re-pin the manifest afterward** (preserving every ` # tailored` marker) and
   re-run `check-harness.sh` + hook tests. A real *standards* shift routes to
   [references/migrations.md](references/migrations.md), not improvisation.
@@ -96,5 +119,13 @@ misfire on the router alone, but the reference carries the steps.
 - Hooks fail open; denial is exit 2; advisory stop-hooks never hard-block.
 - `scripts/dev.sh`, where applicable, is tailored repo policy: pin and diff it,
   never replace it from a generic template or operate another worktree's app.
+- An execution-profile declaration is never inferred from config presence;
+  each declared provider must pass its accepted profile. Fixed stable tuples
+  remain required except that Codex's network tuple may take the accepted
+  experimental broad local/private-network compatibility disjunction. Name its
+  broader reach and ownership-safe teardown limit. Never claim OpenCode permissions are an
+  OS/network sandbox or Cursor repo config proves the effective UI/admin policy.
+- Provider telemetry is not `.harness/log.jsonl`: ship no exporter endpoint,
+  auth header, credential, real hostname, raw-prompt opt-in, or automatic join.
 - Verify with the repo's own checks before declaring done, and report
   failures as failures.

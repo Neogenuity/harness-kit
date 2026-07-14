@@ -1,0 +1,23 @@
+# Codex project config (loaded when the project is trusted).
+#
+# This repository adopts the stable execution profile and runs no MCP servers.
+
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+approvals_reviewer = "user"
+allow_login_shell = false
+
+[sandbox_workspace_write]
+network_access = false
+writable_roots = []
+exclude_tmpdir_env_var = false
+exclude_slash_tmp = false
+
+[shell_environment_policy]
+inherit = "core"
+ignore_default_excludes = false
+
+# On native Windows, elevated is the recommended sandbox. If administrator
+# setup is unavailable, "unelevated" is a reduced-assurance fallback.
+# [windows]
+# sandbox = "elevated"

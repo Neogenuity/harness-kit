@@ -115,6 +115,21 @@
       },
       "suite": "capability"
     },
+    "execution-profile-adoption": {
+      "polarity": "positive",
+      "runs": {
+        "codex/gpt-5.6-luna": {
+          "pass_at_k": 1,
+          "pass_hat_k": 0,
+          "pass_rate": 0.67,
+          "passes": 2,
+          "recorded": "2026-07-14",
+          "trials": 3,
+          "variant": "bare"
+        }
+      },
+      "suite": "capability"
+    },
     "hn-add-skill": {
       "polarity": "positive",
       "runs": {

@@ -10,8 +10,8 @@ the Sources section at the bottom lists the primary docs to re-verify
 against. (Full matrix last validated: 2026-07; Codex facts re-verified
 2026-07-10 after the docs moved hosts; GitHub Copilot + Gemini CLI added and
 verified 2026-07-11; the Execution-containment section added and verified
-against live provider docs 2026-07-11; browser/live-app surfaces re-verified
-2026-07-14 — see Sources.)
+against live provider docs 2026-07-14; browser/live-app and execution-profile
+surfaces re-verified 2026-07-14 — see Sources.)
 
 | Capability | Claude Code | Cursor | Codex | OpenCode | `.agents` standard |
 | --- | --- | --- | --- | --- | --- |
@@ -54,7 +54,7 @@ enforces the whole invariant (schema verified 2026-07-10, see Sources; ADR 007).
 
 ## Execution containment (sandbox, network, approvals)
 
-_verified 2026-07 — per-provider sources in the Sources section._
+_verified 2026-07-14 — per-provider sources in the Sources section._
 
 This is the **enforcement** surface the risky-actions and untrusted-content
 convention docs cite. Pre-tool hooks are *feedback* (a guardrail, not a
@@ -68,17 +68,45 @@ enforcement claim in the two convention docs.
 
 | Control | Claude Code | Cursor | Codex | OpenCode |
 | --- | --- | --- | --- | --- |
-| OS-level sandbox | Seatbelt (macOS), bubblewrap (Linux/WSL2); not native Windows; `sandbox.enabled` in `settings.json` | shell-command sandbox from `.cursor/sandbox.json` (per-user or `<workspace>/.cursor/`); OS primitive not stated in the sandbox reference | Seatbelt (macOS), bubblewrap (Linux/WSL2) | none — allow/ask/deny prompts only, no OS isolation |
-| Filesystem default | writes limited to working dir + session temp; widen with `sandbox.filesystem.allowWrite`, restrict with `denyWrite`/`denyRead` | `type: "workspace_readwrite"` (workspace only) + `additionalReadwritePaths` | `sandbox_mode`: `read-only` \| `workspace-write` (default, workspace only) \| `danger-full-access` | no OS write boundary; `edit`/`bash` gated by `permission` rules |
-| Network egress default | **default-deny**: first new domain prompts, pin with `sandbox.network.allowedDomains`; managed `allowManagedDomainsOnly` blocks the rest | **default-deny** (`networkPolicy.default: "deny"`); allow hosts in `.cursor/sandbox.json` | **off in `workspace-write`**; enable per-repo via `[sandbox_workspace_write] network_access = true` | not OS-restricted; only the `webfetch` tool is permissioned — a shell `curl` is unbounded |
+| OS-level sandbox | Seatbelt (macOS), bubblewrap (Linux/WSL2); not native Windows; `sandbox.enabled` in `settings.json` | Seatbelt (macOS); Landlock + seccomp on Linux with Bubblewrap fallback; config in per-user or repo `.cursor/sandbox.json` | Seatbelt (macOS), bubblewrap (Linux/WSL2), and a native Windows sandbox with preferred `elevated` plus weaker `unelevated` mode | none — allow/ask/deny prompts only, no OS isolation |
+| Filesystem default | writes limited to working dir + session temp; reads remain broad, including credentials unless `sandbox.credentials`/deny rules restrict them | `type: "workspace_readwrite"` (workspace + temp) and optional extra read/write paths; higher-scope path entries union | `sandbox_mode`: `read-only` \| `workspace-write` (workspace + temp by default) \| `danger-full-access`; `writable_roots` broadens | no OS write boundary; `external_directory`, `edit`, and `bash` are permission gates only |
+| Network egress default | no domains preapproved, but a user may approve a new host for the session; project `deniedDomains: ["*"]` closes egress, while managed `allowManagedDomainsOnly` is the central allowlist lock | repo `networkPolicy.default: "deny"`, but the default UI mode adds Cursor's domain defaults and **Allow All** bypasses the repo list; `sandbox.json Only` or admin policy is needed for effective closed egress | off in `workspace-write`; experimental `features.network_proxy` can constrain already-enabled traffic, but Codex CLI 0.144.1 on macOS required broad local/private binding for the tested loopback runtime; managed `experimental_network` is separate | not OS-restricted; `webfetch`/`websearch` can be denied, but an approved shell (or `--auto`) has unrestricted egress |
 | Approvals | permission rules + modes; `/sandbox` auto-allow vs. regular | run modes: Auto-review (default) \| Allowlist \| Run Everything — docs: "Auto-review is not a security boundary" | `approval_policy`: `untrusted` \| `on-request` \| `never` (or granular object) | `permission` allow/ask/deny in `opencode.json` |
 
-Two honest limits the convention docs must not paper over: Claude Code's
-default proxy does not inspect TLS, so a broad `allowedDomains` entry can still
-be a domain-fronting exfil path; and Cursor's run-mode classifier is
-self-described as "not a security boundary." The default-deny network cells and
-the OS sandbox cells are the enforcing facts; the approval cells are policy the
-user still has to set.
+The exact adopted tuples, local-runtime network availability, and admin-only controls live
+in the installed, self-contained
+`docs/conventions/execution-profiles.md`. Two honest limits that doc must not
+paper over: Claude Code's default proxy does not inspect TLS, so a broad
+`allowedDomains` entry can still be a domain-fronting exfil path; and Cursor's
+repo sandbox file is not a complete policy because its UI and admin layers sit
+above it. Claude `excludedCommands` always run outside the sandbox and therefore
+cannot remain in the stable profile. OpenCode has no containment cell to cite
+at all. Approval remains a policy decision, not an OS boundary.
+
+The Codex compatibility variant is not a localhost-only or full-lifecycle
+boundary. Live verification on 2026-07-14 with Codex CLI 0.144.1 on macOS
+required `allow_local_binding = true`, which admitted broader local/private
+reach: concurrent `up`, `health`, `seed`, and local HTTP succeeded, and an
+`example.com` probe was blocked. Sandboxed `ps` was denied, so ownership-safe
+`scripts/dev.sh down` did not complete; a direct process kill is not equivalent
+to that ownership check.
+
+## Provider observability
+
+_verified 2026-07-14 — this is deliberately separate from the provider-neutral
+`.harness/log.jsonl` hook stream._
+
+| Provider | Available signal | Scope / export | Privacy default or limitation |
+| --- | --- | --- | --- |
+| Claude Code | OpenTelemetry metrics and log/events; traces beta | environment, user, or managed configuration | prompt content redacted by default; no repo exporter endpoint/header ships |
+| Cursor | project hooks can author selected local events; team/enterprise hook distribution is admin-scoped | custom hook output, not a standardized repo telemetry exporter | hook payloads can contain prompts, commands, paths, and output; never dump raw payloads by default |
+| Codex | OpenTelemetry logs, metrics, and traces | user config only; project `.codex/config.toml` ignores `otel` | raw prompt export off by default; no collector credentials in repo config |
+| OpenCode | `stats`, local diagnostics, and JSON session export | local CLI/session operations; `export --sanitize` is the safer manual path | exports can contain transcript/file data; no automatic repo-level OTel claim |
+
+The kit does not correlate these provider streams with `.harness/log.jsonl`,
+does not install a collector, and does not ship endpoints, auth headers, real
+hostnames, or raw-prompt opt-ins. Session correlation remains future schema
+work, not a v0.16.0 inference.
 
 ## Instructions-only providers (GitHub Copilot, Gemini CLI)
 
@@ -240,6 +268,11 @@ ships.
   imports at load time, so the shared file loads plus the few Claude-only
   lines. If imports ever misbehave, a symlink `CLAUDE.md → AGENTS.md` is the
   fallback bridge (breaks Windows checkouts; prefer the import).
+- **Claude Code execution profiles** that use `sandbox.credentials` require
+  Claude Code 2.1.187 or later (verified 2026-07-14). The repo profile denies
+  named credential files and environment variables; it does not rely on an
+  undocumented general environment scrub. Sandboxing remains unavailable on
+  native Windows, where WSL2 or a separately reviewed container is required.
 - **Cursor rules** (`.mdc`) want summarized key points inline, not just a
   pointer — keep the summary short and cite the canonical doc path;
   `check-harness.sh` verifies every cited path exists.
@@ -380,18 +413,31 @@ Primary docs to re-validate each section against (all last consulted
   2026-07-14): <https://github.com/microsoft/playwright-cli> and
   <https://github.com/microsoft/playwright-mcp>
 - Claude Code sandboxing (`sandbox.*` settings, Seatbelt/bubblewrap OS
-  enforcement, default-deny network proxy — Execution-containment row,
-  verified 2026-07): <https://code.claude.com/docs/en/sandboxing>
+  enforcement, `failIfUnavailable`, strict unsandboxed fallback,
+  `sandbox.credentials` minimum version, and network proxy behavior —
+  Execution-containment row, verified 2026-07-14):
+  <https://code.claude.com/docs/en/sandboxing> and
+  <https://code.claude.com/docs/en/settings>
+- Claude Code monitoring (OpenTelemetry metrics/events, beta traces, and
+  prompt redaction default — observability row, verified 2026-07-14):
+  <https://code.claude.com/docs/en/monitoring-usage>
 - Codex sandboxing + config (`sandbox_mode`, `approval_policy`,
-  `[sandbox_workspace_write] network_access` — Execution-containment row,
-  verified 2026-07): <https://learn.chatgpt.com/docs/sandboxing> and
-  <https://learn.chatgpt.com/docs/config-file/config-reference>
+  `[sandbox_workspace_write] network_access`, experimental `network_proxy`,
+  project-ignored OTel config, and native Windows modes — containment and
+  observability rows, verified 2026-07-14):
+  <https://learn.chatgpt.com/docs/agent-approvals-security>,
+  <https://learn.chatgpt.com/docs/config-file/config-reference>, and
+  <https://learn.chatgpt.com/docs/windows/windows-sandbox>
   (developers.openai.com/codex/* 308-redirects to learn.chatgpt.com)
 - Cursor run modes + sandbox (`.cursor/sandbox.json`, `type:
-  workspace_readwrite`, `networkPolicy.default: "deny"`, "Auto-review is not a
-  security boundary" — Execution-containment row, verified 2026-07):
+  workspace_readwrite`, `networkPolicy.default: "deny"`, repo/UI/admin policy
+  layering, platform implementations, and "Auto-review is not a security
+  boundary" — Execution-containment row, verified 2026-07-14):
   <https://cursor.com/docs/agent/security/run-modes> and
   <https://cursor.com/docs/reference/sandbox>
+- OpenCode CLI (`stats`, diagnostic logs, JSON session export, and
+  `export --sanitize` — observability row, verified 2026-07-14):
+  <https://opencode.ai/docs/cli/>
 - Agent Skills standard (SKILL.md + references/scripts/assets):
   <https://agentskills.io> — full spec at <https://agentskills.io/specification>
 - AGENTS.md standard (hierarchical, Linux Foundation):

@@ -37,24 +37,26 @@ nobody mistakes a warning for a wall:
 
 ## Default posture
 
-The safe default this repo aims for, loosened only deliberately:
+This repo explicitly adopts all four provider profiles; the safe posture is
+provider-specific and loosened only deliberately:
 
-- **Workspace-only writes.** Writes stay inside the working tree. *[pre-action
-  enforcement — sandbox]*
-- **Network only for provider-doc verification and `gh`.** The sole legitimate
-  egress is re-verifying the provider matrix against live docs and GitHub
-  operations via `gh`; everything else is default-deny. *[pre-action
-  enforcement — sandbox / network policy]*
-- **Approvals on for destructive git operations.** Force-push, tag deletion,
-  history rewrite, and deletes under `docs/evals/` or `docs/plans/completed/`
-  prompt. *[pre-action enforcement — approvals]*
+- **Claude Code and Codex:** writes stay inside the workspace plus declared
+  isolated temp roots, command egress is closed, and unsandboxed fallback is
+  disabled. *[pre-action enforcement — OS sandbox / network policy]*
+- **Cursor:** the committed file declares workspace-plus-temp writes and closed
+  egress; effective closed egress additionally requires **sandbox.json Only**
+  UI mode or administrator policy. *[pre-action enforcement — conditional
+  native sandbox / network policy]*
+- **OpenCode:** external paths and web tools deny while shell commands ask. Its
+  policy is not an OS/filesystem/network boundary, so an approved shell can
+  still reach host paths and the network. *[pre-action policy — approvals only]*
 
 The exact key per harness is in the
 [provider matrix](../../plugins/harness-kit/skills/harness-kit/references/provider-matrix.md);
-per-provider sandbox/network **templates** are the queued
-[execution-sandbox-profiles.md](../plans/execution-sandbox-profiles.md) plan's
-job, not this doc's. **Loosening** is per-need and reversible: allow one host
-for one task, then restore. Widen the narrowest thing.
+this repo's adopted tuples and provider-specific limits are in
+[execution-profiles.md](execution-profiles.md). **Loosening** is per-need and
+reversible: allow one host for one task, then restore. Widen the narrowest
+thing.
 
 ## Destructive git operations
 

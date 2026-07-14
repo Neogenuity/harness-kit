@@ -26,8 +26,8 @@ EVAL_BASELINE_DEFAULT="docs/evals/baselines.json"
 
 # eval_task_meta <task_dir> <key>
 # Reads "- <key>: <value>" from the TASK.md metadata bullet list (suite,
-# polarity, provider, grade). Prints the value, or nothing if unset. First
-# match wins; trailing CR (Windows checkouts) stripped.
+# polarity, provider, grade, network, execution). Prints the value, or nothing
+# if unset. First match wins; trailing CR (Windows checkouts) stripped.
 eval_task_meta() {
     local dir="$1" key="$2"
     [ -f "$dir/TASK.md" ] || return 0

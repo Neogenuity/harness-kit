@@ -68,11 +68,25 @@ whatever ships next — without maintaining N parallel configurations.
    ships a physical-worktree identity/port helper, not a generic `dev.sh`.
    Non-app repos omit the whole runtime bundle.
 
-8. **Observability closes the loop.** Every deny, advisory, and lint finding
+8. **Execution profiles are declared, provider-specific policy.** A repo adopts
+   the stable floor one provider at a time through
+   `EXECUTION_PROFILE_PROVIDERS`; an unset or empty declaration remains a valid
+   unadopted harness. Semantic drift checks validate only declared providers
+   and never infer adoption from surviving config files. The self-contained
+   `docs/conventions/execution-profiles.md` records exact tuples, temp roots,
+   local-runtime network availability and lifecycle limits, admin-only limits,
+   and conditional validation prerequisites such as Python 3.11+ `tomllib` for
+   complete Codex parsing.
+   OpenCode's permission prompts
+   are named honestly rather than presented as an OS or network sandbox.
+
+9. **Observability closes the loop.** Every deny, advisory, and lint finding
    appends one JSON line to `.harness/log.jsonl` (git-ignored). The audit
    workflow summarizes it: a guard that fires repeatedly on the same path is
    the signal for what to engineer away permanently — tighten a pattern, add
-   a lint rule, write the convention doc.
+   a lint rule, write the convention doc. Provider telemetry remains a separate
+   stream with its own scope, schema, retention, and privacy controls; the kit
+   installs no collector and does not infer a session join.
 
 **Hooks are feedback; the sandbox is enforcement.** Pre-tool interception is a
 *guardrail, not a boundary* — an agent can usually reach the same effect
@@ -82,10 +96,10 @@ secret read, feed a lint finding back, advise once) and on the harness's native
 permission/trust layers plus the CI manifest check as the layers that actually
 hold. *Enforcement* proper — OS-level sandboxing, network-egress control,
 filesystem scoping — is a platform capability the kit's job is to **configure**,
-not reimplement. The hostile-input and risky-output guidance now ships as
-convention docs (installed at `docs/conventions/untrusted-content.md` and
-`docs/conventions/risky-actions.md`); the advanced per-provider enforcement
-surface is scoped in the queued `docs/plans/execution-sandbox-profiles.md`.
+not reimplement. The hostile-input, risky-output, and adopted execution-profile
+guidance ships as self-contained convention docs under `docs/conventions/`.
+A devcontainer is an init-authored optional boundary from a confirmed image,
+Dockerfile, or Compose source, never a placeholder template.
 
 ## Anatomy of an installed harness
 
@@ -96,6 +110,7 @@ docs/
   architecture/                # canonical architecture docs
   conventions/                 # one doc per topic agents get wrong
     dev-runtime.md             # app-only dev.sh JSON/lifecycle contract [tailored]
+    execution-profiles.md      # adopted provider floors + limits [tailored]
   skills/                      # canonical task workflows (frontmatter = trigger)
     <slug>/SKILL.md
     verify-live/SKILL.md       # app-only reproduce/observe/rerun workflow [tailored]
@@ -125,10 +140,10 @@ scripts/
 .harness/                      # local harness state (git-ignored)
   log.jsonl                    # hook event log
   dev/                         # app-only, worktree-scoped runtime state/logs/traces
-.claude/   settings.json (permissions + hook wiring), skills/ (stubs), agents/ (thin)
-.cursor/   hooks.json, rules/*.mdc (thin), skills/ (stubs), agents/ (thin), mcp.json
-.codex/    config.toml (MCP), hooks.json, agents/*.toml (thin)   # skills come from .agents/
-.opencode/ skills/ (stubs), agents/ (thin) + opencode.json (MCP + native denies) at root   # hook shim documented, not shipped (descoped 2026-07-13)
+.claude/   settings.json (permissions + hooks + optional declared profile), skills/, agents/
+.cursor/   hooks.json, sandbox.json (optional declared profile), rules/, skills/, agents/, mcp.json
+.codex/    config.toml (optional declared profile + MCP), hooks.json, agents/*.toml   # skills from .agents/
+.opencode/ skills/, agents/ + opencode.json (MCP + native denies + optional declared permission profile)
 .agents/   skills/ (stubs)          # cross-vendor standard; also read by Codex + OpenCode
 ```
 

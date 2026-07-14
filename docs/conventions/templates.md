@@ -57,7 +57,10 @@ for the fact you touched, no stamp means no merge. Unstable facts
 `shellcheck -x --severity=warning` clean (info/style notices are acceptable —
 TAILOR blocks keep commented arms next to live code). BSD/GNU portable:
 macOS ships BSD grep/awk, CI runs GNU. Bash + jq are the only assumed
-dependencies, and jq's absence must degrade, not crash.
+universal dependencies, and jq's absence must degrade, not crash. Optional
+adopted features may add a narrowly documented conditional prerequisite;
+declared Codex execution-profile validation, for example, requires Python 3.11+
+`tomllib` and reports the profile unverifiable when the parser is unavailable.
 
 ## Version discipline
 

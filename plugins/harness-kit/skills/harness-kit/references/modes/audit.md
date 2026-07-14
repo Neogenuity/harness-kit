@@ -19,8 +19,25 @@ the drift gate; manifest present and passing its checksum
 verification. Report the MCP trust-inventory state: servers configured across
 the four MCP locations vs. `MCP_ALLOWED_SERVERS` coverage (or "no inventory
 declared"), and whether the `docs/conventions/untrusted-content.md` and
-`docs/conventions/risky-actions.md` governance docs are present or missing. If
-a behavioral eval bank exists (`docs/evals/`), report its health too: number of golden tasks by suite (capability / regression) and
+`docs/conventions/risky-actions.md` governance docs are present or missing.
+Audit `EXECUTION_PROFILE_PROVIDERS` independently: unset/empty is
+**unadopted**, never inferred from config presence; each declared provider is
+**adopted** only when its accepted declared profile passes, otherwise
+**drifted**. Fixed stable tuples remain required except that Codex's network
+tuple may take the accepted experimental broad local/private-network
+compatibility disjunction. Report
+**unavailable** for a requested variant the provider cannot express, and
+**unverifiable** when effective policy depends on UI/admin scope you cannot
+inspect. Require the self-contained `docs/conventions/execution-profiles.md`
+and its AGENTS link when at least one profile is declared or the devcontainer
+was adopted into the harness. Claude's credential tuple requires Claude Code
+2.1.187 or later.
+
+Report provider observability as a separate availability/scope table. Do not
+combine provider signals with `.harness/log.jsonl`, claim automatic session
+correlation, or recommend repo-stored endpoints, credentials, headers, or raw
+prompt capture. If a behavioral eval bank exists (`docs/evals/`), report its
+health too: number of golden tasks by suite (capability / regression) and
 polarity, whether `test-eval.sh` passes (grader validity), and the age of
 `docs/evals/baselines.json` — report the age of the OLDEST per-cell
 `recorded` date across `tasks.*.runs.*.recorded` (falling back to the file's
@@ -35,6 +52,43 @@ table of pattern element → status (present / drifted / missing) with the
 concrete fix for each, ordered by risk (secret exposure first, drift
 second, missing content last), plus the log summary when available. Offer
 to fix; don't fix unasked.
+
+## Execution-profile and devcontainer audit
+
+For each declared provider, name what the check proves and what it cannot:
+Claude's project floor is not an administrator lock; Cursor's committed
+`sandbox.json` cannot prove the active network UI/admin mode; Codex's
+local/private-network compatibility variant is experimental, requires broad
+local binding, and must contain only exact localhost/127.0.0.1 domain rules;
+OpenCode exposes permission policy but no OS/filesystem/network sandbox. The
+stable profile's fixed operational tuples still drift when changed, even if a
+different value sounds more restrictive: the declaration promises both safety
+and the documented operability envelope. Codex validation requires Python
+3.11+ `tomllib` to parse the complete file; without it, report the declared
+profile as unverifiable, never green. Only provably additive deny hardening
+is accepted without changing the profile, such as extra Claude credential or
+domain denies and extra Cursor `networkPolicy.deny` entries. Any extra writable
+or readable root, public/wildcard network allowance, unsandboxed fallback or
+nonempty Claude `excludedCommands`,
+disabled approval, or globally allowed OpenCode shell is drift.
+
+For the Codex compatibility variant, report that it is not localhost-only and
+does not prove the full `scripts/dev.sh` lifecycle. The 2026-07-14 live check
+with Codex CLI 0.144.1 on macOS allowed concurrent `up`, `health`, `seed`, and
+local HTTP while blocking an `example.com` probe, but sandboxed `ps` prevented
+ownership-safe `down`. Do not treat a direct process kill as equivalent.
+
+Devcontainer audit is static and read-only. If `.devcontainer/` is absent,
+report unadopted rather than missing. A prior explicit opt-in, the combined
+convention/link, or other repository evidence that the harness owns this
+boundary makes it adopted; there is no devcontainer declaration to add. A
+merely pre-existing `.devcontainer/` remains an unadopted boundary: inspect it
+statically and offer adoption rather than inferring it. When present, identify
+its concrete image/Dockerfile/Compose source, configured user, mounts, ports,
+and lifecycle commands. Flag root execution, host credential/SSH/GPG mounts,
+container-engine sockets, automatic repo-code execution, placeholders, and a
+source that cannot be built from the repo. Do not build or start it during
+audit; offer the explicit verification separately.
 
 ## Application runtime audit
 

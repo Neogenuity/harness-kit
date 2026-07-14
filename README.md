@@ -178,13 +178,13 @@ checklist:
 - [x] MIT license
 - [x] Self-application (this repo runs its own harness, CI-gated)
 - [x] Re-verify the provider matrix against current harness docs
-      (re-validated 2026-07-10; hook event names are still evolving — check
+      (re-validated 2026-07-14; hook event names are still evolving — check
       the per-fact stamps before wiring a provider you haven't used lately)
 - [x] Tag releases — every release is tagged on its release commit. Update
-      mode's old-template recovery targets the tag matching the manifest
-      header, but a tested recovery path for installs without the kit repo's
-      git history (plugin cache, plain copies) is still being defined —
-      tracked in
+      mode recovers the old template from the tag matching the manifest header
+      when repository history is available, or from the installed pristine
+      base for plugin-cache and plain-copy installs; both paths are regression
+      tested in
       [docs/plans/completed/v0.14.0-provider-wiring-assurance.md](docs/plans/completed/v0.14.0-provider-wiring-assurance.md)
 - [ ] Demo recording of `init` on a fresh repo — tracked in
       [docs/plans/active/launch-readiness.md](docs/plans/active/launch-readiness.md)

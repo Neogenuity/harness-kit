@@ -129,10 +129,11 @@ else
 fi
 if [ -f "$ROOT/scripts/eval.sh" ]; then
     help_out="$(bash "$ROOT/scripts/eval.sh" --help 2>&1)"
-    if printf '%s\n' "$help_out" | grep -q -- '--variant'; then
-        ok "eval.sh --help prints its full option block, including --variant (not truncated by a stale sed range)"
+    if printf '%s\n' "$help_out" | grep -q -- '--variant' \
+            && printf '%s\n' "$help_out" | grep -q -- '--allow-provider-config-write'; then
+        ok "eval.sh --help prints its full option block, including --variant and --allow-provider-config-write"
     else
-        bad "eval.sh --help is missing --variant — its usage sed range is likely shorter than its header comment"
+        bad "eval.sh --help is missing --variant or --allow-provider-config-write — its usage sed range is likely shorter than its header comment"
     fi
 else
     ok "eval.sh --help completeness (skipped: script absent)"
@@ -246,8 +247,8 @@ UEOF
 fi
 
 # ---- bank-wide metadata enum validation (offline, cheap) -------------------
-# Every task's suite/polarity/provider/grade/network metadata must be one of the
-# values eval.sh enforces at runtime — a typo here (e.g. "suite: regresion")
+# Every task's suite/polarity/provider/grade/network/execution metadata must be
+# one of the values eval.sh enforces at runtime — a typo (e.g. "suite: regresion")
 # would otherwise silently bypass scorer behavior instead of failing loudly.
 # Bank-independent (an empty bank has nothing to iterate and trivially passes),
 # so it runs unconditionally, before the bank-dependent checks below decide
@@ -264,6 +265,7 @@ else
         grade="$(eval_task_meta "$td" grade)"
         prov="$(eval_task_meta "$td" provider)"
         network="$(eval_task_meta "$td" network)"; network="${network:-none}"
+        execution="$(eval_task_meta "$td" execution)"; execution="${execution:-default}"
         case "$suite" in
             capability|regression) ;;
             *) bad "$slug: invalid suite metadata '$suite'"; meta_fails=$((meta_fails+1)) ;;
@@ -284,6 +286,14 @@ else
             none|required) ;;
             *) bad "$slug: invalid network metadata '$network'"; meta_fails=$((meta_fails+1)) ;;
         esac
+        case "$execution" in
+            default|provider-config-write) ;;
+            *) bad "$slug: invalid execution metadata '$execution'"; meta_fails=$((meta_fails+1)) ;;
+        esac
+        if [ "$execution" = provider-config-write ] && [ "$network" = required ]; then
+            bad "$slug: provider-config-write execution cannot require network"
+            meta_fails=$((meta_fails+1))
+        fi
     done
     [ "$meta_fails" -eq 0 ] && ok "bank metadata enums ($(printf '%s\n' "$BANK_TASKS" | wc -l | tr -d ' ') task(s))"
 fi
@@ -736,6 +746,61 @@ TASKEOF
     printf '#!/usr/bin/env bash\nexit 0\n' > "$R/tasks/bad-network/check.sh"
     printf '#!/usr/bin/env bash\ntrue\n' > "$R/tasks/bad-network/reference/apply.sh"
 
+    # bad-execution: execution metadata is deliberately outside the closed enum.
+    mkdir -p "$R/tasks/bad-execution/reference"
+    cat > "$R/tasks/bad-execution/TASK.md" <<'TASKEOF'
+# bad-execution
+
+- suite: capability
+- polarity: positive
+- provider: codex
+- grade: check
+- execution: host-maintenance
+
+## Prompt
+
+Do nothing; this task's execution metadata is deliberately invalid.
+TASKEOF
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$R/tasks/bad-execution/check.sh"
+    printf '#!/usr/bin/env bash\ntrue\n' > "$R/tasks/bad-execution/reference/apply.sh"
+
+    # incompatible-execution: maintenance config writes cannot also request network.
+    mkdir -p "$R/tasks/incompatible-execution/reference"
+    cat > "$R/tasks/incompatible-execution/TASK.md" <<'TASKEOF'
+# incompatible-execution
+
+- suite: capability
+- polarity: positive
+- provider: codex
+- grade: check
+- network: required
+- execution: provider-config-write
+
+## Prompt
+
+Do nothing; this task deliberately combines incompatible execution metadata.
+TASKEOF
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$R/tasks/incompatible-execution/check.sh"
+    printf '#!/usr/bin/env bash\ntrue\n' > "$R/tasks/incompatible-execution/reference/apply.sh"
+
+    # provider-config-write: exercises the explicit task-scoped maintenance mode.
+    mkdir -p "$R/tasks/provider-config-write/reference"
+    cat > "$R/tasks/provider-config-write/TASK.md" <<'TASKEOF'
+# provider-config-write
+
+- suite: capability
+- polarity: positive
+- provider: codex
+- grade: check
+- execution: provider-config-write
+
+## Prompt
+
+Do nothing; this task exists only to inspect the Codex maintenance invocation.
+TASKEOF
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$R/tasks/provider-config-write/check.sh"
+    printf '#!/usr/bin/env bash\ntrue\n' > "$R/tasks/provider-config-write/reference/apply.sh"
+
     # network-required: exercises the task-scoped Codex network override.
     mkdir -p "$R/tasks/network-required/reference"
     cat > "$R/tasks/network-required/TASK.md" <<'TASKEOF'
@@ -883,6 +948,34 @@ TASKEOF
         sed 's/^/    /' "$R_BASE/c-mock.err"
     fi
 
+    rd_c_mock_maint="$R_BASE/results-c-mock-maint"
+    bash "$R/scripts/eval.sh" provider-config-write --provider mock --trials 1 \
+        --tasks-dir "$R/tasks" --results-dir "$rd_c_mock_maint" --run-id pin-mock-maint \
+        >"$R_BASE/c-mock-maint.out" 2>"$R_BASE/c-mock-maint.err"
+    rc=$?
+    if [ "$rc" -eq 0 ] \
+            && grep -Fq -- 'execution=provider-config-write' "$R_BASE/c-mock-maint.out" \
+            && grep -Fq -- 'provider_config_write_ack=0' "$R_BASE/c-mock-maint.out" \
+            && ! grep -Fq -- 'unrestricted host filesystem' "$R_BASE/c-mock-maint.err"; then
+        ok "runner guards: mock remains harmless reference-only plumbing without the maintenance acknowledgment"
+    else
+        bad "runner guards: mock provider-config-write metadata should remain exempt from the real-provider acknowledgment gate (rc=$rc)"
+    fi
+
+    rd_c_mock_flag="$R_BASE/results-c-mock-flag"
+    bash "$R/scripts/eval.sh" ok-task --provider mock --trials 1 --allow-provider-config-write \
+        --tasks-dir "$R/tasks" --results-dir "$rd_c_mock_flag" --run-id pin-mock-flag \
+        >"$R_BASE/c-mock-flag.out" 2>"$R_BASE/c-mock-flag.err"
+    rc=$?
+    if [ "$rc" -eq 0 ] \
+            && grep -Fq -- 'execution=default' "$R_BASE/c-mock-flag.out" \
+            && grep -Fq -- 'provider_config_write_ack=1' "$R_BASE/c-mock-flag.out" \
+            && ! grep -Fq -- 'unrestricted host filesystem' "$R_BASE/c-mock-flag.err"; then
+        ok "runner guards: mock also ignores a maintenance acknowledgment on default metadata"
+    else
+        bad "runner guards: mock should remain exempt from the default-task acknowledgment mismatch (rc=$rc)"
+    fi
+
     shimdir="$R_BASE/shim"
     mkdir -p "$shimdir"
     cat > "$shimdir/claude" <<'TASKEOF'
@@ -905,11 +998,13 @@ TASKEOF
     fi
 
     # (c2) Codex network permission is opt-in per task. A shim captures the
-    # exact argv without invoking a model: required gets the config override,
-    # while the default task does not.
+    # exact argv without invoking a model: required gets the complete explicit
+    # task-only broad local/private weakening, while the default gets no overrides.
     cat > "$shimdir/codex" <<'TASKEOF'
 #!/bin/sh
 printf '%s\n' "$@" > "$CODEX_SHIM_ARGS"
+[ -z "${CODEX_SHIM_ENV:-}" ] || printf '%s\n' "${HARNESS_ALLOW_MECHANISM_EDITS-__UNSET__}" > "$CODEX_SHIM_ENV"
+[ -z "${CODEX_SHIM_INVOKED:-}" ] || : > "$CODEX_SHIM_INVOKED"
 last_message=""
 want_last=0
 for arg in "$@"; do
@@ -932,26 +1027,133 @@ TASKEOF
         >"$R_BASE/codex-required.out" 2>"$R_BASE/codex-required.err"
     rc3=$?
     if [ "$rc3" -eq 0 ] \
+            && [ "$(grep -Fxc -- '-c' "$R_BASE/codex-required.args")" -eq 7 ] \
             && grep -Fxq -- '-c' "$R_BASE/codex-required.args" \
-            && grep -Fxq -- 'sandbox_workspace_write.network_access=true' "$R_BASE/codex-required.args"; then
-        ok "runner guards: network-required task grants the Codex sandbox network access"
+            && grep -Fxq -- 'sandbox_workspace_write.network_access=true' "$R_BASE/codex-required.args" \
+            && grep -Fxq -- 'features.network_proxy.enabled=true' "$R_BASE/codex-required.args" \
+            && grep -Fxq -- 'features.network_proxy.allow_local_binding=true' "$R_BASE/codex-required.args" \
+            && grep -Fxq -- 'features.network_proxy.domains={"localhost"="allow","127.0.0.1"="allow"}' "$R_BASE/codex-required.args" \
+            && grep -Fxq -- 'features.network_proxy.unix_sockets={}' "$R_BASE/codex-required.args" \
+            && grep -Fxq -- 'features.network_proxy.dangerously_allow_non_loopback_proxy=false' "$R_BASE/codex-required.args" \
+            && grep -Fxq -- 'features.network_proxy.dangerously_allow_all_unix_sockets=false' "$R_BASE/codex-required.args" \
+            && grep -Fq -- 'explicit task-only broad local/private weakening' "$R_BASE/codex-required.err"; then
+        ok "runner guards: network-required task pins and labels the broad local/private Codex compatibility tuple"
     else
-        bad "runner guards: network-required task should add only the Codex network config (rc=$rc3)"
+        bad "runner guards: network-required task should add and label all seven broad local/private Codex compatibility overrides (rc=$rc3)"
         sed 's/^/    /' "$R_BASE/codex-required.err"
     fi
 
     rd_c4="$R_BASE/results-c4"
-    CODEX_SHIM_ARGS="$R_BASE/codex-default.args" PATH="$shimdir:$PATH" \
+    CODEX_SHIM_ARGS="$R_BASE/codex-default.args" CODEX_SHIM_ENV="$R_BASE/codex-default.env" \
+        HARNESS_ALLOW_MECHANISM_EDITS=1 PATH="$shimdir:$PATH" \
         bash "$R/scripts/eval.sh" ok-task --provider codex --model shim --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_c4" --run-id network-default \
         >"$R_BASE/codex-default.out" 2>"$R_BASE/codex-default.err"
     rc4=$?
     if [ "$rc4" -eq 0 ] \
-            && ! grep -Fxq -- 'sandbox_workspace_write.network_access=true' "$R_BASE/codex-default.args"; then
-        ok "runner guards: tasks default to Codex network disabled"
+            && ! grep -Fxq -- '-c' "$R_BASE/codex-default.args" \
+            && ! grep -Fxq -- 'sandbox_workspace_write.network_access=true' "$R_BASE/codex-default.args" \
+            && ! grep -Fq -- 'features.network_proxy.' "$R_BASE/codex-default.args" \
+            && grep -Fxq -- 'workspace-write' "$R_BASE/codex-default.args" \
+            && ! grep -Fxq -- 'danger-full-access' "$R_BASE/codex-default.args" \
+            && grep -Fxq -- '__UNSET__' "$R_BASE/codex-default.env" \
+            && ! grep -Fq -- 'broad local/private' "$R_BASE/codex-default.err" \
+            && ! grep -Fq -- 'unrestricted host filesystem' "$R_BASE/codex-default.err" \
+            && grep -Fq -- 'execution=default' "$R_BASE/codex-default.out" \
+            && grep -Fq -- 'provider_config_write_ack=0' "$R_BASE/codex-default.out"; then
+        ok "runner guards: default Codex execution clears maintenance env and stays workspace-write/network-disabled"
     else
-        bad "runner guards: task without network metadata must not get the Codex network config (rc=$rc4)"
+        bad "runner guards: default Codex execution must clear maintenance env and stay workspace-write/network-disabled (rc=$rc4)"
         sed 's/^/    /' "$R_BASE/codex-default.err"
+    fi
+
+    # (c3) Provider-config writes require both task metadata and an explicit CLI
+    # acknowledgment. Each one-sided opt-in refuses before provider invocation.
+    rm -f "$R_BASE/codex-maint-no-flag.invoked" "$R_BASE/codex-flag-default.invoked"
+    CODEX_SHIM_ARGS="$R_BASE/codex-maint-no-flag.args" CODEX_SHIM_INVOKED="$R_BASE/codex-maint-no-flag.invoked" PATH="$shimdir:$PATH" \
+        bash "$R/scripts/eval.sh" provider-config-write --provider codex --model shim --trials 1 \
+        --tasks-dir "$R/tasks" --results-dir "$R_BASE/results-c5-no-flag" --run-id provider-config-write-no-flag \
+        >"$R_BASE/codex-maint-no-flag.out" 2>"$R_BASE/codex-maint-no-flag.err"
+    rc5a=$?
+    if [ "$rc5a" -ne 0 ] \
+            && grep -Fq -- 'pass --allow-provider-config-write' "$R_BASE/codex-maint-no-flag.err" \
+            && [ ! -e "$R_BASE/codex-maint-no-flag.invoked" ]; then
+        ok "runner guards: provider-config-write metadata without CLI acknowledgment refuses before invocation"
+    else
+        bad "runner guards: provider-config-write metadata without its CLI acknowledgment should refuse before invocation (rc=$rc5a)"
+    fi
+
+    CODEX_SHIM_ARGS="$R_BASE/codex-flag-default.args" CODEX_SHIM_INVOKED="$R_BASE/codex-flag-default.invoked" PATH="$shimdir:$PATH" \
+        bash "$R/scripts/eval.sh" ok-task --provider codex --model shim --trials 1 \
+        --allow-provider-config-write \
+        --tasks-dir "$R/tasks" --results-dir "$R_BASE/results-c5-default-flag" --run-id default-with-config-flag \
+        >"$R_BASE/codex-flag-default.out" 2>"$R_BASE/codex-flag-default.err"
+    rc5b=$?
+    if [ "$rc5b" -ne 0 ] \
+            && grep -Fq -- 'only valid when task ok-task declares execution metadata' "$R_BASE/codex-flag-default.err" \
+            && [ ! -e "$R_BASE/codex-flag-default.invoked" ]; then
+        ok "runner guards: maintenance CLI acknowledgment on a default task refuses before invocation"
+    else
+        bad "runner guards: maintenance CLI acknowledgment on a default task should refuse before invocation (rc=$rc5b)"
+    fi
+
+    # With both signals, Codex gets the mechanism-edit env and danger-full. The
+    # warning must state that a disposable workspace does not contain host effects.
+    rd_c5="$R_BASE/results-c5"
+    CODEX_SHIM_ARGS="$R_BASE/codex-maint.args" CODEX_SHIM_ENV="$R_BASE/codex-maint.env" \
+        PATH="$shimdir:$PATH" \
+        bash "$R/scripts/eval.sh" provider-config-write --provider codex --model shim --trials 1 \
+        --allow-provider-config-write \
+        --tasks-dir "$R/tasks" --results-dir "$rd_c5" --run-id provider-config-write \
+        >"$R_BASE/codex-maint.out" 2>"$R_BASE/codex-maint.err"
+    rc5=$?
+    maint_warning='WARNING: execution: provider-config-write gives the provider process unrestricted host filesystem and public network access. The disposable trial workspace does not contain effects elsewhere on the host; run this eval inside an external container or VM.'
+    if [ "$rc5" -eq 0 ] \
+            && grep -Fxq -- '1' "$R_BASE/codex-maint.env" \
+            && [ "$(grep -Fxc -- '--sandbox' "$R_BASE/codex-maint.args")" -eq 1 ] \
+            && [ "$(grep -Fxc -- 'danger-full-access' "$R_BASE/codex-maint.args")" -eq 1 ] \
+            && ! grep -Fxq -- 'workspace-write' "$R_BASE/codex-maint.args" \
+            && ! grep -Fxq -- '-c' "$R_BASE/codex-maint.args" \
+            && ! grep -Fq -- 'features.network_proxy.' "$R_BASE/codex-maint.args" \
+            && grep -Fxq -- '--skip-git-repo-check' "$R_BASE/codex-maint.args" \
+            && grep -Fxq -- '--json' "$R_BASE/codex-maint.args" \
+            && grep -Fxq -- '--output-last-message' "$R_BASE/codex-maint.args" \
+            && grep -Fxq -- "$maint_warning" "$R_BASE/codex-maint.err" \
+            && grep -Fq -- 'execution=provider-config-write' "$R_BASE/codex-maint.out" \
+            && grep -Fq -- 'provider_config_write_ack=1' "$R_BASE/codex-maint.out"; then
+        ok "runner guards: acknowledged provider-config-write gives Codex exact maintenance env/danger-full and host-risk warning"
+    else
+        bad "runner guards: acknowledged provider-config-write Codex invocation should carry the exact env/argv/host-risk warning (rc=$rc5)"
+        sed 's/^/    /' "$R_BASE/codex-maint.err"
+    fi
+
+    # Both invalid execution metadata and its forbidden network combination fail
+    # before the shimmed provider process can be invoked.
+    rm -f "$R_BASE/codex-bad-execution.invoked" "$R_BASE/codex-incompatible.invoked"
+    CODEX_SHIM_ARGS="$R_BASE/codex-bad-execution.args" CODEX_SHIM_INVOKED="$R_BASE/codex-bad-execution.invoked" PATH="$shimdir:$PATH" \
+        bash "$R/scripts/eval.sh" bad-execution --provider codex --model shim --trials 1 \
+        --tasks-dir "$R/tasks" --results-dir "$R_BASE/results-c6" --run-id bad-execution \
+        >"$R_BASE/codex-bad-execution.out" 2>"$R_BASE/codex-bad-execution.err"
+    rc6=$?
+    if [ "$rc6" -ne 0 ] \
+            && grep -Fq -- "invalid execution metadata 'host-maintenance'" "$R_BASE/codex-bad-execution.err" \
+            && [ ! -e "$R_BASE/codex-bad-execution.invoked" ]; then
+        ok "runner guards: invalid execution metadata fails before provider invocation"
+    else
+        bad "runner guards: invalid execution metadata should fail before provider invocation (rc=$rc6)"
+    fi
+
+    CODEX_SHIM_ARGS="$R_BASE/codex-incompatible.args" CODEX_SHIM_INVOKED="$R_BASE/codex-incompatible.invoked" PATH="$shimdir:$PATH" \
+        bash "$R/scripts/eval.sh" incompatible-execution --provider codex --model shim --trials 1 \
+        --tasks-dir "$R/tasks" --results-dir "$R_BASE/results-c7" --run-id incompatible-execution \
+        >"$R_BASE/codex-incompatible.out" 2>"$R_BASE/codex-incompatible.err"
+    rc7=$?
+    if [ "$rc7" -ne 0 ] \
+            && grep -Fq -- "cannot be combined with network metadata 'required'" "$R_BASE/codex-incompatible.err" \
+            && [ ! -e "$R_BASE/codex-incompatible.invoked" ]; then
+        ok "runner guards: provider-config-write + network-required fails before provider invocation"
+    else
+        bad "runner guards: incompatible execution/network metadata should fail before provider invocation (rc=$rc7)"
     fi
 
     # (d) results-dir collision refusal: same --run-id, same --results-dir,

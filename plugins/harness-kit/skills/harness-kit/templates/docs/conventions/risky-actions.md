@@ -20,9 +20,9 @@ nobody mistakes a warning for a wall:
 
 - **pre-action enforcement** — native permission denies, approval policies,
   sandbox / network settings. *Holds* until the user loosens the native config,
-  and it is the only layer that stops a shell command before it runs. Cite the
-  Execution-containment row of the harness-kit provider matrix
-  (`references/provider-matrix.md`).
+  and it is the only layer that stops a shell command before it runs. When this
+  repo adopts execution profiles, cite the exact provider-specific floor in
+  `docs/conventions/execution-profiles.md`.
 - **in-turn advisory feedback** — the portable hooks. `guard-config.sh` denies
   mechanism / lint-config *file edits* (exit 2, mid-turn) — the protected set
   also covers `harness.conf`, the Claude Code local-settings override, and
@@ -39,22 +39,29 @@ nobody mistakes a warning for a wall:
 
 ## Default posture
 
-The safe default this repo aims for, loosened only deliberately:
+<!-- TAILOR: keep these bullets only for profiles the repo actually declares.
+     Unset/empty EXECUTION_PROFILE_PROVIDERS means unadopted, not enforced. -->
 
-- **Workspace-only writes.** Writing outside the working tree needs an explicit
-  widen. *[pre-action enforcement — sandbox]*
-- **Network default-deny.** No outbound network unless a host is allow-listed.
-  *[pre-action enforcement — sandbox / network policy]*
-- **Approvals on for destructive actions.** Out-of-workspace writes, deletes,
-  pushes, and networked commands prompt. *[pre-action enforcement — approvals]*
+When explicitly adopted, the safe profile is provider-specific and loosened
+only deliberately:
 
-The exact key per harness is in `references/provider-matrix.md`: e.g. Claude
-Code `sandbox.filesystem` + `sandbox.network.allowedDomains`; Codex
-`sandbox_mode = "workspace-write"` with `network_access = false`; Cursor
-`.cursor/sandbox.json` (`networkPolicy.default: "deny"`); OpenCode has **no OS
-sandbox** — its `permission` prompts are the only layer, so a shell can still
-reach the network. **Loosening** is per-need and reversible: allow one host for
-one task, widen one write path, then restore. Widen the narrowest thing.
+- **Claude Code and Codex:** workspace plus declared isolated temp roots, closed
+  command egress, and no unsandboxed fallback. *[pre-action enforcement — OS
+  sandbox / network policy]*
+- **Cursor:** the committed file declares workspace-plus-temp writes and closed
+  egress, but effective closed egress also requires **sandbox.json Only** UI
+  mode or administrator policy. *[pre-action enforcement — conditional native
+  sandbox / network policy]*
+- **OpenCode:** external paths and web tools deny; shell commands ask. This is a
+  permission posture, not an OS/filesystem/network boundary. *[pre-action
+  policy — approvals only]*
+
+`EXECUTION_PROFILE_PROVIDERS` is the adoption source of truth; unset or empty
+means these floors are unadopted even if provider files exist. The exact tuples,
+temp roots, local/private compatibility weakenings, and administrator-only
+limits are in `docs/conventions/execution-profiles.md`. **Loosening** is per-need and
+reversible: allow one host for one task, widen one write path, then restore.
+Widen the narrowest thing.
 
 ## Destructive commands
 

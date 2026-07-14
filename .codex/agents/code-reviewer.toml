@@ -2,7 +2,6 @@
 # Edit the canonical doc frontmatter, then re-run the sync. Non-blocking.
 name = "code-reviewer"
 description = "Inferential reviewer for a completed diff AFTER verify.sh passes — checks misunderstood scope, over-engineering, cause-masking fixes, and missing/weak tests, the four classes deterministic gates can't see. Delegate before opening a PR or declaring a task done."
-tools = ["Read", "Grep", "Glob", "Bash"]
 developer_instructions = """
 Canonical source: docs/agents/code-reviewer.md — read it first for the full persona. This stub only
 registers the agent with the harness; edit the canonical doc and re-run

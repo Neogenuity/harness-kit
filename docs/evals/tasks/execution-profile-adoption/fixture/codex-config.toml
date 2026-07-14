@@ -1,0 +1,6 @@
+[company]
+keep = true
+
+[mcp_servers.localdocs]
+command = "local-docs"
+args = ["--stdio"]

@@ -19,7 +19,7 @@ docs/evals/
   README.md              # this file
   baselines.json         # recorded pass@k / pass^k per task+provider+model
   tasks/<slug>/
-    TASK.md              # prompt + metadata (suite, polarity, provider, grade)
+    TASK.md              # prompt + metadata (suite, polarity, provider, grade, network, execution)
     setup.sh             # optional: seed workspace state before the agent runs
     check.sh             # REQUIRED grader: post-agent workspace, exit 0/1/3 (see below)
     reference/
@@ -41,6 +41,8 @@ recurring changes your reviewers care about most.
 - polarity: positive | negative
 - provider: any | claude | codex        (default any)
 - grade: check | check+verify           (default check)
+- network: none | required              (default none)
+- execution: default | provider-config-write  (default default)
 
 ## Prompt
 
@@ -63,10 +65,31 @@ recurring changes your reviewers care about most.
   the shortcut was avoided *and* the goal met — see the exit-3 convention below.
 - **provider** — pins a task to one provider CLI (default `any`); `eval.sh`
   refuses to run a pinned task under a different `--provider` (mock is
-  exempt). All four metadata fields are validated against their enum before a
+  exempt). All six metadata fields are validated against their enum before a
   run starts; a typo dies loudly instead of silently changing scoring.
 - **grade** — `check` runs only `check.sh`; `check+verify` also runs the
   workspace's `scripts/verify.sh`.
+- **network** — declares whether a task needs to reach a localhost service
+  (default `none`). For Codex, `required` enables the experimental task-scoped
+  proxy with exact `localhost` and `127.0.0.1` domain rules, empty Unix-socket
+  rules, broad local/private binding on, and both dangerous bypasses forced
+  off. This explicit test-only weakening is not localhost-only; public hosts
+  and wildcards remain outside the allowlist. Tasks that do not opt in keep
+  command network access disabled and receive no proxy overrides. Never combine
+  `network: required` with `execution: provider-config-write`.
+- **execution** — `default` keeps the provider runner posture unchanged.
+  `provider-config-write` is only for a task that explicitly requires edits to
+  provider policy/config files; metadata declares eligibility but does not
+  authorize the weakening. Every non-mock run also requires the explicit
+  `--allow-provider-config-write` CLI flag. The runner then sets
+  `HARNESS_ALLOW_MECHANISM_EDITS=1`; for Codex it uses `danger-full-access`
+  because `workspace-write` makes `.codex/config.toml` read-only. That grants
+  unrestricted host filesystem access and public network access: the
+  disposable trial clone does not contain effects elsewhere on the host.
+  Prefer an external container or VM for real runs. Mock validation is harmless
+  and exempt from the extra flag. Never infer this mode from task content,
+  describe it as workspace-only containment, or combine it with
+  `network: required`.
 
 ## Graders are executable and agent-independent
 
