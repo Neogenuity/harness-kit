@@ -1,16 +1,15 @@
 ---
 name: harness-kit
 description: >-
-    Scaffolds and maintains a standardized cross-agent harness (Claude Code,
-    Cursor, Codex, OpenCode, .agents) in any repository: a canonical docs/
-    knowledge base, an executable quality-gate runner (verify.sh), generated
-    provider skill stubs, provider-agnostic hook scripts with lint feedback
-    and observability logging, shared permissions, and a CI drift gate with
-    mechanism integrity checks, plus an app-only development-runtime contract
-    and live-verification workflow, optional declared provider execution
-    profiles, and an authored devcontainer contract. Activates when asked to
-    set up or standardize an agent/AI harness in a repo, audit an existing harness,
-    add a skill/subagent/hook to the harness, sync provider stubs, or
+    Engineers and continuously improves reliable coding-agent behavior across
+    Claude Code, Cursor, Codex, OpenCode, and .agents: canonical project
+    context, executable quality gates, in-turn feedback, layered guardrails,
+    observability, and CI-backed integrity. Includes generated provider stubs,
+    shared permissions, an app-only development-runtime and live-verification
+    workflow, optional execution profiles, and an authored devcontainer
+    contract. Activates when asked to instrument, set up, standardize, or audit
+    an agent/AI harness; improve recurring agent failures; add a skill,
+    subagent, hook, guardrail, or verification gate; sync provider stubs; or
     upgrade/migrate harness machinery ("harness init", "harness audit").
 ---
 

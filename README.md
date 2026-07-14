@@ -1,18 +1,18 @@
 # harness-kit
 
-**One canonical knowledge base for every coding agent — Claude Code, Cursor,
-Codex, OpenCode — with CI that fails when it drifts.**
+**Harness Engineering for reliable coding agents — canonical context,
+in-turn feedback, guardrails, executable verification, and continuous
+improvement across Claude Code, Cursor, Codex, and OpenCode.**
 
 [![ci](https://github.com/riotCode/harness-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/riotCode/harness-kit/actions/workflows/ci.yml)
 [![harness-check](https://github.com/riotCode/harness-kit/actions/workflows/harness-check.yml/badge.svg)](https://github.com/riotCode/harness-kit/actions/workflows/harness-check.yml)
 
-A **harness** is everything that surrounds the model when an agent works in
-your repo: the docs it's fed, the skills it can activate, the hooks that
-guard and give feedback, the permissions, the quality gates. Every agent
-vendor wants those in its own dialect and directory — so teams end up with
-N parallel configurations that disagree within a month, and agents that
-confidently act on the stale one. harness-kit scaffolds one canonical,
-enforced harness instead:
+A **harness** is the engineered environment around a coding agent: the context
+it receives, the skills it can activate, the feedback and guardrails it gets,
+the permissions it operates under, and the proof required before work is done.
+harness-kit makes that environment a tested, continuously improving repository
+system. Its cross-agent layer keeps the same system coherent wherever the work
+runs, so teams do not accumulate conflicting vendor-specific configurations.
 
 ```mermaid
 flowchart LR

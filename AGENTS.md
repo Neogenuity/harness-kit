@@ -6,9 +6,10 @@ deeper sources.
 
 ## Project
 
-**harness-kit** — a Claude Code skill/plugin that scaffolds a standardized
-cross-agent harness (Claude Code, Cursor, Codex, OpenCode, `.agents`) into
-any repository. Two facts to know before touching anything:
+**harness-kit** — a Claude Code skill/plugin for engineering reliable
+coding-agent behavior: canonical context, feedback, guardrails, verification,
+and continuous improvement, kept coherent across Claude Code, Cursor, Codex,
+OpenCode, and `.agents`. Two facts to know before touching anything:
 
 1. The distributed plugin lives entirely under `plugins/harness-kit/` — everything at the
    repo root is this repo's **own installed harness** (dogfooding) and never

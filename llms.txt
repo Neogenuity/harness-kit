@@ -1,10 +1,10 @@
 # harness-kit
 
-> One canonical knowledge base for every coding agent — Claude Code, Cursor,
-> Codex, OpenCode — with CI that fails when it drifts. A Claude Code
-> skill/plugin that scaffolds a standardized, enforced cross-agent harness
-> (docs, skills, hooks, permissions, quality gates) into any repository,
-> vendoring everything so the target repo depends on nothing at runtime.
+> Harness Engineering for reliable coding agents: canonical context, in-turn
+> feedback, guardrails, executable verification, and continuous improvement.
+> A Claude Code skill/plugin that makes this environment portable across Claude
+> Code, Cursor, Codex, and OpenCode, vendoring it so the target repo depends on
+> nothing at runtime.
 
 The repository root is itself a live installation of the kit (dogfooding);
 only the `plugins/harness-kit/` directory ships to users.
