@@ -1,5 +1,5 @@
 {
-  "recorded": "2026-07-13",
+  "recorded": "2026-07-14",
   "tasks": {
     "add-convention-doc": {
       "polarity": "positive",
@@ -391,6 +391,21 @@
           "passes": 3,
           "recorded": "2026-07-13",
           "trials": 3
+        }
+      },
+      "suite": "capability"
+    },
+    "verify-live-runtime": {
+      "polarity": "positive",
+      "runs": {
+        "codex/gpt-5.6-luna": {
+          "pass_at_k": 1,
+          "pass_hat_k": 1,
+          "pass_rate": 1,
+          "passes": 3,
+          "recorded": "2026-07-14",
+          "trials": 3,
+          "variant": "bare"
         }
       },
       "suite": "capability"
