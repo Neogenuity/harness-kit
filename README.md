@@ -180,7 +180,7 @@ checklist:
       header, but a tested recovery path for installs without the kit repo's
       git history (plugin cache, plain copies) is still being defined —
       tracked in
-      [docs/plans/active/provider-wiring-assurance.md](docs/plans/active/provider-wiring-assurance.md)
+      [docs/plans/completed/v0.14.0-provider-wiring-assurance.md](docs/plans/completed/v0.14.0-provider-wiring-assurance.md)
 - [ ] Demo recording of `init` on a fresh repo — tracked in
       [docs/plans/active/launch-readiness.md](docs/plans/active/launch-readiness.md)
 - [ ] Move to the `neogenuity` org and update install commands — tracked in

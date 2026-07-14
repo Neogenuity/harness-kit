@@ -60,7 +60,17 @@ not-yet-existing paths are legal — queued plans name future files by design.
 
 ## Roadmap (set 2026-07-10, re-sorted 2026-07-13)
 
-Shipped: **v0.13.0** — reviewer loop + skill split (the canonical `code-reviewer`
+Shipped: **v0.14.0** — provider wiring assurance (the harness now *verifies* the
+wiring it documents: a new `check-harness.sh` tuple check turns a hooks-deleted
+`.claude/settings.json` from a false "coherent" into a specific per-guard
+failure; agent stubs join skill stubs as generated-and-checked from canonical
+frontmatter; the OpenCode/Cursor shim descoped with a dated rationale; init/update
+gain a `jq` preflight and tested old-template recovery; a bare-vs-plugin-activated
+eval baseline dimension, with the paid recordings deferred. Execution plan
+reviewed by Codex gpt-5.6-sol — 6 findings folded pre-build; integrated diff by
+gpt-5.6-terra; built in parallel Opus 4.8 + Sonnet 5 worktrees)
+([completed/v0.14.0-provider-wiring-assurance.md](completed/v0.14.0-provider-wiring-assurance.md));
+**v0.13.0** — reviewer loop + skill split (the canonical `code-reviewer`
 persona with a v1-compatible findings schema and a seeded-defect catch-rate eval
 recorded at claude/sonnet 5/5; the plugin `SKILL.md` split from a ~5.2k-token
 monolith into a ~781-token router + per-mode `references/modes/`, shipped only
@@ -111,15 +121,10 @@ rows + strict Agent Skills validation + matrix stamping
 **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
 ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
-**Active:** [provider-wiring-assurance.md](active/provider-wiring-assurance.md) —
-the mechanism plan for **v0.14.0** (semantic hook-wiring + agent-stub coherence
-checks, the OpenCode/Cursor wiring descoped with a dated matrix rationale, init
-preflight, update recovery for plugin installs, eval acceptance floors);
-activated 2026-07-13 after a `gpt-5.6-sol` execution review. And
-[launch-readiness.md](active/launch-readiness.md) — parallel-track; doc items
-3–6 (SECURITY.md, "what 1.0 promises", supported-platforms, content hygiene
-sweep) shipped in v0.13.0, while the demo, the org move, and the public flip
-remain maintainer actions. The next mechanism plan activates from the queue
+**Active:** [launch-readiness.md](active/launch-readiness.md) — parallel-track;
+doc items 3–6 (SECURITY.md, "what 1.0 promises", supported-platforms, content
+hygiene sweep) shipped in v0.13.0, while the demo, the org move, and the public
+flip remain maintainer actions. The next mechanism plan activates from the queue
 below.
 
 | # | Plan | Theme |

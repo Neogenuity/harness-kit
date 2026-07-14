@@ -3,6 +3,64 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.14.0 — 2026-07-13
+
+Provider wiring assurance — the harness now *verifies* the wiring it documents.
+A fresh clone with `.claude/settings.json`'s `hooks` object deleted used to pass
+`check-harness.sh` at exit 0 ("coherent"); it now fails with a specific
+per-guard error. Agent stubs join skill stubs as generated-and-checked. The
+OpenCode/Cursor hook shim is descoped with a dated rationale rather than left a
+documented-but-unshipped claim. Init/update gain a `jq` preflight and a tested
+old-template recovery path. Eval baselines gain a bare-vs-plugin-activated
+dimension. Execution plan reviewed by Codex gpt-5.6-sol (6 findings folded
+pre-build); integrated diff reviewed by Codex gpt-5.6-terra. Implementation
+delegated to parallel Opus 4.8 + Sonnet 5 worktrees.
+
+### Hook-wiring validation (mechanism)
+
+- **New `check-harness.sh` check** validates, per declared hook-wired provider
+  (`HOOK_WIRED_PROVIDERS` in `harness.conf`), every required
+  `(config, event, matcher, script)` tuple against the frozen provider matrix —
+  a guard on the wrong event, a weakened matcher, a missing config, or a command
+  pointing at a missing script now all fail (previously any of these stayed
+  green). Migration: update mode replaces `check-harness.sh` and `install-lib.sh`
+  and diffs the tailored `harness.conf` — declare `HOOK_WIRED_PROVIDERS` and
+  `AGENT_PROVIDERS` on upgrade (update/audit proposes the set, you confirm; the
+  check errors loudly until declared, and never infers the set from surviving
+  configs).
+
+### Agent-stub generation (mechanism)
+
+- **Agent stubs are now generated** by `sync-agent-skills.sh` — like skill stubs
+  — from `name`/`description` frontmatter on the canonical `docs/agents/*.md`,
+  and checked for bidirectional equality. Previously hand-authored. Migration:
+  update mode replaces `sync-agent-skills.sh`; re-run it and commit the
+  regenerated stubs.
+
+### Provider wiring reconciliation
+
+- The OpenCode TS hook shim and Cursor `guard-config` wiring are **descoped**
+  (dated 2026-07-13): documented as the reuse path, but no shim template ships,
+  so OpenCode is not in the hook-wired set. Every shipped surface reconciled so
+  none implies the shim ships.
+
+### Install/update robustness (mechanism)
+
+- **`jq` preflight** at init/update names missing prerequisites before
+  scaffolding a harness whose guards would silently fail open.
+- **Old-template recovery** for update mode across install channels (git tag,
+  plugin cache, plain copy) via a git-ignored persisted pristine base, tested for
+  the no-local-git path.
+
+### Evals
+
+- **Execution-variant dimension** (bare vs plugin-activated) in the baseline key:
+  `bare` keeps the `provider/model` key (zero migration for existing baselines);
+  a non-bare variant appends `/variant` so it can never overwrite the bare cell.
+  The paid Codex plugin-activated recordings and acceptance-floor decision are
+  deferred to a follow-up (activating the plugin inside a trial workspace is not
+  yet built; `eval.sh --variant` only tags the row).
+
 ## 0.13.0 — 2026-07-13
 
 Reviewer loop + skill split — the inferential half of the feedback system lands
