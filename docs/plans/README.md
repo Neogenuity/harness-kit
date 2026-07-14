@@ -60,7 +60,15 @@ not-yet-existing paths are legal — queued plans name future files by design.
 
 ## Roadmap (set 2026-07-10, re-sorted 2026-07-13)
 
-Shipped: **v0.15.0** — runtime legibility (a universal worktree identity/port
+Shipped: **v0.16.0** — declared execution profiles (explicit per-provider
+adoption for Claude Code, Cursor, Codex, and OpenCode; semantic drift checks;
+an honestly labeled Codex local/private-network compatibility weakening;
+authored devcontainer and provider-observability contracts; guarded
+provider-config-write eval execution; and a Codex gpt-5.6-luna **2/3** adoption
+baseline. Mechanism/content implementation was delegated to Terra/Luna,
+reciprocally reviewed, and closed by an independent pre-commit review)
+([completed/v0.16.0-execution-sandbox-profiles.md](completed/v0.16.0-execution-sandbox-profiles.md));
+**v0.15.0** — runtime legibility (a universal worktree identity/port
 helper; conditional, pinned `dev.sh up|health|seed|down` app contract; a
 self-contained `verify-live` skill; surface-aware optional browser guidance;
 app-aware init/update/audit adoption; a two-worktree HTTP fixture; and a Codex
@@ -128,11 +136,7 @@ rows + strict Agent Skills validation + matrix stamping
 **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
 ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
-**Active:**
-[v0.16.0 execution sandbox profiles](active/v0.16.0-execution-sandbox-profiles.md)
-— opt-in declared provider profiles, semantic drift checks, an explicitly
-weakened local/private-network compatibility variant, an authored devcontainer
-recipe, and truthful provider-observability guidance. [Launch readiness](active/launch-readiness.md) remains a parallel
+**Active:** [Launch readiness](active/launch-readiness.md) remains a parallel
 maintainer track; its demo, org move, and public flip are still open.
 
 The remaining mechanism queue follows.
@@ -180,8 +184,8 @@ MCP inventory, CI hardening — near-zero tailoring cost) moved ahead of the
 reviewer and runtime work per current combined-controls guidance, which treats
 containment as non-optional rather than finishing work — it shipped as
 v0.10.0; its *advanced*
-per-provider sandbox profiles were split into their own plan, now active as
-[v0.16.0](active/v0.16.0-execution-sandbox-profiles.md). Its high tailoring
+per-provider sandbox profiles were split into their own plan and shipped as
+[v0.16.0](completed/v0.16.0-execution-sandbox-profiles.md). Its high tailoring
 cost kept it behind runtime-legibility, and it depends only on that plan's
 `dev.sh` boot contract because runtime-legibility ships no devcontainer of its
 own.
