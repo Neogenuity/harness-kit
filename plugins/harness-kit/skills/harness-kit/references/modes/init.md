@@ -3,9 +3,10 @@
 Read [../pattern.md](../pattern.md) first if unread this session; provider file
 locations and event mappings are in [../provider-matrix.md](../provider-matrix.md).
 
-**Preflight — runtime prerequisites (before scaffolding anything).** Source
-`scripts/install-lib.sh` and run `harness_missing_prereqs`; name every tool it
-prints to the user *before* installing the mechanism. The critical one is
+**Preflight — runtime prerequisites (before scaffolding anything).** Source the
+NEW kit's `templates/scripts/install-lib.sh` and run
+`harness_missing_prereqs`; name every tool it prints to the user *before*
+installing the mechanism. The critical one is
 **`jq`**: without it every guard hook fails OPEN (see the provider matrix), so
 the whole in-turn feedback layer — secret-read denials, the format/lint loop,
 the advisory stop-hook — is silently inert and only the native permission deny
@@ -24,9 +25,18 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    `.opencode/`, `.agents/`); MCP server configs (`.mcp.json`,
    `.cursor/mcp.json`, `opencode.json` `mcp`, `.codex/config.toml`
    `[mcp_servers.*]`); secret-file patterns present (`.env*`,
-   `auth.json`, key files); docs already written. If a partial harness
-   exists, switch to a gap-filling variant of this flow — never overwrite
-   hand-written content; migrate it toward `docs/` instead.
+   `auth.json`, key files); docs already written. Also classify the repo as an
+   **application** (a local service/site/API with meaningful running state) or
+   **non-app** (library, docs, static data, or another repo with no running app
+   to exercise). For an app, inspect manifest `dev`/`start`/`serve` scripts,
+   Compose services and healthchecks, Procfiles, framework entrypoints,
+   existing smoke tests, and artifact configuration. Propose all six runtime
+   mappings before asking: boot, readiness/health, deterministic seed/reset,
+   port injection/allocation, repo-relative logs, and repo-relative traces (or
+   no traces). Carry only genuinely unresolved classification or mapping facts
+   into the interview. If a partial harness exists, switch to a gap-filling
+   variant of this flow — never overwrite hand-written content; migrate it
+   toward `docs/` instead.
 
 2. **Interview (only what recon can't answer).** Ask, ideally in one round:
    - Quality gates: the ordered commands that define "done" (recon proposes,
@@ -50,12 +60,22 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    - The 1-2 recurring tasks that *define success* in this repo ("add an
      endpoint", "add a model") — the seeds for the first behavioral eval golden
      tasks. Skippable; the eval bank starts empty and an empty bank is fine.
+   - **Application repos only:** always present the detected app classification
+     and proposed six-field runtime map, then require one explicit confirmation
+     to adopt the runtime bundle before authoring anything. Ask detailed
+     follow-ups only for mappings recon could not prove. A deterministic
+     seed/reset is required for adoption; do not disguise a best-effort
+     additive seed as a reset. Confirm a candidate port base/span and optional
+     namespace while preserving `HARNESS_DEV_PORT` as the explicit override.
+     Non-app repos skip every runtime question, leave no placeholders, and
+     record runtime support as N/A.
 
-3. **Install mechanism** from `templates/scripts/` into `scripts/`:
-   `harness.conf`, `install-lib.sh`, `sync-agent-skills.sh`, `check-harness.sh`,
-   `test-check-harness.sh`, `test-install.sh`, `eval-lib.sh`, `eval.sh`,
-   `eval-harness.sh`, `test-eval.sh`, `test-verify.sh`, `verify.sh`, and
-   `hooks/` (all scripts + tests + README).
+3. **Install mechanism** from `templates/scripts/` into `scripts/` with
+   `harness_install_mechanism` from that NEW source's `install-lib.sh`. Let the
+   new helper enumerate its own file set instead of copying an old hard-coded
+   list; the set includes `dev-instance.sh` (physical-worktree suffix and
+   candidate-port derivation) and its regression coverage as well as the
+   config, install/sync/check/eval/verify, and hook machinery.
    `chmod +x scripts/hooks/*.sh scripts/*.sh`.
    `install-lib.sh` is the deterministic, model-free core of this flow —
    `harness_install_mechanism` copies exactly this set, and step 8's
@@ -103,6 +123,16 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      protected-file maintenance.
    - `hooks/guard-project-policy.sh`: implement the invariant check from the
      interview (follow the in-file example), or leave the no-op skeleton.
+   - **Application repos only — author `scripts/dev.sh`; do not copy a generic
+     template.** Implement the confirmed runtime map against
+     `templates/docs/conventions/dev-runtime.md`: `up|health|seed|down`, one
+     compact JSON v1 object and no other stdout for every recognized action,
+     worktree ownership under `.harness/dev/`, deterministic explicit seeding,
+     and repo-relative log/trace paths. Use `scripts/dev-instance.sh suffix`
+     for the `^h[0-9a-f]{12}$` instance and `port <base> <span> [namespace]`
+     for the candidate unless `HARNESS_DEV_PORT` is set. A foreign occupied
+     port is an error — never reuse or kill its process. Mark `dev.sh`
+     executable. Non-app repos do not get this file.
 
 5. **Author content** (this is authoring, not copying — use the codebase):
    - `AGENTS.md` from `templates/AGENTS.md.tmpl`: fill every placeholder,
@@ -118,6 +148,13 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      real defaults, delete inapplicable sections (production environment, MCP)
      and, for the enforcement facts, keep only what the wired providers' rows
      in the provider matrix prove.
+   - **Application repos only:** copy
+     `templates/docs/conventions/dev-runtime.md` to
+     `docs/conventions/dev-runtime.md` and tailor its runtime map; copy the
+     self-contained `templates/docs/skills/verify-live/SKILL.md` to
+     `docs/skills/verify-live/SKILL.md`. Add both conditional links from the
+     AGENTS template. Never point either file at this skill/plugin directory.
+     Non-app repos omit the files and links.
    - `docs/skills/<slug>/SKILL.md` per initial skill, following
      `templates/docs/skills/_example/SKILL.md`. Frontmatter descriptions are
      activation triggers — spend effort on them.
@@ -183,7 +220,8 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      shared `AGENTS.md` (default reads `GEMINI.md` only; verified 2026-07-11).
    - Run `bash scripts/sync-agent-skills.sh` to generate all skill AND agent
      stubs (agent stubs come from each `docs/agents/*.md` frontmatter into every
-     `AGENT_PROVIDERS` dir).
+     `AGENT_PROVIDERS` dir). In app repos this generates the `verify-live`
+     provider stubs only after the canonical skill and AGENTS link exist.
 
 7. **CI gate**: install `templates/ci/github-actions-harness-check.yml` as
    `.github/workflows/harness-check.yml` (or add the `check-harness.sh` step
@@ -193,13 +231,13 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    `pull_request_target`, minimal permissions; opt-in, cost notes in its
    header).
 
-8. **Write the manifest** for upgrades *and* CI integrity — do this AFTER
-   step 4, so the checksums pin the tailored state. `harness_generate_manifest`
+8. **Write the manifest** for upgrades *and* CI integrity — do this AFTER all
+   policy tailoring and conditional app authoring, so the checksums pin the
+   tailored state. `harness_generate_manifest`
    in `scripts/install-lib.sh` is the single producer; it pins the whole
-   `scripts/hooks/` tree plus the top-level mechanism files (`harness.conf`,
-   `install-lib.sh`, `sync-agent-skills.sh`, `check-harness.sh`,
-   `test-check-harness.sh`, `test-install.sh`, `eval-lib.sh`, `eval.sh`,
-   `eval-harness.sh`, `test-eval.sh`, `verify.sh`):
+   `scripts/hooks/` tree plus the top-level files enumerated by the NEW
+   installer, including `dev-instance.sh`; in an app repo it also pins the
+   authored `dev.sh`:
    ```bash
    . scripts/install-lib.sh
    harness_generate_manifest . <kit-version> > scripts/.harness-manifest
@@ -215,6 +253,8 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    deliberately forks that file (update mode then only ever diffs it, never
    replaces it) — do this for the policy files step 4 tailors: `verify.sh`,
    `hooks/format.sh`, `hooks/guard-project-policy.sh`, and **`harness.conf`**.
+   In an app repo, append ` # tailored` to the `dev.sh` manifest line too; it is
+   authored project policy and has no kit template to replace it from.
    Pinning `harness.conf` is load-bearing: its `SECRET_PATTERNS` is the single
    source for the secret guard, so an un-re-pinned narrowing (which would
    silently disarm the guard) must fail CI like any other policy edit — shell
@@ -227,6 +267,11 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    exit 2 for both; repeat both with Codex-shaped payloads (an apply_patch
    envelope in `tool_input.command` — crib the builders from
    `scripts/hooks/test-affected-files.sh`) and confirm exit 2 again;
-   confirm every AGENTS.md link opens. Report results honestly, including
+   confirm every AGENTS.md link opens. For an app repo, validate every
+   `dev.sh` action's single-object JSON schema and lifecycle: `up` waits ready
+   without seeding and records whether it started; `seed` resets known data;
+   `health` is read-only and exits zero iff ready; `down` stops only this
+   worktree and is idempotent. Exercise cleanup only if that validation's
+   initial `up` reported `started: true`. Report results honestly, including
    anything left unwired. To rehearse the whole flow on a disposable repo
    first, follow [fixture-recipe.md](../fixture-recipe.md).

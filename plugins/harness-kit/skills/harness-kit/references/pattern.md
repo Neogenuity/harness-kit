@@ -59,7 +59,16 @@ whatever ships next — without maintaining N parallel configurations.
    (seconds), CI runs everything (minutes). Agents can't ignore a failing
    gate the way they ignore prose.
 
-7. **Observability closes the loop.** Every deny, advisory, and lint finding
+7. **Runnable apps have one worktree-scoped control surface.** Application
+   repos author `scripts/dev.sh up|health|seed|down` against the development
+   runtime convention. Each recognized action emits one JSON v1 object, so a
+   live-verification skill can start or reuse the app, reset deterministic data,
+   find its logs/traces, and clean up without guessing stack-specific commands.
+   The script is tailored project policy, manifest-pinned and diff-only; the kit
+   ships a physical-worktree identity/port helper, not a generic `dev.sh`.
+   Non-app repos omit the whole runtime bundle.
+
+8. **Observability closes the loop.** Every deny, advisory, and lint finding
    appends one JSON line to `.harness/log.jsonl` (git-ignored). The audit
    workflow summarizes it: a guard that fires repeatedly on the same path is
    the signal for what to engineer away permanently — tighten a pattern, add
@@ -86,7 +95,10 @@ CLAUDE.md                      # thin pointer to AGENTS.md + quality gates
 docs/
   architecture/                # canonical architecture docs
   conventions/                 # one doc per topic agents get wrong
-  skills/<slug>/SKILL.md       # canonical task workflows (frontmatter = trigger)
+    dev-runtime.md             # app-only dev.sh JSON/lifecycle contract [tailored]
+  skills/                      # canonical task workflows (frontmatter = trigger)
+    <slug>/SKILL.md
+    verify-live/SKILL.md       # app-only reproduce/observe/rerun workflow [tailored]
   agents/<name>.md             # canonical persona docs
   plans/                       # execution plans (surfaced by session-context.sh)
 scripts/
@@ -94,6 +106,9 @@ scripts/
                                #   secret patterns, log toggle)     [tailored]
   verify.sh                    # executable "done": ordered quality gates
                                #   (--fast subset for the stop-hook) [tailored]
+  dev.sh                       # app-only runtime adapter: up/health/seed/down
+                               #   (authored per repo; no generic template) [tailored]
+  dev-instance.sh              # physical-worktree suffix + port candidate helper
   sync-agent-skills.sh         # stub + skill-resource mirror generator
                                #   (+ --check mode, orphan detection)
   check-harness.sh             # CI drift gate + manifest integrity + doctor
@@ -107,7 +122,9 @@ scripts/
     session-context.sh         # session-start orientation banner (branch,
                                #   recent commits, active plans)
     test-*.sh                  # regression tests, run by check-harness.sh
-.harness/                      # hook event log (JSONL, git-ignored)
+.harness/                      # local harness state (git-ignored)
+  log.jsonl                    # hook event log
+  dev/                         # app-only, worktree-scoped runtime state/logs/traces
 .claude/   settings.json (permissions + hook wiring), skills/ (stubs), agents/ (thin)
 .cursor/   hooks.json, rules/*.mdc (thin), skills/ (stubs), agents/ (thin), mcp.json
 .codex/    config.toml (MCP), hooks.json, agents/*.toml (thin)   # skills come from .agents/
@@ -119,9 +136,9 @@ scripts/
 
 | Layer | Examples | Packaging treatment |
 | --- | --- | --- |
-| **Mechanism** | sync script, check script, lib.sh, hook tests | Copied verbatim; upgraded via manifest; integrity-checked in CI |
-| **Policy** | quality gates (verify.sh), secret patterns, formatter/lint maps, protected paths, permission allowlist, plans dir | Templates with marked `TAILOR` blocks; filled at init; never auto-overwritten |
-| **Content** | AGENTS.md, conventions, skills, personas, invariant checks | Authored per-project; kit provides skeletons + interview |
+| **Mechanism** | sync script, check script, lib.sh, hook tests, `dev-instance.sh` | Copied verbatim; upgraded via manifest; integrity-checked in CI |
+| **Policy** | quality gates (verify.sh), secret patterns, formatter/lint maps, protected paths, permission allowlist, plans dir; app-only authored `dev.sh` | Templates with marked `TAILOR` blocks, or repo-authored adapters where no generic mechanism can fit; pinned after init and never auto-overwritten |
+| **Content** | AGENTS.md, conventions, skills, personas, invariant checks; app-only tailored runtime convention/skill | Authored or tailored per-project; kit provides skeletons + interview |
 
 ## Why stubs instead of symlinks or full copies
 
@@ -151,7 +168,9 @@ drift.
 ## Upgrade model
 
 At install, the kit writes `scripts/.harness-manifest`: the kit version plus
-a sha256 per installed mechanism file, pinned AFTER init-time tailoring.
+a sha256 per installed mechanism file, pinned AFTER init-time tailoring. In an
+application repo it also pins the authored `scripts/dev.sh` with a
+` # tailored` marker; the marker makes it diff-only, not exempt from integrity.
 `check-harness.sh` verifies those checksums on every run, so any later edit
 — agent, human, or merge — fails CI until its line is deliberately re-pinned.
 A line suffixed ` # tailored` marks a deliberate local fork: its checksum is
@@ -160,5 +179,9 @@ marker only exempts it from template *replacement*, not from pinning), but
 `update` will only ever diff that file, never replace it. On `update`, files
 whose checksum still matches the manifest are
 upgraded in place; files that differ (or are marked tailored) get a diff
-instead of an overwrite. Policy templates (TAILOR blocks) are always treated
-as tailored after init.
+instead of an overwrite. Policy templates (TAILOR blocks) and authored policy
+adapters are always treated as tailored after init. Update uses the NEW kit's
+`templates/scripts/install-lib.sh` to enumerate the new version's mechanism —
+an old installed helper cannot discover files that did not exist when it
+shipped. New content such as the app-only convention and skill is offered as
+an explicit opt-in and is never auto-added or overwritten.

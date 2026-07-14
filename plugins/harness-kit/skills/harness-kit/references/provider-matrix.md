@@ -10,7 +10,8 @@ the Sources section at the bottom lists the primary docs to re-verify
 against. (Full matrix last validated: 2026-07; Codex facts re-verified
 2026-07-10 after the docs moved hosts; GitHub Copilot + Gemini CLI added and
 verified 2026-07-11; the Execution-containment section added and verified
-against live provider docs 2026-07-11 — see Sources.)
+against live provider docs 2026-07-11; browser/live-app surfaces re-verified
+2026-07-14 — see Sources.)
 
 | Capability | Claude Code | Cursor | Codex | OpenCode | `.agents` standard |
 | --- | --- | --- | --- | --- | --- |
@@ -20,6 +21,7 @@ against live provider docs 2026-07-11 — see Sources.)
 | Hooks <br>_verified 2026-07_ | `.claude/settings.json` → `hooks` | `.cursor/hooks.json` | `.codex/hooks.json` (or `config.toml` `[hooks]`; trust-gated) | `.opencode/plugins/*.ts` shim (JS/TS only) — documented path, but **no shim template ships** (descoped 2026-07-13); native `opencode.json` denies + CI are the backstop | — |
 | Permissions <br>_verified 2026-07_ | `.claude/settings.json` → `permissions` | (harness UI) | (trust model + `PermissionRequest` hook) | `opencode.json` `permission.read` denies (mirror `harness.conf` `SECRET_PATTERNS`) | — |
 | MCP servers <br>_verified 2026-07_ | `.mcp.json` (project) | `.cursor/mcp.json` | `.codex/config.toml` `[mcp_servers.*]` | `opencode.json` `"mcp"` | `~/.agents/mcp-settings.json` (proposed, user-level) |
+| Browser / live-app interaction <br>_verified 2026-07_ | Claude in Chrome extension from Claude Code CLI (`--chrome`/`/chrome`) or VS Code; actions run in a visible Chrome/Edge window and may use its signed-in state | Browser for Agent is GA in the Cursor desktop/editor surface; embedded browser can capture screenshots and pass selected elements/DOM context to Agent | Built-in Browser is in the ChatGPT desktop app, **not** Codex CLI or IDE; local CLI/IDE can instead use an already-configured browser MCP such as Playwright | Use an already-configured local browser MCP such as Playwright through `opencode.json`; this matrix claims no native OpenCode browser | — |
 | Distribution | `.claude-plugin/marketplace.json` → `plugins/harness-kit/.claude-plugin/plugin.json`; `/plugin marketplace add <owner>/harness-kit` (verified 2026-07-10) | — (no plugin channel) | `.agents/plugins/marketplace.json` → `plugins/harness-kit/.codex-plugin/plugin.json`; `codex plugin marketplace add <path>` (verified 2026-07-10) | — (no plugin channel) | `.agents/plugins/marketplace.json` (Codex's channel rides the `.agents` tree) |
 
 Each capability row carries a `verified <date>` stamp — month-level for the
@@ -27,6 +29,16 @@ last full-matrix pass, with finer per-cell stamps overriding where a fact was
 individually re-checked (as in Distribution and the Codex facts).
 `check-harness.sh`'s doctor warns when any stamp ages past
 `HARNESS_MATRIX_STALE_DAYS` (default 90), so restamp the rows you re-verify.
+
+The browser row is deliberately **surface-aware**, not a promise that every
+provider's headless CLI has a native browser. Prefer the current surface's
+already-available browser/computer-use tool. A repo may also already provide
+Microsoft's Playwright CLI (agent-oriented CLI; headless by default, headed on
+request) or Playwright MCP (persistent browser tools over MCP). Both are
+portable options, not harness-kit dependencies: init never auto-installs a
+browser, extension, package, skill, or MCP server, and installed skills never
+link back to a plugin cache. When no browser surface is already available,
+live verification falls back to HTTP and reports visual behavior unverified.
 
 **Distribution** is the versioned, updatable install path (vs. the manual
 clone-and-copy of `skills/harness-kit`). The two providers do **not** share a
@@ -324,6 +336,9 @@ Primary docs to re-validate each section against (all last consulted
   `--bare` recommendation for scripted calls; re-verified 2026-07-12 for the
   `scripts/eval.sh` invocation — see that script's header for why `--bare`
   is deliberately not adopted there): <https://code.claude.com/docs/en/headless>
+- Claude Code with Chrome (extension-backed browser automation from CLI and VS
+  Code, visible Chrome/Edge window, shared browser login state; browser row
+  re-verified 2026-07-14): <https://code.claude.com/docs/en/chrome>
 - Cursor hooks (event list — note there is no pre-edit event; re-verified
   2026-07-12 for `afterFileEdit`'s empty output schema and the exit-code /
   JSON-output contract that backs the Cursor stdout caveat and Post-tool
@@ -331,6 +346,10 @@ Primary docs to re-validate each section against (all last consulted
   2026-07-12 for the full event list and per-hook `failClosed` semantics —
   see the Per-provider notes Cursor-hooks bullet and the
   `beforeShellExecution` evaluation under Payload differences.
+- Cursor Browser (embedded Agent browser behavior) and the Cursor 2.0 GA
+  announcement (browser row re-verified 2026-07-14):
+  <https://cursor.com/docs/agent/tools/browser> and
+  <https://cursor.com/changelog/2-0>
 - Codex hooks (payload fields, Stop JSON contract, exit codes):
   <https://learn.chatgpt.com/docs/hooks>
   (developers.openai.com/codex/hooks now 308-redirects here)
@@ -342,12 +361,24 @@ Primary docs to re-validate each section against (all last consulted
   (developers.openai.com/codex/plugins/build 308-redirects here; the hooks
   doc <https://learn.chatgpt.com/docs/hooks> recommends Git-root-resolved
   hook commands)
+- Codex Browser (built-in Browser availability and explicit CLI/IDE exclusion)
+  and MCP (local desktop/CLI/IDE shared configuration plus Playwright as an
+  example browser server; browser row re-verified 2026-07-14):
+  <https://developers.openai.com/codex/browser> and
+  <https://learn.chatgpt.com/docs/extend/mcp.md>
 - OpenCode permissions (`permission.read` pattern rules; also the allow/ask/deny
   layer for the Execution-containment table — OpenCode ships no OS sandbox):
   <https://opencode.ai/docs/permissions/>
 - OpenCode plugins (the deferred hook shim's API — documented path; no shim
   template ships as of the 2026-07-13 descope):
   <https://opencode.ai/docs/plugins/>
+- OpenCode MCP servers (local server configuration used by the browser row;
+  re-verified 2026-07-14): <https://opencode.ai/docs/mcp-servers>
+- Microsoft Playwright CLI (agent-oriented CLI, headless-by-default browser
+  sessions and screenshots/traces) and Playwright MCP (portable browser MCP,
+  including provider configs and headed/headless modes; re-verified
+  2026-07-14): <https://github.com/microsoft/playwright-cli> and
+  <https://github.com/microsoft/playwright-mcp>
 - Claude Code sandboxing (`sandbox.*` settings, Seatbelt/bubblewrap OS
   enforcement, default-deny network proxy — Execution-containment row,
   verified 2026-07): <https://code.claude.com/docs/en/sandboxing>
