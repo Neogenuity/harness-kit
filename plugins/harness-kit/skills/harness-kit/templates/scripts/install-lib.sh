@@ -21,7 +21,14 @@
 # harness_generate_manifest, which reads this list. The scripts/hooks/ tree is
 # always included wholesale (see harness_manifest_paths). Add a new top-level
 # mechanism file here and it is covered by the manifest and the installer at once.
-_HARNESS_MECHANISM_TOPLEVEL="harness.conf sync-agent-skills.sh check-harness.sh test-check-harness.sh install-lib.sh test-install.sh eval-lib.sh eval.sh eval-harness.sh test-eval.sh test-verify.sh verify.sh"
+_HARNESS_MECHANISM_TOPLEVEL="harness.conf sync-agent-skills.sh check-harness.sh test-check-harness.sh install-lib.sh test-install.sh dev-instance.sh test-dev-instance.sh eval-lib.sh eval.sh eval-harness.sh test-eval.sh test-verify.sh verify.sh"
+
+# Optional project-owned policy that is authored for an application repo, never
+# copied from this template directory. When present, it is still integrity-
+# pinned and carried through re-pin. Keep this set separate from mechanism:
+# install, persisted template bases, and update's add-new-files pass must never
+# mistake a repo-specific dev launcher for a generic kit template.
+_HARNESS_OPTIONAL_PROJECT_POLICY_TOPLEVEL="dev.sh"
 
 # Policy files: update mode must NEVER auto-overwrite these, even when the
 # installed copy still matches its pin (SKILL update step 3). The project may
@@ -29,7 +36,7 @@ _HARNESS_MECHANISM_TOPLEVEL="harness.conf sync-agent-skills.sh check-harness.sh 
 # unmarked), and secret/format/guard policy must be reviewed, never silently
 # replaced. harness_update_decision returns 'diff' for any path here regardless
 # of marker — repo-relative, matching manifest paths.
-_HARNESS_POLICY_FILES="scripts/verify.sh scripts/harness.conf scripts/hooks/format.sh scripts/hooks/guard-secrets.sh scripts/hooks/guard-project-policy.sh"
+_HARNESS_POLICY_FILES="scripts/verify.sh scripts/harness.conf scripts/dev.sh scripts/hooks/format.sh scripts/hooks/guard-secrets.sh scripts/hooks/guard-project-policy.sh"
 
 # _harness_sha256 <file...> — prints "<sha256>  <path>" lines, the manifest's
 # own line format. Mirrors check-harness.sh's sha256_of tool selection.
@@ -70,6 +77,9 @@ harness_manifest_paths() {
       {
           find scripts/hooks -type f ! -name '.harness-manifest' 2>/dev/null
           for f in $_HARNESS_MECHANISM_TOPLEVEL; do
+              [ -f "scripts/$f" ] && printf 'scripts/%s\n' "$f"
+          done
+          for f in $_HARNESS_OPTIONAL_PROJECT_POLICY_TOPLEVEL; do
               [ -f "scripts/$f" ] && printf 'scripts/%s\n' "$f"
           done
       } | sort

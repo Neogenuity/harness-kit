@@ -137,6 +137,7 @@ wait_parallel_gates() {
 # parallel_full_gate "typecheck" vendor/bin/phpstan analyse --no-progress
 # parallel_full_gate "tests"     php artisan test --parallel
 # Use full_gate instead when a gate consumes another gate's output.
+# full_gate "smoke" bash scripts/dev.sh health
 
 full_gate "harness" bash scripts/check-harness.sh
 # ------------------------------------------------------------------------------

@@ -154,11 +154,13 @@ missing=""
 # harness.conf is a sourced config (not executable, like every non-.sh file);
 # the .sh mechanism files must carry the exec bit (check-harness.sh check #5).
 for f in check-harness.sh harness.conf install-lib.sh sync-agent-skills.sh \
-         test-check-harness.sh test-install.sh test-verify.sh verify.sh; do
+         dev-instance.sh test-dev-instance.sh test-check-harness.sh \
+         test-install.sh test-verify.sh verify.sh; do
     [ -f "$F/scripts/$f" ] || missing="$missing $f(absent)"
 done
-for f in check-harness.sh install-lib.sh sync-agent-skills.sh \
-         test-check-harness.sh test-install.sh test-verify.sh verify.sh; do
+for f in check-harness.sh install-lib.sh sync-agent-skills.sh dev-instance.sh \
+         test-dev-instance.sh test-check-harness.sh test-install.sh \
+         test-verify.sh verify.sh; do
     [ -x "$F/scripts/$f" ] || missing="$missing $f(not-exec)"
 done
 [ -f "$F/scripts/hooks/lib.sh" ] || missing="$missing hooks/lib.sh(absent)"
@@ -172,8 +174,10 @@ grep -qxF '.harness/' "$F/.gitignore" \
     || fail "clean init: .gitignore missing .harness/"
 if grep -q "scripts/install-lib.sh" "$F/scripts/.harness-manifest" \
     && grep -q "scripts/test-install.sh" "$F/scripts/.harness-manifest" \
+    && grep -q "scripts/dev-instance.sh" "$F/scripts/.harness-manifest" \
+    && grep -q "scripts/test-dev-instance.sh" "$F/scripts/.harness-manifest" \
     && grep -q "scripts/harness.conf" "$F/scripts/.harness-manifest"; then
-    pass "clean init: manifest enumerates install-lib.sh, test-install.sh, harness.conf"
+    pass "clean init: manifest enumerates install library, dev-instance helper/test, and harness.conf"
 else
     fail "clean init: manifest omits one of the new mechanism files"
 fi
@@ -336,20 +340,85 @@ else
 fi
 rm -rf "$F" "$NEWKIT"
 
-# --- update installs newly-shipped mechanism files (v0.6 -> v0.7 migration) ----
-# An old install's manifest can't list a file the previous kit didn't ship;
-# update must still add it so the re-pin covers it and check #6/#9 run/verify it.
+# --- update installs newly-shipped mechanism files using the NEW kit library ---
+# An old install's manifest can't list files the previous kit didn't ship. More
+# subtly, its OLD installed install-lib.sh does not know their names either, so
+# update must source the NEW kit's library before applying the new templates.
+# Simulate pre-v0.15 by removing both helper files and their pins, then prove
+# the new library discovers, installs, and chmods both.
 F=$(make_fixture)
-rm "$F/scripts/install-lib.sh"
-grep -v 'scripts/install-lib.sh' "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
+rm "$F/scripts/dev-instance.sh" "$F/scripts/test-dev-instance.sh"
+grep -vE 'scripts/(test-)?dev-instance\.sh' "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
 mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
-harness_update_apply "$SCRIPTS_DIR" "$F" >/dev/null
-if [ -f "$F/scripts/install-lib.sh" ]; then
-    pass "migration: update re-adds a newly-shipped mechanism file absent from the target"
+NEWKIT=$(mktemp -d); cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+(
+    # This source is the behavior under test: update orchestration must use the
+    # incoming kit's list, not the legacy target's install-lib.sh.
+    # shellcheck source=/dev/null
+    . "$NEWKIT/scripts/install-lib.sh"
+    harness_update_apply "$NEWKIT/scripts" "$F"
+) >/dev/null
+if [ -x "$F/scripts/dev-instance.sh" ] && [ -x "$F/scripts/test-dev-instance.sh" ]; then
+    pass "migration: new-kit install library adds executable v0.15 helper and test"
 else
-    fail "migration: update did not add the missing mechanism file"
+    fail "migration: new-kit install library did not add both v0.15 files executable"
 fi
-rm -rf "$F"
+rm -rf "$F" "$NEWKIT"
+
+# --- optional scripts/dev.sh is pinned policy, never a copied template --------
+# The kit can author this repo-specific launcher, but the installer cannot ship
+# a useful generic body. A same-named file in a source dir is therefore ignored
+# by install/persist/add; once a target authors one, manifest generation includes
+# it and update is diff-only (even if pristine and unmarked).
+ROGUE=$(mktemp -d); cp -R "$SCRIPTS_DIR" "$ROGUE/scripts"
+printf '#!/usr/bin/env bash\necho WRONG-GENERIC-TEMPLATE\n' > "$ROGUE/scripts/dev.sh"
+chmod +x "$ROGUE/scripts/dev.sh"
+F=$(mktemp -d); ( cd "$F" && git init -q )
+harness_install_mechanism "$ROGUE/scripts" "$F"
+if [ ! -e "$F/scripts/dev.sh" ]; then
+    pass "project policy: install never copies a source scripts/dev.sh template"
+else
+    fail "project policy: install copied forbidden generic scripts/dev.sh"
+fi
+harness_persist_base "$ROGUE/scripts" "$F" "$KIT_VERSION"
+BASE=$(harness_base_dir "$F" "$KIT_VERSION")
+if [ ! -e "$BASE/dev.sh" ]; then
+    pass "project policy: persisted mechanism base excludes scripts/dev.sh"
+else
+    fail "project policy: persisted base captured scripts/dev.sh as mechanism"
+fi
+harness_generate_manifest "$F" "$KIT_VERSION" > "$F/scripts/.harness-manifest"
+harness_update_apply "$ROGUE/scripts" "$F" >/dev/null
+if [ ! -e "$F/scripts/dev.sh" ]; then
+    pass "project policy: update add pass never installs scripts/dev.sh"
+else
+    fail "project policy: update add pass installed scripts/dev.sh"
+fi
+
+printf '#!/usr/bin/env bash\necho PROJECT-OWNED\n' > "$F/scripts/dev.sh"
+chmod +x "$F/scripts/dev.sh"
+harness_repin_manifest "$F" "$KIT_VERSION" > "$F/scripts/.hm" \
+    && mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
+devpin=$(grep 'scripts/dev.sh' "$F/scripts/.harness-manifest" || true)
+if [ -n "$devpin" ] && [ "${devpin%% *}" = "$(sha_of "$F" scripts/dev.sh)" ]; then
+    pass "project policy: authored scripts/dev.sh is manifest-pinned"
+else
+    fail "project policy: authored scripts/dev.sh was not pinned"
+fi
+# Mark it tailored and prove both update and re-pin preserve ownership/content.
+grep -v 'scripts/dev.sh' "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
+printf '%s  scripts/dev.sh # tailored\n' "$(sha_of "$F" scripts/dev.sh)" >> "$F/scripts/.hm"
+mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
+harness_update_apply "$ROGUE/scripts" "$F" >/dev/null
+harness_repin_manifest "$F" "9.9.9" > "$F/scripts/.hm" \
+    && mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
+if grep -qF 'PROJECT-OWNED' "$F/scripts/dev.sh" \
+   && grep 'scripts/dev.sh' "$F/scripts/.harness-manifest" | grep -qF '# tailored'; then
+    pass "project policy: tailored scripts/dev.sh stays diff-only and its marker survives re-pin"
+else
+    fail "project policy: update replaced scripts/dev.sh or re-pin lost its tailored marker"
+fi
+rm -rf "$F" "$ROGUE"
 
 # --- HOOK_WIRED_PROVIDERS migration for a legacy pre-declaration install -------
 # harness.conf is diff-only on update, so a pre-v0.14 install never grows the
