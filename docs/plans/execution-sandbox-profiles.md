@@ -59,7 +59,7 @@ matrix section these profiles turn on) and the plans-machinery fixture recipe
 (used to prove each profile installs cleanly). **Corrected 2026-07-11:**
 runtime-legibility ships a `dev.sh` **boot contract**, not a `.devcontainer/` —
 so this plan owns its own optional `.devcontainer/` template and depends only
-on that boot contract ([v0.15.0-runtime-legibility.md](active/v0.15.0-runtime-legibility.md), scope
+on that boot contract ([v0.15.0-runtime-legibility.md](completed/v0.15.0-runtime-legibility.md), scope
 item 1), not on any devcontainer from that plan. A matrix re-verification pass
 at edit time is required — provider security surfaces move fast (ADR 004).
 

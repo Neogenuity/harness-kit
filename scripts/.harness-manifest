@@ -1,4 +1,4 @@
-# harness-kit 0.14.0
+# harness-kit 0.15.0
 ea081b6c11c4c43afab3ac2f7e7be3c4001dab09f898bafc07eab8e070405a3f  scripts/check-harness.sh
 7b6f0ef248121b10a267c0a53fab98f9ad86458a5970ea3eb3ff99befe9a57e0  scripts/check-packaging.sh # tailored
 298bc6520091d54cf72e7dcc6269ff116872136a475d76e989af8169282babe7  scripts/dev-instance.sh

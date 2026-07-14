@@ -3,6 +3,83 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.15.0 — 2026-07-14
+
+Runtime legibility — application repositories can expose one deterministic,
+worktree-owned live runtime contract to every agent surface. The release ships
+the universal instance helper, conditionally authors a tailored `dev.sh`, adds
+a self-contained `verify-live` workflow, and grounds optional browser guidance
+in each provider's actual surface. Implementation was delegated to Terra
+(mechanism and executable evidence) and Luna (content and provider contract),
+then cross-reviewed in both directions.
+
+### Worktree-aware runtime mechanism
+
+- **Universal `scripts/dev-instance.sh`** derives a stable `h` + 12-character
+  lowercase hash suffix from the physical Git worktree root and namespace, and
+  maps a validated base/span to a deterministic candidate port. Finite port
+  hashing is collision-resistant, not collision-proof; runtime startup must
+  fail loudly rather than reuse or kill another instance's occupied port.
+- **Conditional `scripts/dev.sh` contract** for detected and confirmed app
+  repositories implements `up|health|seed|down`. Every valid action returns one
+  JSON v1 object; startup is idempotent and readiness-gated, seed resets named
+  fixture data, health is read-only, and down can stop only this worktree's
+  resources. State lives under `.harness/dev/`, with repo-relative JSON paths.
+- **Installer/update integrity** treats the helper and its regression test as
+  mechanism, but `dev.sh` as optional project policy: authored scripts are
+  executable, manifest-pinned, diff-only, preserved on update, and protected by
+  the config guard. Update mode now sources the incoming kit's `install-lib.sh`
+  so pre-0.15 installs can discover newly introduced mechanism files.
+- **Parallel full-gate support** lets independent template, eval, fixture, and
+  harness checks overlap while preserving declaration-ordered output and exact
+  failure rerun commands. The tailored verify template also includes the
+  commented `full_gate "smoke" bash scripts/dev.sh health` adoption point.
+
+### Live-verification content
+
+- **Self-contained `verify-live` skill** enforces
+  start/reuse → seed → reproduce → inspect targeted logs/traces → change → rerun
+  the same flow → `verify.sh` → ownership-aware cleanup. It stops on a missing or
+  invalid runtime contract instead of guessing repo-specific commands.
+- **Runtime convention and app-aware init** document the lifecycle JSON schema,
+  ownership, deterministic seeding, port override, log/trace paths, and failure
+  behavior. Recon proposes commands from manifests, Compose files, and
+  Procfiles; interview asks only unresolved details. Libraries receive no
+  placeholder runtime content and audit reports N/A.
+- **Safe adoption/audit** offers existing apps an opt-in proposal through
+  update/audit; it never auto-adds or overwrites authored content or `dev.sh`.
+  Audit calls only `health` and distinguishes missing, non-executable, unpinned,
+  invalid JSON, stopped, unhealthy, and ready states.
+- **Surface-aware browser guidance** is stamped from current primary sources
+  for Claude Code Chrome, Cursor Browser, Codex Browser, OpenCode MCP, and
+  Playwright CLI/MCP. It uses an already configured native/browser/computer-use
+  surface when available, otherwise falls back to HTTP and explicitly reports
+  that visual behavior was not checked; no browser tool is installed
+  automatically.
+
+### Evidence
+
+- The root-only Python fixture runs main and linked-worktree HTTP instances
+  concurrently, proves suffix/port separation, deterministic seed resets,
+  valid JSON, logs, ownership-safe teardown, readiness-timeout cleanup, and
+  that stopping A leaves B healthy. Python 3 is a contributor/test prerequisite
+  only; installed harness prerequisites remain Bash, jq, Git, and SHA-256.
+- The positive `verify-live-runtime` capability eval passed **3/3** on Codex
+  `gpt-5.6-luna` (`pass@k=1`, `pass^k=1`, rate 1.00; run
+  `20260714-170246-codex-gpt-5.6-luna`). Eval tasks now have closed,
+  task-scoped `network: none|required` metadata so localhost fixtures can opt in
+  without enabling network for ordinary Codex evals.
+
+### Migration
+
+- Update mode automatically installs or refreshes `dev-instance.sh` and its
+  test.
+- Existing app installs adopt `dev.sh`, runtime docs, AGENTS links, and the
+  `verify-live` skill only by explicit opt-in; authored files are never
+  auto-overwritten. Non-app repositories need no action.
+- The commented live smoke-gate example is diff-only in an existing tailored
+  `scripts/verify.sh`; adopt it manually if the repository wants that gate.
+
 ## 0.14.0 — 2026-07-13
 
 Provider wiring assurance — the harness now *verifies* the wiring it documents.

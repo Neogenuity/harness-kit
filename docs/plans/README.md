@@ -60,7 +60,14 @@ not-yet-existing paths are legal — queued plans name future files by design.
 
 ## Roadmap (set 2026-07-10, re-sorted 2026-07-13)
 
-Shipped: **v0.14.0** — provider wiring assurance (the harness now *verifies* the
+Shipped: **v0.15.0** — runtime legibility (a universal worktree identity/port
+helper; conditional, pinned `dev.sh up|health|seed|down` app contract; a
+self-contained `verify-live` skill; surface-aware optional browser guidance;
+app-aware init/update/audit adoption; a two-worktree HTTP fixture; and a Codex
+gpt-5.6-luna **3/3** live-runtime eval. Mechanism/content implementation was
+delegated to Terra/Luna workstreams and cross-reviewed in both directions)
+([completed/v0.15.0-runtime-legibility.md](completed/v0.15.0-runtime-legibility.md));
+**v0.14.0** — provider wiring assurance (the harness now *verifies* the
 wiring it documents: a new `check-harness.sh` tuple check turns a hooks-deleted
 `.claude/settings.json` from a false "coherent" into a specific per-guard
 failure; agent stubs join skill stubs as generated-and-checked from canonical
@@ -121,10 +128,7 @@ rows + strict Agent Skills validation + matrix stamping
 **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
 ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
-**Active:** [v0.15.0 runtime legibility](active/v0.15.0-runtime-legibility.md) —
-the mechanism plan for the worktree-aware `dev.sh` contract, live verification,
-and app-shaped runtime evidence; activated 2026-07-14 after Terra/Luna execution
-review. And [launch-readiness.md](active/launch-readiness.md) — parallel-track;
+**Active:** [launch-readiness.md](active/launch-readiness.md) — parallel-track;
 doc items 3–6 (SECURITY.md, "what 1.0 promises", supported-platforms, content
 hygiene sweep) shipped in v0.13.0, while the demo, the org move, and the public
 flip remain maintainer actions. The remaining mechanism queue follows.
