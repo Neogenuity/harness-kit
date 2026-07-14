@@ -54,8 +54,9 @@ doctor keeps WARNing on the same condition on every later run (check #10).
 3. **Install mechanism** from `templates/scripts/` into `scripts/`:
    `harness.conf`, `install-lib.sh`, `sync-agent-skills.sh`, `check-harness.sh`,
    `test-check-harness.sh`, `test-install.sh`, `eval-lib.sh`, `eval.sh`,
-   `eval-harness.sh`, `test-eval.sh`, `verify.sh`, and `hooks/` (all scripts +
-   tests + README). `chmod +x scripts/hooks/*.sh scripts/*.sh`.
+   `eval-harness.sh`, `test-eval.sh`, `test-verify.sh`, `verify.sh`, and
+   `hooks/` (all scripts + tests + README).
+   `chmod +x scripts/hooks/*.sh scripts/*.sh`.
    `install-lib.sh` is the deterministic, model-free core of this flow —
    `harness_install_mechanism` copies exactly this set, and step 8's
    `harness_generate_manifest` and `update` mode both call it; `test-install.sh`
@@ -65,8 +66,10 @@ doctor keeps WARNing on the same condition on every later run (check #10).
 
 4. **Tailor policy** in the marked `TAILOR` blocks:
    - `verify.sh`: write the interviewed quality gates as `gate` (fast:
-     formatter/linter) and `full_gate` (typecheck, tests) lines, ordered
-     cheapest-first. Keep the default `harness` gate.
+     formatter/linter), `full_gate` (serial typecheck/tests), or
+     `parallel_full_gate` (independent typecheck/tests) lines. Keep serial gates
+     cheapest-first and keep the default `harness` gate. Only parallelize gates
+     that do not consume one another's outputs or share mutable fixtures.
    - `hooks/format.sh`: uncomment/add extension → formatter lines for the
      detected stack.
    - `harness.conf` `SECRET_PATTERNS` / `SECRET_ALLOW_PATTERNS`: extend for

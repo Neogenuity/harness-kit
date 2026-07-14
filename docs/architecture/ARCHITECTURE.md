@@ -60,11 +60,12 @@ lifecycle a user's repo does:
    `check-harness.sh`) requires every non-tailored installed file to be
    byte-identical to its template — see
    [ADR 006](decisions/006-dogfood-copies-are-enforced-duplicates.md).
-4. `scripts/verify.sh` (shellcheck → manifest JSON → template regression
-   tests → `check-harness.sh`) gates the release; `ci.yml` executes
-   `bash scripts/verify.sh` directly (plus `harness-check.yml` for the
-   shipped drift-gate template), so the gate list can never drift from this
-   executable definition.
+4. `scripts/verify.sh` gates the release: cheap shellcheck and manifest checks
+   fail fast, then independent template regressions, eval validation, and the
+   nested harness check run concurrently behind one reporting barrier.
+   `ci.yml` executes `bash scripts/verify.sh` directly (plus
+   `harness-check.yml` for the shipped drift-gate template), so the gate list
+   can never drift from this executable definition.
 
 Anything that breaks in this loop breaks here first, before it ships.
 

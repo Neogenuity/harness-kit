@@ -51,7 +51,9 @@ whatever ships next — without maintaining N parallel configurations.
 6. **Verification is executable, and feedback lands at the fastest layer.**
    `scripts/verify.sh` is the one executable definition of "done"; AGENTS.md,
    CLAUDE.md, and skills point at it instead of listing commands, so the
-   gates cannot drift across docs. The same policy runs at three latencies:
+   gates cannot drift across docs. Independent full gates can use its explicit
+   parallel queue; serial gates retain cheap-first, fail-fast behavior. The same
+   policy runs at three latencies:
    the post-edit hook feeds lint findings back within the turn
    (milliseconds), the advisory stop-hook can run `verify.sh --fast`
    (seconds), CI runs everything (minutes). Agents can't ignore a failing

@@ -154,11 +154,11 @@ missing=""
 # harness.conf is a sourced config (not executable, like every non-.sh file);
 # the .sh mechanism files must carry the exec bit (check-harness.sh check #5).
 for f in check-harness.sh harness.conf install-lib.sh sync-agent-skills.sh \
-         test-check-harness.sh test-install.sh verify.sh; do
+         test-check-harness.sh test-install.sh test-verify.sh verify.sh; do
     [ -f "$F/scripts/$f" ] || missing="$missing $f(absent)"
 done
 for f in check-harness.sh install-lib.sh sync-agent-skills.sh \
-         test-check-harness.sh test-install.sh verify.sh; do
+         test-check-harness.sh test-install.sh test-verify.sh verify.sh; do
     [ -x "$F/scripts/$f" ] || missing="$missing $f(not-exec)"
 done
 [ -f "$F/scripts/hooks/lib.sh" ] || missing="$missing hooks/lib.sh(absent)"
