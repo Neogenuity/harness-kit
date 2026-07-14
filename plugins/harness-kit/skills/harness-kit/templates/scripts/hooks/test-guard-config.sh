@@ -42,6 +42,8 @@ run() {
 run 2 "hook script edit denied"          "$(payload "$WORK/scripts/hooks/lib.sh")"
 run 2 "check-harness.sh edit denied"     "$(payload "$WORK/scripts/check-harness.sh")"
 run 2 "install-lib.sh edit denied"       "$(payload "$WORK/scripts/install-lib.sh")"
+run 2 "dev-instance.sh edit denied"      "$(payload "$WORK/scripts/dev-instance.sh")"
+run 2 "project dev.sh edit denied"       "$(payload "$WORK/scripts/dev.sh")"
 run 2 "eval runner edit denied"          "$(payload "$WORK/scripts/eval.sh")"
 run 2 "eval-lib edit denied"             "$(payload "$WORK/scripts/eval-lib.sh")"
 run 2 "manifest edit denied"             "$(payload "$WORK/scripts/.harness-manifest")"
@@ -114,6 +116,12 @@ run 2 "Codex patch: harness.conf edit denied"       "$(codex_patch '*** Update F
 run 2 "Codex bare patch: harness.conf edit denied"  "$(codex_patch_bare '*** Update File: scripts/harness.conf
 @@
 +x')"
+run 2 "Codex patch: dev-instance edit denied"       "$(codex_patch '*** Update File: scripts/dev-instance.sh
+@@
++x')"
+run 2 "Codex bare patch: project dev.sh edit denied" "$(codex_patch_bare '*** Update File: scripts/dev.sh
+@@
++x')"
 run 2 "Codex patch: local settings add denied"      "$(codex_patch '*** Add File: .claude/settings.local.json
 +{"disableAllHooks": true}')"
 run 2 "Codex bare patch: local settings add denied" "$(codex_patch_bare '*** Add File: .claude/settings.local.json
@@ -131,6 +139,12 @@ run 0 "Codex shell: sed on mechanism not scanned (documented limit)" "$(jq -cn '
 # envelope is only parsed when tool_name is apply_patch.
 run 0 "Codex shell: patch text in a heredoc not treated as a mechanism edit" "$(jq -cn --arg c "$(printf 'cat > demo.patch <<PATCH\n*** Begin Patch\n*** Update File: scripts/hooks/lib.sh\n@@\n+evil\n*** End Patch\nPATCH')" '{turn_id: "t1", tool_name: "shell", tool_use_id: "c1", tool_input: {command: $c}}')"
 run 0 "Codex patch: escape hatch allows mechanism edit" "$(codex_patch '*** Update File: scripts/hooks/lib.sh
+@@
++x')" "HARNESS_ALLOW_MECHANISM_EDITS=1"
+run 0 "Codex patch: escape hatch allows dev-instance edit" "$(codex_patch '*** Update File: scripts/dev-instance.sh
+@@
++x')" "HARNESS_ALLOW_MECHANISM_EDITS=1"
+run 0 "Codex bare patch: escape hatch allows project dev.sh edit" "$(codex_patch_bare '*** Update File: scripts/dev.sh
 @@
 +x')" "HARNESS_ALLOW_MECHANISM_EDITS=1"
 
@@ -184,6 +198,8 @@ run 0 "ordinary source file allowed"     "$(payload "$WORK/src/app.php")"
 run 0 "sibling name not protected"       "$(payload "$WORK/src/check-harness.sh.md")"
 run 0 "escape hatch allows mechanism edit" "$(payload "$WORK/scripts/hooks/lib.sh")" "HARNESS_ALLOW_MECHANISM_EDITS=1"
 run 0 "escape hatch allows harness.conf tailoring" "$(payload "$WORK/scripts/harness.conf")" "HARNESS_ALLOW_MECHANISM_EDITS=1"
+run 0 "escape hatch allows direct dev-instance edit" "$(payload "$WORK/scripts/dev-instance.sh")" "HARNESS_ALLOW_MECHANISM_EDITS=1"
+run 0 "escape hatch allows direct project dev.sh edit" "$(payload "$WORK/scripts/dev.sh")" "HARNESS_ALLOW_MECHANISM_EDITS=1"
 run 0 "bare command payload fails open"  "$(jq -cn '{tool_input: {command: "ls"}}')"
 run 0 "empty payload fails open"         '{}'
 
