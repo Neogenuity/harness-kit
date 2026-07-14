@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -36,7 +37,8 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler contract
         if self.path == "/health":
-            self._json(200, {"instance": self.server.instance, "status": "ready"})
+            status = "booting" if os.environ.get("HARNESS_FIXTURE_NEVER_READY") else "ready"
+            self._json(200, {"instance": self.server.instance, "status": status})
         elif self.path == "/data":
             self._json(200, self._data())
         elif self.path == "/":

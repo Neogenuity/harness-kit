@@ -138,8 +138,13 @@ wait_parallel_gates() {
 gate      "shellcheck" bash -c 'shellcheck -x --severity=warning \
     plugins/harness-kit/skills/harness-kit/templates/scripts/*.sh \
     plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/*.sh \
+    docs/evals/tasks/verify-live-runtime/*.sh \
+    docs/evals/tasks/verify-live-runtime/fixture/*.sh \
+    docs/evals/tasks/verify-live-runtime/reference/*.sh \
     scripts/*.sh scripts/hooks/*.sh'
 full_gate "manifests" bash scripts/check-packaging.sh
+# Application repos can opt into a serial live smoke gate at this point:
+# full_gate "smoke" bash scripts/dev.sh health
 # Every template regression script owns its scratch fixtures, so these are safe
 # to schedule independently. The long install suite no longer serializes the
 # eval, hook, and harness suites behind it.
@@ -153,6 +158,9 @@ done
 # check-harness.sh — would recurse). So the real bank is validated here, once,
 # with no model in the loop. Dogfood-only, same rationale as the dedup below.
 parallel_full_gate "evals" bash scripts/test-eval.sh
+# Root-only deterministic proof of the app runtime contract. Python 3 is a
+# harness-kit contributor prerequisite, not an installed-harness dependency.
+parallel_full_gate "runtime-fixture" bash docs/evals/tasks/verify-live-runtime/test-fixture.sh
 # HARNESS_NESTED_FIXTURE here skips check-harness.sh's re-run of test-install.sh
 # and test-check-harness.sh (each spins up fixtures / sub-checks and is already
 # run above on the byte-identical templates, so re-running the root copies is

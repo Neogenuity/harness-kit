@@ -61,6 +61,11 @@ everything else is the dogfood.
 - **A CI drift gate** — hand-edited stubs, stale syncs, dead doc links,
   non-executable hooks, failing hook tests, or un-pinned edits to mechanism
   files (manifest checksums) all fail the build.
+- **Conditional runtime legibility for applications** — app-shaped repos can
+  adopt a tailored, pinned `scripts/dev.sh` lifecycle plus a self-contained
+  live-verification skill. Every repo receives the worktree-aware
+  `scripts/dev-instance.sh` helper; libraries receive no placeholder runtime
+  contract.
 
 Everything is **vendored into the target repo**: nothing at runtime depends
 on the kit being installed, so teammates on any harness — or none — get

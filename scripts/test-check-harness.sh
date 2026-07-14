@@ -204,6 +204,25 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
     W=$(new_fixture)
     printf '# harness-kit 9.9.9\n%s  scripts/gone.sh # tailored\n' "$ZEROS" > "$W/scripts/.harness-manifest"
     assert_flags "manifest: missing tailored file is flagged too" "$W" "does not exist"
+
+    # Completeness explicitly includes the v0.15 helper and the optional,
+    # project-authored dev.sh policy. Removing either line while leaving the
+    # executable on disk must not silently exempt it from integrity checks.
+    W=$(new_fixture)
+    mkdir -p "$W/scripts/hooks"
+    printf '#!/usr/bin/env bash\necho h000000000000\n' > "$W/scripts/dev-instance.sh"
+    chmod +x "$W/scripts/dev-instance.sh"
+    printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n' \
+        "$(sha "$W/scripts/check-harness.sh")" > "$W/scripts/.harness-manifest"
+    assert_flags "manifest completeness: dev-instance helper missing-line is flagged" "$W" "dev-instance.sh' is present but not pinned"
+
+    W=$(new_fixture)
+    mkdir -p "$W/scripts/hooks"
+    printf '#!/usr/bin/env bash\necho project\n' > "$W/scripts/dev.sh"
+    chmod +x "$W/scripts/dev.sh"
+    printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n' \
+        "$(sha "$W/scripts/check-harness.sh")" > "$W/scripts/.harness-manifest"
+    assert_flags "manifest completeness: optional dev.sh missing-line is flagged" "$W" "dev.sh' is present but not pinned"
 fi
 
 # --- check #9: a missing manifest is an ERROR once the harness is adopted ---

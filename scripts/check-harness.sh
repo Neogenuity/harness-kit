@@ -712,6 +712,7 @@ if [ -f "$MANIFEST" ] && [ -d "$ROOT/scripts/hooks" ]; then
     for mech in "$ROOT"/scripts/hooks/* \
                 "$ROOT"/scripts/harness.conf "$ROOT"/scripts/check-harness.sh \
                 "$ROOT"/scripts/sync-agent-skills.sh "$ROOT"/scripts/install-lib.sh \
+                "$ROOT"/scripts/dev-instance.sh "$ROOT"/scripts/dev.sh \
                 "$ROOT"/scripts/eval-lib.sh "$ROOT"/scripts/eval.sh \
                 "$ROOT"/scripts/eval-harness.sh \
                 "$ROOT"/scripts/verify.sh "$ROOT"/scripts/test-*.sh; do

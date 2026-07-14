@@ -4,6 +4,10 @@ Thanks for looking under the hood. This repo runs the harness it ships, so
 contributing here *is* using the product — the guards and gates you hit are
 the ones users get.
 
+Contributors also need Python 3 for this repository's root-only live-runtime
+fixture. Python is not an installed-harness prerequisite: shipped harnesses
+continue to require only Bash, `jq`, Git, and a SHA-256 tool.
+
 ## Ground rules
 
 1. **`bash scripts/verify.sh` must pass** before any PR: shellcheck

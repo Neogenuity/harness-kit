@@ -41,11 +41,23 @@ chmod +x "$main/scripts/dev.sh" "$main/scripts/dev-instance.sh"
 git -C "$main" worktree add -q -b linked-fixture "$linked" || exit 1
 
 # The concurrency proof uses each worktree's DEFAULT helper candidate — no
-# override. Compute first so a hash collision fails explicitly instead of
-# making one `up` look flaky.
+# override. Finite hashing is not collision-proof, so if this randomly named
+# linked path lands on the main candidate, re-add the same commit at a new
+# physical path until the candidates separate. This preserves the assertion
+# without turning the documented collision caveat into a probabilistic CI
+# failure.
 port_a=$(cd "$main" && bash scripts/dev-instance.sh port 30000 20000 fixture) || exit 1
 port_b=$(cd "$linked" && bash scripts/dev-instance.sh port 30000 20000 fixture) || exit 1
-[ "$port_a" != "$port_b" ] || { echo "FAIL: linked worktrees derived the same helper candidate"; exit 1; }
+candidate_attempt=0
+while [ "$port_a" = "$port_b" ] && [ "$candidate_attempt" -lt 20 ]; do
+    git -C "$main" worktree remove --force "$linked" >/dev/null 2>&1 || exit 1
+    candidate_attempt=$((candidate_attempt + 1))
+    linked="$work/linked-retry-$candidate_attempt"
+    git -C "$main" worktree add -q --detach "$linked" HEAD || exit 1
+    port_b=$(cd "$linked" && bash scripts/dev-instance.sh port 30000 20000 fixture) || exit 1
+done
+[ "$port_a" != "$port_b" ] \
+    || { echo "FAIL: could not derive distinct candidates after 20 physical-path retries"; exit 1; }
 
 json_validate() {
     local file="$1" action="$2" status="$3" started="$4"
@@ -167,6 +179,38 @@ run_ok "$main" down "$work/a-down2.json" "$work/a-down2.err" || exit 1
 json_validate "$work/a-down2.json" down stopped false || exit 1
 run_ok "$linked" down "$work/b-down.json" "$work/b-down.err" || exit 1
 json_validate "$work/b-down.json" down stopped false || exit 1
+
+# A child that binds successfully but never reports ready must be terminated by
+# the failed `up`; its PID/port state may be removed only after it is gone.
+never_ready_port=$(python3 - <<'PY'
+import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1])
+s.close()
+PY
+)
+(cd "$main" && HARNESS_DEV_PORT="$never_ready_port" HARNESS_FIXTURE_NEVER_READY=1 \
+    bash scripts/dev.sh up) >"$work/never-ready.json" 2>"$work/never-ready.err"
+never_ready_rc=$?
+[ "$never_ready_rc" -ne 0 ] || { echo "FAIL: permanently unready child reported success"; exit 1; }
+json_validate "$work/never-ready.json" up error false || exit 1
+(cd "$main" && bash scripts/dev.sh health) >"$work/never-ready-health.json" 2>"$work/never-ready-health.err"
+never_ready_health_rc=$?
+[ "$never_ready_health_rc" -ne 0 ] || { echo "FAIL: failed readiness left health ready"; exit 1; }
+json_validate "$work/never-ready-health.json" health stopped false || exit 1
+python3 - "$never_ready_port" <<'PY' || { echo "FAIL: failed readiness left a listener behind"; exit 1; }
+import socket, sys
+s = socket.socket()
+s.settimeout(0.2)
+try:
+    s.connect(("127.0.0.1", int(sys.argv[1])))
+except OSError:
+    raise SystemExit(0)
+finally:
+    s.close()
+raise SystemExit(1)
+PY
 
 # A foreign listener on an explicit override must produce one error object;
 # dev.sh must neither reuse it nor kill it during its failed launch cleanup.

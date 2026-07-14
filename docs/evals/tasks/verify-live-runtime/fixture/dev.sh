@@ -112,7 +112,8 @@ case "$action" in
         nohup "$PYTHON_BIN" "$ROOT/live_app/app.py" \
             --port "$port" --instance "$INSTANCE" --data "$DATA_FILE" --log "$LOG_FILE" \
             >> "$LOG_FILE" 2>&1 &
-        printf '%s\n' "$!" > "$PID_FILE"
+        launched_pid=$!
+        printf '%s\n' "$launched_pid" > "$PID_FILE"
         i=0
         while [ "$i" -lt 50 ]; do
             if ready; then
@@ -123,6 +124,12 @@ case "$action" in
             sleep 0.1
             i=$((i + 1))
         done
+        # This PID is the child launched by this invocation, so it is safe to
+        # terminate directly. Never erase the only ownership state while an
+        # unready child is still alive: that would orphan the listener and make
+        # later health/down calls falsely report stopped.
+        kill "$launched_pid" 2>/dev/null || true
+        wait "$launched_pid" 2>/dev/null || true
         rm -f "$PID_FILE" "$PORT_FILE"
         emit up error "" false "instance failed to become ready; inspect logs"
         exit 1
