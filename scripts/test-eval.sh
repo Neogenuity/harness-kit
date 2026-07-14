@@ -246,7 +246,7 @@ UEOF
 fi
 
 # ---- bank-wide metadata enum validation (offline, cheap) -------------------
-# Every task's suite/polarity/provider/grade metadata must be one of the
+# Every task's suite/polarity/provider/grade/network metadata must be one of the
 # values eval.sh enforces at runtime — a typo here (e.g. "suite: regresion")
 # would otherwise silently bypass scorer behavior instead of failing loudly.
 # Bank-independent (an empty bank has nothing to iterate and trivially passes),
@@ -263,6 +263,7 @@ else
         polarity="$(eval_task_meta "$td" polarity)"; polarity="${polarity:-positive}"
         grade="$(eval_task_meta "$td" grade)"
         prov="$(eval_task_meta "$td" provider)"
+        network="$(eval_task_meta "$td" network)"; network="${network:-none}"
         case "$suite" in
             capability|regression) ;;
             *) bad "$slug: invalid suite metadata '$suite'"; meta_fails=$((meta_fails+1)) ;;
@@ -278,6 +279,10 @@ else
         case "$prov" in
             ''|any|claude|codex) ;;
             *) bad "$slug: invalid provider metadata '$prov'"; meta_fails=$((meta_fails+1)) ;;
+        esac
+        case "$network" in
+            none|required) ;;
+            *) bad "$slug: invalid network metadata '$network'"; meta_fails=$((meta_fails+1)) ;;
         esac
     done
     [ "$meta_fails" -eq 0 ] && ok "bank metadata enums ($(printf '%s\n' "$BANK_TASKS" | wc -l | tr -d ' ') task(s))"
@@ -713,6 +718,42 @@ TASKEOF
     printf '#!/usr/bin/env bash\nexit 0\n' > "$R/tasks/bad-enum/check.sh"
     printf '#!/usr/bin/env bash\ntrue\n' > "$R/tasks/bad-enum/reference/apply.sh"
 
+    # bad-network: network metadata is deliberately outside the closed enum.
+    mkdir -p "$R/tasks/bad-network/reference"
+    cat > "$R/tasks/bad-network/TASK.md" <<'TASKEOF'
+# bad-network
+
+- suite: capability
+- polarity: positive
+- provider: any
+- grade: check
+- network: internet
+
+## Prompt
+
+Do nothing; this task's network metadata is deliberately invalid.
+TASKEOF
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$R/tasks/bad-network/check.sh"
+    printf '#!/usr/bin/env bash\ntrue\n' > "$R/tasks/bad-network/reference/apply.sh"
+
+    # network-required: exercises the task-scoped Codex network override.
+    mkdir -p "$R/tasks/network-required/reference"
+    cat > "$R/tasks/network-required/TASK.md" <<'TASKEOF'
+# network-required
+
+- suite: capability
+- polarity: positive
+- provider: codex
+- grade: check
+- network: required
+
+## Prompt
+
+Do nothing; this task exists only to inspect the Codex invocation.
+TASKEOF
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$R/tasks/network-required/check.sh"
+    printf '#!/usr/bin/env bash\ntrue\n' > "$R/tasks/network-required/reference/apply.sh"
+
     # pinned: pinned to the codex provider.
     mkdir -p "$R/tasks/pinned/reference"
     cat > "$R/tasks/pinned/TASK.md" <<'TASKEOF'
@@ -813,6 +854,18 @@ TASKEOF
         sed 's/^/    /' "$R_BASE/b.err"
     fi
 
+    rd_b2="$R_BASE/results-b2"
+    bash "$R/scripts/eval.sh" bad-network --provider mock --trials 1 \
+        --tasks-dir "$R/tasks" --results-dir "$rd_b2" --run-id bnetwork \
+        >"$R_BASE/b2.out" 2>"$R_BASE/b2.err"
+    rc=$?
+    if [ "$rc" -ne 0 ] && grep -q "invalid network metadata 'internet'" "$R_BASE/b2.err"; then
+        ok "runner guards: invalid network metadata is rejected by eval.sh itself"
+    else
+        bad "runner guards: bad-network task should be rejected by eval.sh and name the bad value (rc=$rc)"
+        sed 's/^/    /' "$R_BASE/b2.err"
+    fi
+
     # (c) provider gate + mock exemption. The claude-pinned-refusal half uses
     # a shim `claude` on PATH that would prove it was invoked (prints
     # SHIM-INVOKED and exits 7) — if the gate ever regresses and lets the
@@ -849,6 +902,56 @@ TASKEOF
     else
         bad "runner guards: provider gate should refuse and never reach the shimmed CLI (rc=$rc)"
         sed 's/^/    /' "$R_BASE/c-claude.err"
+    fi
+
+    # (c2) Codex network permission is opt-in per task. A shim captures the
+    # exact argv without invoking a model: required gets the config override,
+    # while the default task does not.
+    cat > "$shimdir/codex" <<'TASKEOF'
+#!/bin/sh
+printf '%s\n' "$@" > "$CODEX_SHIM_ARGS"
+last_message=""
+want_last=0
+for arg in "$@"; do
+    if [ "$want_last" -eq 1 ]; then
+        last_message="$arg"
+        want_last=0
+    elif [ "$arg" = "--output-last-message" ]; then
+        want_last=1
+    fi
+done
+[ -z "$last_message" ] || printf 'shim complete\n' > "$last_message"
+printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1}}'
+exit 0
+TASKEOF
+    chmod +x "$shimdir/codex"
+    rd_c3="$R_BASE/results-c3"
+    CODEX_SHIM_ARGS="$R_BASE/codex-required.args" PATH="$shimdir:$PATH" \
+        bash "$R/scripts/eval.sh" network-required --provider codex --model shim --trials 1 \
+        --tasks-dir "$R/tasks" --results-dir "$rd_c3" --run-id network-required \
+        >"$R_BASE/codex-required.out" 2>"$R_BASE/codex-required.err"
+    rc3=$?
+    if [ "$rc3" -eq 0 ] \
+            && grep -Fxq -- '-c' "$R_BASE/codex-required.args" \
+            && grep -Fxq -- 'sandbox_workspace_write.network_access=true' "$R_BASE/codex-required.args"; then
+        ok "runner guards: network-required task grants the Codex sandbox network access"
+    else
+        bad "runner guards: network-required task should add only the Codex network config (rc=$rc3)"
+        sed 's/^/    /' "$R_BASE/codex-required.err"
+    fi
+
+    rd_c4="$R_BASE/results-c4"
+    CODEX_SHIM_ARGS="$R_BASE/codex-default.args" PATH="$shimdir:$PATH" \
+        bash "$R/scripts/eval.sh" ok-task --provider codex --model shim --trials 1 \
+        --tasks-dir "$R/tasks" --results-dir "$rd_c4" --run-id network-default \
+        >"$R_BASE/codex-default.out" 2>"$R_BASE/codex-default.err"
+    rc4=$?
+    if [ "$rc4" -eq 0 ] \
+            && ! grep -Fxq -- 'sandbox_workspace_write.network_access=true' "$R_BASE/codex-default.args"; then
+        ok "runner guards: tasks default to Codex network disabled"
+    else
+        bad "runner guards: task without network metadata must not get the Codex network config (rc=$rc4)"
+        sed 's/^/    /' "$R_BASE/codex-default.err"
     fi
 
     # (d) results-dir collision refusal: same --run-id, same --results-dir,

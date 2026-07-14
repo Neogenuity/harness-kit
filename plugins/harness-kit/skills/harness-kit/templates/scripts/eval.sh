@@ -14,8 +14,11 @@
 #   Codex exec:           codex exec <prompt> --model <m> --cd <ws> \
 #                             --sandbox workspace-write --json \
 #                             --output-last-message <file>
+#                         Tasks declaring `network: required` additionally get
+#                             -c sandbox_workspace_write.network_access=true
 # The workspace is a throwaway clone, which is why the sandbox-bypass flags are
-# acceptable here and only here.
+# acceptable here and only here. Network access is opt-in per task; the default
+# remains the workspace-write sandbox with network disabled.
 #
 #   bash scripts/eval.sh <task-slug> [options]
 #     --trials N        independent trials (default 3)
@@ -134,6 +137,7 @@ SUITE="$(eval_task_meta "$TASK_DIR" suite)"; SUITE="${SUITE:-capability}"
 POLARITY="$(eval_task_meta "$TASK_DIR" polarity)"; POLARITY="${POLARITY:-positive}"
 GRADE_META="$(eval_task_meta "$TASK_DIR" grade)"
 TASK_PROVIDER="$(eval_task_meta "$TASK_DIR" provider)"
+TASK_NETWORK="$(eval_task_meta "$TASK_DIR" network)"; TASK_NETWORK="${TASK_NETWORK:-none}"
 
 # Metadata validation: a typo here would otherwise silently bypass scorer
 # behavior (e.g. "suite: regresion" quietly scored as capability) instead of
@@ -153,6 +157,10 @@ esac
 case "$TASK_PROVIDER" in
     ''|any|claude|codex) ;;
     *) die "task $TASK: invalid provider metadata '$TASK_PROVIDER' (want any|claude|codex)" ;;
+esac
+case "$TASK_NETWORK" in
+    none|required) ;;
+    *) die "task $TASK: invalid network metadata '$TASK_NETWORK' (want none|required)" ;;
 esac
 
 # Provider gate: a task pinned to one provider (its prompt or grader assumes
@@ -230,10 +238,19 @@ run_agent() {
                 _ "$ws" "$prompt" "$MODEL"
             ;;
         codex)
-            _eval_capped "$td/transcript.jsonl" "$td/agent.stderr" \
-                codex exec "$prompt" --model "$MODEL" --cd "$ws" \
-                    --sandbox workspace-write --skip-git-repo-check --json \
-                    --output-last-message "$td/last-message.txt"
+            if [ "$TASK_NETWORK" = required ]; then
+                _eval_capped "$td/transcript.jsonl" "$td/agent.stderr" \
+                    codex exec "$prompt" --model "$MODEL" --cd "$ws" \
+                        --sandbox workspace-write \
+                        -c sandbox_workspace_write.network_access=true \
+                        --skip-git-repo-check --json \
+                        --output-last-message "$td/last-message.txt"
+            else
+                _eval_capped "$td/transcript.jsonl" "$td/agent.stderr" \
+                    codex exec "$prompt" --model "$MODEL" --cd "$ws" \
+                        --sandbox workspace-write --skip-git-repo-check --json \
+                        --output-last-message "$td/last-message.txt"
+            fi
             ;;
         mock)
             # No model: the "agent" is the reference solution. Proves the whole
@@ -246,7 +263,7 @@ run_agent() {
 PROMPT="$(eval_task_prompt "$TASK_DIR")"
 [ -n "$PROMPT" ] || die "task $TASK has an empty ## Prompt section"
 
-echo "eval: $TASK  provider=$PROVIDER  model=$MODEL  variant=$VARIANT  suite=$SUITE  polarity=$POLARITY  trials=$TRIALS"
+echo "eval: $TASK  provider=$PROVIDER  model=$MODEL  variant=$VARIANT  suite=$SUITE  polarity=$POLARITY  network=$TASK_NETWORK  trials=$TRIALS"
 echo "run:  $OUT"
 
 passes=0

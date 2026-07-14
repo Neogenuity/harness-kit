@@ -4,6 +4,7 @@
 - polarity: positive
 - provider: any
 - grade: check
+- network: required
 
 ## Prompt
 

@@ -21,7 +21,7 @@ docs/evals/
   README.md              # this file
   baselines.json         # recorded pass@k / pass^k per task+provider+model
   tasks/<slug>/
-    TASK.md              # prompt + metadata (suite, polarity, provider, grade)
+    TASK.md              # prompt + metadata (suite, polarity, provider, grade, network)
     setup.sh             # optional: seed workspace state before the agent runs
     check.sh             # REQUIRED grader: post-agent workspace, exit 0/1/3 (see below)
     reference/
@@ -39,6 +39,7 @@ docs/evals/
 - polarity: positive | negative
 - provider: any | claude | codex        (default any)
 - grade: check | check+verify           (default check)
+- network: none | required              (default none)
 
 ## Prompt
 
@@ -69,11 +70,18 @@ this prose documents it>
   message — except `mock`, which is exempt so a provider-pinned task still
   gets plumbing/grader-validity coverage without the pinned CLI installed.
   `eval.sh` also validates every metadata value against its enum (suite,
-  polarity, provider, grade) before a run starts, dying and naming the
+  polarity, provider, grade, network) before a run starts, dying and naming the
   offending value on a typo.
 - **grade** — `check` runs only `check.sh`; `check+verify` additionally runs the
   workspace's `scripts/verify.sh`. Most tasks put the exact subset they need
   inside `check.sh` (faster than the full gate).
+- **network** — declares whether the task needs provider network access, such
+  as binding a localhost HTTP server (default `none`). For Codex,
+  `required` adds the task-scoped
+  `sandbox_workspace_write.network_access=true` config override; tasks that do
+  not opt in retain the network-disabled workspace-write sandbox. Because the
+  override may permit more than loopback traffic, tasks must remain
+  self-contained and must not depend on external services.
 
 ## Acceptance criteria are executable and agent-independent
 
