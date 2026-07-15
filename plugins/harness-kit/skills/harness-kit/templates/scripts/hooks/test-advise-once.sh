@@ -29,6 +29,7 @@ export HARNESS_LOG=0
 
 # Fixture hook: always warns, so every case exercises the protocol.
 cp "$LIB" "$WORK/lib.sh"
+cp "$(dirname "$LIB")/../log-lib.sh" "$WORK/log-lib.sh"
 cat > "$WORK/fixture-hook.sh" <<'EOF'
 #!/usr/bin/env bash
 set -uo pipefail
@@ -162,7 +163,8 @@ fi
 # --- observability: an advisory appends one valid JSON line ---
 LOG="$WORK/log.jsonl"
 printf '%s' '{"stop_hook_active": false}' | env HARNESS_LOG=1 HARNESS_LOG_FILE="$LOG" "$HOOK" >/dev/null 2>&1
-if [ -f "$LOG" ] && jq -e 'select(.event == "advise")' "$LOG" >/dev/null 2>&1; then
+if [ -f "$LOG" ] && jq -e 'select(.version == 2 and .event == "advise"
+        and keys == ["context","data","detail","event","file","hook","ts","version"])' "$LOG" >/dev/null 2>&1; then
     echo "ok:   advisory appends a valid JSON log line"
 else
     echo "FAIL: advisory did not append a valid JSON log line"

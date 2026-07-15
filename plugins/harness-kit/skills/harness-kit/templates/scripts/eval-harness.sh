@@ -34,6 +34,8 @@
 #   bash scripts/eval-harness.sh --update-baseline   # record current as the new baseline
 #     --results-dir DIR   default .harness/eval-results
 #     --baseline FILE     default docs/evals/baselines.json
+#     --format table|json default table; JSON is the machine-readable scoring
+#                         view consumed by audit-log.sh
 #     --no-fail           report regressions/violations but exit 0 (for dashboards)
 #     --expected-trials N (--update-baseline only, default 3) every INCOMING
 #                         cell (this run's results) must have exactly N
@@ -56,12 +58,13 @@ cd "$ROOT" || exit 1
 die() { echo "eval-harness.sh: $*" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || die "jq is required."
 
-RESULTS_DIR="$EVAL_RESULTS_DIR_DEFAULT"; BASELINE="$EVAL_BASELINE_DEFAULT"
+RESULTS_DIR="$EVAL_RESULTS_DIR_DEFAULT"; BASELINE="$EVAL_BASELINE_DEFAULT"; FORMAT=table
 UPDATE=0; FAIL_ON_REGRESSION=1; EXPECTED_TRIALS=3
 while [ $# -gt 0 ]; do
     case "$1" in
         --results-dir) RESULTS_DIR="$2"; shift 2 ;;
         --baseline) BASELINE="$2"; shift 2 ;;
+        --format) FORMAT="$2"; shift 2 ;;
         --update-baseline) UPDATE=1; shift ;;
         --expected-trials) EXPECTED_TRIALS="$2"; shift 2 ;;
         --no-fail) FAIL_ON_REGRESSION=0; shift ;;
@@ -70,6 +73,8 @@ while [ $# -gt 0 ]; do
     esac
 done
 case "$EXPECTED_TRIALS" in ''|*[!0-9]*) die "--expected-trials must be a non-negative integer" ;; esac
+case "$FORMAT" in table|json) ;; *) die "--format must be table or json" ;; esac
+[ "$UPDATE" -eq 0 ] || [ "$FORMAT" = table ] || die "--format json is scoring-only; do not combine it with --update-baseline"
 
 [ -d "$RESULTS_DIR" ] || die "no results dir at $RESULTS_DIR — run scripts/eval.sh first"
 # -exec cat {} + streams the files by argv (no word-splitting on paths with
@@ -253,66 +258,79 @@ if [ "$UPDATE" -eq 1 ]; then
     exit 0
 fi
 
-base='{}'; [ -f "$BASELINE" ] && base=$(cat "$BASELINE")
-printf '%-26s %-8s %-16s %-18s %-6s %-8s %-8s %-7s %s\n' \
-    TASK SUITE MODEL VARIANT PASS "pass@k" "pass^k" RATE "vs baseline"
-regressions=0
-violations=0
-while IFS= read -r row; do
-    [ -n "$row" ] || continue
-    task=$(printf '%s' "$row"   | jq -r '.task')
-    suite=$(printf '%s' "$row"  | jq -r '.suite')
-    prov=$(printf '%s' "$row"   | jq -r '.provider')
-    model=$(printf '%s' "$row"  | jq -r '.model')
-    variant=$(printf '%s' "$row" | jq -r '.variant // "bare"')
-    trials=$(printf '%s' "$row" | jq -r '.trials')
-    passes=$(printf '%s' "$row" | jq -r '.passes')
-    phk=$(printf '%s' "$row"    | jq -r '.pass_hat_k')
-    pk=$(printf '%s' "$row"     | jq -r '.pass_at_k')
-    rate=$(printf '%s' "$row"   | jq -r '.pass_rate')
-    viol=$(printf '%s' "$row"   | jq -r '.violations // 0')
-    # Same conditional key shape as the --update-baseline reducer: "bare"
-    # looks up the plain provider/model cell every existing baseline uses;
-    # a non-bare variant looks up its own distinct provider/model/variant cell.
-    if [ "$variant" = bare ]; then key="$prov/$model"; else key="$prov/$model/$variant"; fi
-    brate=$(printf '%s' "$base" | jq -r --arg t "$task" --arg k "$key" \
-        '.tasks[$t].runs[$k].pass_rate // "—"')
-    note="baseline $brate"
-    if [ "$brate" != "—" ]; then
-        cmp=$(awk -v a="$rate" -v b="$brate" 'BEGIN{ if(a<b)print "down"; else if(a>b)print "up"; else print "same"}')
-        case "$cmp" in
-            down) note="DOWN from $brate";;
-            up)   note="up from $brate";;
-            same) note="= $brate";;
-        esac
-    fi
-    # Regression-suite tasks carry the absolute pass^k=1 invariant — any run
-    # below that is a hard failure, independent of the baseline comparison.
-    flag=""
-    if [ "$suite" = regression ] && [ "$phk" != 1 ]; then
-        flag=" ** REGRESSION"; regressions=$((regressions+1))
-    fi
-    # A negative_violation outcome means check.sh caught a forbidden shortcut
-    # (exit 3) — a hard failure regardless of suite; capability-suite's
-    # "informational" latitude never covers a caught reward hack.
-    if [ "${viol:-0}" -gt 0 ] 2>/dev/null; then
-        flag="$flag ** NEGATIVE VIOLATION"; violations=$((violations+1))
-    fi
-    printf '%-26s %-8s %-16s %-18s %-6s %-8s %-8s %-7s %s%s\n' \
-        "$task" "$suite" "$model" "$variant" "$passes/$trials" "$pk" "$phk" "$rate" "$note" "$flag"
-done <<EOF
-$AGG
-EOF
-
-echo "----"
-fail_run=0
-if [ "$regressions" -gt 0 ]; then
-    echo "$regressions regression-suite task(s) below pass^k=1"
-    fail_run=1
+base='{}'
+if [ -f "$BASELINE" ]; then
+    jq empty "$BASELINE" >/dev/null 2>&1 || die "baseline at $BASELINE is not valid JSON"
+    base=$(cat "$BASELINE")
 fi
-if [ "$violations" -gt 0 ]; then
+
+# One scored representation feeds both formats and the exit decision. The JSON
+# mode is therefore not a second scorer and cannot drift from the table.
+SCORED=$(printf '%s\n' "$AGG" | jq -c -s --argjson base "$base" '
+    map(. as $r
+        | (if (($r.variant // "bare") == "bare") then ($r.provider + "/" + $r.model)
+           else ($r.provider + "/" + $r.model + "/" + ($r.variant // "bare")) end) as $key
+        | ($base.tasks[$r.task].runs[$key].pass_rate // null) as $baseline
+        | . + {
+            baseline_rate:$baseline,
+            trend:(if $baseline == null then "unbaselined"
+                   elif .pass_rate < $baseline then "down"
+                   elif .pass_rate > $baseline then "up" else "same" end),
+            regression:(.suite == "regression" and .pass_hat_k != 1),
+            negative_violation:((.violations // 0) > 0)
+          })
+    | sort_by([.task,.provider,.model,.variant])') \
+    || die "failed to score eval aggregate"
+regressions=$(printf '%s' "$SCORED" | jq '[.[] | select(.regression)] | length')
+violations=$(printf '%s' "$SCORED" | jq '[.[] | select(.negative_violation)] | length')
+fail_run=0
+[ "$regressions" -gt 0 ] && fail_run=1
+[ "$violations" -gt 0 ] && fail_run=1
+
+if [ "$FORMAT" = json ]; then
+    printf '%s' "$SCORED" | jq -S -c \
+        --arg status "$([ "$fail_run" -eq 1 ] && printf fail || printf pass)" \
+        --argjson regressions "$regressions" --argjson violations "$violations" \
+        '{version:1,status:$status,regressions:$regressions,violations:$violations,cells:.}'
+else
+    printf '%-26s %-8s %-16s %-18s %-6s %-8s %-8s %-7s %s\n' \
+        TASK SUITE MODEL VARIANT PASS "pass@k" "pass^k" RATE "vs baseline"
+    while IFS= read -r row; do
+        [ -n "$row" ] || continue
+        task=$(printf '%s' "$row" | jq -r .task)
+        suite=$(printf '%s' "$row" | jq -r .suite)
+        model=$(printf '%s' "$row" | jq -r .model)
+        variant=$(printf '%s' "$row" | jq -r .variant)
+        trials=$(printf '%s' "$row" | jq -r .trials)
+        passes=$(printf '%s' "$row" | jq -r .passes)
+        pk=$(printf '%s' "$row" | jq -r .pass_at_k)
+        phk=$(printf '%s' "$row" | jq -r .pass_hat_k)
+        rate=$(printf '%s' "$row" | jq -r .pass_rate)
+        brate=$(printf '%s' "$row" | jq -r '.baseline_rate // "—"')
+        trend=$(printf '%s' "$row" | jq -r .trend)
+        case "$trend" in
+            down) note="DOWN from $brate" ;;
+            up) note="up from $brate" ;;
+            same) note="= $brate" ;;
+            *) note="baseline —" ;;
+        esac
+        flag=""
+        [ "$(printf '%s' "$row" | jq -r .regression)" = true ] && flag=" ** REGRESSION"
+        [ "$(printf '%s' "$row" | jq -r .negative_violation)" = true ] \
+            && flag="$flag ** NEGATIVE VIOLATION"
+        printf '%-26s %-8s %-16s %-18s %-6s %-8s %-8s %-7s %s%s\n' \
+            "$task" "$suite" "$model" "$variant" "$passes/$trials" "$pk" "$phk" "$rate" "$note" "$flag"
+    done <<EOF
+$(printf '%s' "$SCORED" | jq -c '.[]')
+EOF
+fi
+
+if [ "$FORMAT" = table ]; then echo "----"; fi
+if [ "$regressions" -gt 0 ] && [ "$FORMAT" = table ]; then
+    echo "$regressions regression-suite task(s) below pass^k=1"
+fi
+if [ "$violations" -gt 0 ] && [ "$FORMAT" = table ]; then
     echo "$violations task(s) with a negative_violation outcome (forbidden shortcut caught)"
-    fail_run=1
 fi
 if [ "$fail_run" -eq 1 ]; then
     if [ "$FAIL_ON_REGRESSION" -eq 1 ]; then
@@ -321,10 +339,10 @@ if [ "$fail_run" -eq 1 ]; then
     # --no-fail keeps the exit code 0, but printing a bare "ok" after
     # regression/violation lines above would directly contradict them —
     # say plainly that something failed and was reported, not swallowed.
-    echo "not ok (reported above; --no-fail)"
+    [ "$FORMAT" = table ] && echo "not ok (reported above; --no-fail)"
     exit 0
 fi
-echo "ok"
+[ "$FORMAT" = table ] && echo "ok"
 exit 0
 
 # --- CI (scheduled, NOT per-PR) -----------------------------------------------

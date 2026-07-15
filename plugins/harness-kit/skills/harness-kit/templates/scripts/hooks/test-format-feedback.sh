@@ -21,11 +21,15 @@ trap 'rm -rf "$WORK"' EXIT
 
 # Fixture hook: always has findings, so every case exercises the protocol.
 cp "$HOOKS_DIR/lib.sh" "$WORK/lib.sh"
+cp "$HOOKS_DIR/../log-lib.sh" "$WORK/log-lib.sh"
+export HARNESS_LOG=1
+export HARNESS_LOG_FILE="$WORK/log.jsonl"
 cat > "$WORK/fixture-hook.sh" <<'EOF'
 #!/usr/bin/env bash
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 hook_read_input
+hook_log lint-findings x.py "TEST DIAGNOSTIC SENTINEL-RAW-MUST-NOT-PERSIST"
 hook_feedback "TEST DIAGNOSTIC"
 EOF
 chmod +x "$WORK/fixture-hook.sh"
@@ -61,7 +65,7 @@ run() {
     echo "ok:   $desc"
 }
 
-run "Claude nested layout: stderr + exit 2" '{"tool_input":{"file_path":"x.py"}}' 2 err
+run "Claude nested layout: stderr + exit 2" '{"session_id":7,"conversation_id":"conversation-fallback","tool_input":{"file_path":"x.py"}}' 2 err
 run "Codex command layout: stderr + exit 2" "$(jq -cn --arg c "apply_patch <<'EOF'
 *** Begin Patch
 *** Update File: x.py
@@ -87,6 +91,20 @@ elif printf '%s' "$cursor_out" | grep -q 'TEST DIAGNOSTIC'; then
     fails=$((fails + 1))
 else
     echo "ok:   Cursor layout — degrades to documented no-op JSON ({}), finding stays in the log only"
+fi
+
+if [ -f "$HARNESS_LOG_FILE" ] && jq -e -s '
+    length >= 1 and all(.[]; .version == 2 and .event == "lint-findings"
+      and keys == ["context","data","detail","event","file","hook","ts","version"]
+      and (.detail | fromjson) == {category:"lint-findings",count:1})
+      and (tostring | contains("SENTINEL-RAW-MUST-NOT-PERSIST") | not)
+      and any(.[]; .context.session_id == "conversation-fallback"
+        and .context.provenance.session_id == "payload")' \
+      "$HARNESS_LOG_FILE" >/dev/null 2>&1; then
+    echo "ok:   lint findings use the exact v2 envelope"
+else
+    echo "FAIL: lint findings did not use the exact v2 envelope"
+    fails=$((fails + 1))
 fi
 
 # format.sh itself must stay silent and fail open when no lint arm matches.

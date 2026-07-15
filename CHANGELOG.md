@@ -3,6 +3,69 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.17.0 — 2026-07-15
+
+Local outcome telemetry and documentation gardening — the harness now records
+verification outcomes without changing gate behavior, reduces mixed historical
+and current events into deterministic local trends, and offers an offline,
+read-only documentation health workflow. Terra implemented the portable
+mechanism and fixtures, Luna implemented the schema/workflow content, and the
+two streams received reciprocal and lead review through dogfood integration.
+
+### Outcome stream and audit
+
+- **Exact mixed-version contract:** new producers use the eight-key v2 envelope
+  `{version,ts,hook,event,file,detail,context,data}` while code-reviewer findings
+  remain exact five-key v1 records. Optional run, session, provider, and plan
+  attribution is accepted only with explicit provenance; absent context stays
+  unknown rather than being inferred from repository state.
+- **Fail-open gate telemetry:** serial and parallel `verify.sh` gates record
+  label, fast/full mode, pass/fail, exit code, and portable integer duration.
+  Parallel children remain concurrent while the parent emits results in
+  declaration order. Skipped fast-mode gates are not fabricated, and missing
+  logging dependencies or unwritable destinations never change a gate result.
+- **Deterministic `audit-log.sh`:** the reducer accepts interleaved exact v1/v2
+  rows, counts malformed and unsupported rows, summarizes daily gate failures,
+  explicit-session retries, repeat denials, and review findings, joins exact
+  `Harness-Session-Id:` trailers to local commits, and consumes the existing
+  eval scorer's new JSON view. Plan-cycle timing and PR enrichment report N/A
+  until a reliable versioned producer exists.
+- **Privacy floor:** durable lint events retain only a bounded category/count,
+  never raw diagnostics. The local git-ignored stream installs no collector and
+  does not ingest provider telemetry, prompts, commands, tool output, secrets,
+  endpoints, authorization data, or cost exports.
+
+### Documentation gardening
+
+- **Canonical `doc-garden` skill and offline scanner:** `doc-garden.sh` checks
+  tracked Markdown across the repository for broken local links, missing
+  anchors, references to deleted paths, and stale or malformed verification
+  stamps while ignoring CommonMark fences and same-line
+  `<!-- doc-garden: planned -->` exceptions. Reports are stably ordered,
+  read-only, and advisory.
+- The skill reuses existing harness checks, de-duplicates overlapping results,
+  keeps external URL probing separately authorized, and requires distinct
+  authorization for edits, commits, pushes, or pull requests. Provider-neutral
+  scheduled-run guidance ships without a daemon or unstamped platform claim.
+- Root dogfood adopts the new convention and skill and regenerates Claude,
+  Cursor, OpenCode, and `.agents` skill stubs. Deterministic scanner fixtures
+  proved the authorization and detection boundaries, so no paid behavioral run
+  was required.
+
+### Migration
+
+- Update mode normally adds `log-lib.sh`, `audit-log.sh`, `doc-garden.sh`, and
+  their tests, and replaces manifest-matching mechanism files including
+  `hooks/lib.sh`; locally changed or tailored mechanism remains diff-only.
+- `verify.sh`, `harness.conf`, `hooks/format.sh`, secret/project guards, provider
+  configs, and application launchers remain policy and are always reviewed as
+  diffs. Gate instrumentation is therefore opt-in for an existing tailored
+  `verify.sh`, while mixed-log reduction remains usable without it.
+- The telemetry convention, `doc-garden` skill, AGENTS links, and generated
+  provider stubs are content adoption: update proposes them but never silently
+  creates or overwrites them. Existing v1 logs are read in place and are never
+  rewritten.
+
 ## 0.16.0 — 2026-07-14
 
 Declared execution profiles — repositories can explicitly adopt and verify the
@@ -501,7 +564,7 @@ fixture-covered).
   hardening from the template if you've tailored them.
 - **Plans.** The governance plan's advanced half (per-provider sandbox
   profiles, devcontainer, audit-log export) split into its own queued plan
-  ([docs/plans/active/v0.16.0-execution-sandbox-profiles.md](docs/plans/active/v0.16.0-execution-sandbox-profiles.md));
+  ([docs/plans/completed/v0.16.0-execution-sandbox-profiles.md](docs/plans/completed/v0.16.0-execution-sandbox-profiles.md));
   completed plan at
   [docs/plans/completed/v0.10.0-execution-governance-baseline.md](docs/plans/completed/v0.10.0-execution-governance-baseline.md).
 
@@ -544,7 +607,7 @@ task bank tracked nowhere the plans machinery could see.
   tracks this work; two new queued plans,
   [docs/plans/eval-discrimination.md](docs/plans/completed/v0.12.0-eval-discrimination.md)
   (a task bank that actually discriminates model behavior) and
-  [docs/plans/launch-readiness.md](docs/plans/launch-readiness.md) (the
+  [docs/plans/active/launch-readiness.md](docs/plans/active/launch-readiness.md) (the
   launch, previously tracked only as README checkboxes), join the roadmap;
   `docs/plans/active/` is now tracked (a fresh clone previously lost the
   directory). `.github/workflows/ci.yml` now runs `bash scripts/verify.sh`

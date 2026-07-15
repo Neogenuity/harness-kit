@@ -28,6 +28,7 @@ two architectural facts an agent must know before touching anything}}.
      at least one provider in EXECUTION_PROFILE_PROVIDERS or separately adopts
      a devcontainer. Devcontainer-only adoption adds no provider declaration. -->
 - [docs/conventions/execution-profiles.md](docs/conventions/execution-profiles.md) — exact adopted provider sandbox/permission floors, local-runtime network and lifecycle limits, admin-only controls, devcontainer authoring contract, and separate provider-observability map
+- [docs/conventions/outcome-telemetry.md](docs/conventions/outcome-telemetry.md) — mixed v1/v2 local event schema, explicit attribution/privacy rules, deterministic gate/retry trends, and provider-telemetry separation
 <!-- APPLICATION REPOS ONLY: keep this link only when init authored and pinned
      scripts/dev.sh; non-app repos omit the convention, skill, and both links. -->
 - [docs/conventions/dev-runtime.md](docs/conventions/dev-runtime.md) — the worktree-scoped `scripts/dev.sh up|health|seed|down` JSON contract, deterministic seed, and log/trace locations
@@ -38,6 +39,8 @@ two architectural facts an agent must know before touching anything}}.
 <!-- one line per canonical skill -->
 <!-- APPLICATION REPOS ONLY: paired with the dev-runtime convention above. -->
 - [docs/skills/verify-live/SKILL.md](docs/skills/verify-live/SKILL.md) — reproduce and verify behavior against the seeded running app, targeted logs/traces, and an existing browser surface when available
+<!-- OPTIONAL DOC GARDEN: keep only after explicit adoption; then sync stubs. -->
+- [docs/skills/doc-garden/SKILL.md](docs/skills/doc-garden/SKILL.md) — audit local links, anchors, path references, and verification-date freshness offline; fixes and publication require separate authorization
 - [docs/skills/{{SLUG}}/SKILL.md](docs/skills/{{SLUG}}/SKILL.md) — {{summary}}
 
 **When you add a skill or a convention doc, link it from this file.** This

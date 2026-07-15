@@ -70,14 +70,15 @@ the code is guessing.
 
 Emit **one JSON line per finding**, appended to `.harness/log.jsonl` — the same
 git-ignored harness log the guard hooks write, so the audit workflow counts
-review findings alongside deny/advise/lint events. Each line is a **v1-compatible
-`hook_log` line**: the top level is exactly the five keys
-`{ts, hook, event, file, detail}` that `scripts/hooks/lib.sh:hook_log` emits —
-nothing added at the top level, so every existing consumer
+review findings alongside deny/advise/lint/gate events. Each reviewer line stays
+an **exact v1 record** even where current hooks and `verify.sh` emit the
+[eight-key v2 envelope](../conventions/outcome-telemetry.md): its top level is
+exactly `{ts, hook, event, file, detail}`. Add no version, context, data, or
+other top-level key, so the seeded-defect grader and every existing consumer
 (`jq '.event'`, `.hook`, `.file`, `.ts`, and the audit `group_by`) keeps working
 unchanged. The reviewer-specific fields ride **inside `detail`, as a JSON-encoded
-object string** (the schema is defined here; the outcome-telemetry plan consumes
-it, never the reverse):
+object string**. The schema is defined here; the mixed-log reducer consumes it,
+never the reverse:
 
 | top-level key | value for a review finding |
 | ------------- | -------------------------- |
@@ -157,4 +158,3 @@ HERE, then run `bash scripts/sync-agent-skills.sh` — `check-harness.sh` (via
 `--check`) fails on a stub that drifts from the generator, is missing from a
 declared provider, or orphans a deleted canonical persona. Non-blocking review.
 -->
-

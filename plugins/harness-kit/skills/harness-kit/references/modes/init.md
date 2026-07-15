@@ -28,8 +28,9 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    `.cursor/sandbox.json`, Codex sandbox/approval/network keys, OpenCode
    `permission`); any `.devcontainer/` plus the concrete image, Dockerfile, or
    Compose service it uses; secret-file patterns present (`.env*`,
-   `auth.json`, key files); docs already written. Also classify the repo as an
-   **application** (a local service/site/API with meaningful running state) or
+   `auth.json`, key files); docs already written; existing `.harness/log.jsonl`,
+   eval baselines/results, and documentation scheduling. Also classify the repo
+   as an **application** (a local service/site/API with meaningful running state) or
    **non-app** (library, docs, static data, or another repo with no running app
    to exercise). For an app, inspect manifest `dev`/`start`/`serve` scripts,
    Compose services and healthchecks, Procfiles, framework entrypoints,
@@ -73,6 +74,11 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      correct most often?).
    - The first 1-3 skills: recurring task shapes with a known recipe
      (e.g. "add an endpoint", "add a model").
+   - Offer the self-contained `doc-garden` skill. Adoption adds canonical
+     content, its AGENTS link, and generated stubs; it does not authorize a
+     schedule, external link probes, edits, commits, pushes, or PRs. Keep the
+     default scan offline and read-only. A trusted existing scheduler may run it
+     later with separately configured permissions.
    - One domain invariant for the advisory stop-hook, if any (the mistake
      that costs a review cycle every time — e.g. tenancy scoping, missing
      migration, unregistered route). Skippable; the hook ships as a no-op.
@@ -93,8 +99,10 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    `harness_install_mechanism` from that NEW source's `install-lib.sh`. Let the
    new helper enumerate its own file set instead of copying an old hard-coded
    list; the set includes `dev-instance.sh` (physical-worktree suffix and
-   candidate-port derivation) and its regression coverage as well as the
-   config, install/sync/check/eval/verify, and hook machinery.
+   candidate-port derivation), `log-lib.sh` (fail-open v2 helpers),
+   `audit-log.sh` (deterministic mixed-log/eval reduction), `doc-garden.sh`
+   (offline documentation scanning), and their regression coverage as well as
+   the config, install/sync/check/eval/verify, and hook machinery.
    `chmod +x scripts/hooks/*.sh scripts/*.sh`.
    `install-lib.sh` is the deterministic, model-free core of this flow —
    `harness_install_mechanism` copies exactly this set, and step 8's
@@ -108,7 +116,10 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      formatter/linter), `full_gate` (serial typecheck/tests), or
      `parallel_full_gate` (independent typecheck/tests) lines. Keep serial gates
      cheapest-first and keep the default `harness` gate. Only parallelize gates
-     that do not consume one another's outputs or share mutable fixtures.
+     that do not consume one another's outputs or share mutable fixtures. Keep
+     the template's v2 gate-event wrapper intact: it emits name, mode, outcome,
+     exit code, and integer duration without logging command arguments/output or
+     changing a gate result.
    - `hooks/format.sh`: uncomment/add extension → formatter lines for the
      detected stack.
    - `harness.conf` `SECRET_PATTERNS` / `SECRET_ALLOW_PATTERNS`: extend for
@@ -173,6 +184,11 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      real defaults, delete inapplicable sections (production environment, MCP)
      and, for the enforcement facts, keep only what the wired providers' rows
      in the provider matrix prove.
+   - Copy `templates/docs/conventions/outcome-telemetry.md` to
+     `docs/conventions/outcome-telemetry.md` and keep its AGENTS link. It is the
+     self-contained exact v1/v2, provenance, privacy, reducer, and N/A contract
+     for the local mechanism installed in step 3. Do not replace it with a link
+     into this plugin or combine it with provider observability.
    - **Adopted execution profiles or devcontainer:** copy
      `templates/docs/conventions/execution-profiles.md` into
      `docs/conventions/execution-profiles.md` after at least one provider
@@ -189,6 +205,11 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      `docs/skills/verify-live/SKILL.md`. Add both conditional links from the
      AGENTS template. Never point either file at this skill/plugin directory.
      Non-app repos omit the files and links.
+   - If the user adopted doc gardening, copy
+     `templates/docs/skills/doc-garden/SKILL.md` to
+     `docs/skills/doc-garden/SKILL.md`, keep its conditional AGENTS link, and
+     generate its provider stubs in step 6. Otherwise remove the link and create
+     no canonical/stub files.
    - `docs/skills/<slug>/SKILL.md` per initial skill, following
      `templates/docs/skills/_example/SKILL.md`. Frontmatter descriptions are
      activation triggers — spend effort on them.
@@ -326,14 +347,28 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    silently disarm the guard) must fail CI like any other policy edit — shell
    edits are unscanned by design, so this manifest is their enforcing layer.
 
-9. **Verify — do not skip**: `bash scripts/verify.sh` and
-   `bash scripts/check-harness.sh` pass; each `scripts/hooks/test-*.sh`
-   passes standalone; feed `guard-secrets.sh` a real payload for the repo's
+9. **Verify — do not skip**: before `verify.sh` can create the real local log,
+   prove the no-data path against an explicitly absent fixture:
+
+   ```bash
+   [ ! -e .harness/init-no-data-check.absent.jsonl ] && \
+     bash scripts/audit-log.sh --log .harness/init-no-data-check.absent.jsonl --format table
+   ```
+
+   Confirm it reports
+   `log.status: no_data`, zero parser counters, empty gate/retry/deny sections,
+   and review count zero. Git/eval sections remain independently derived. Then
+   require `bash scripts/verify.sh` and `bash scripts/check-harness.sh` to pass;
+   each `scripts/hooks/test-*.sh` passes standalone; run `bash scripts/test-log.sh`,
+   `bash scripts/test-audit-log.sh`, and `bash scripts/test-doc-garden.sh`
+   directly; feed `guard-secrets.sh` a real payload for the repo's
    own `.env` and `guard-config.sh` one for `scripts/hooks/lib.sh`, confirm
    exit 2 for both; repeat both with Codex-shaped payloads (an apply_patch
    envelope in `tool_input.command` — crib the builders from
    `scripts/hooks/test-affected-files.sh`) and confirm exit 2 again;
-   confirm every AGENTS.md link opens. For an app repo, validate every
+   confirm every AGENTS.md link opens. If doc-garden was adopted, run its
+   default offline report and confirm it made no changes. For an app repo,
+   validate every
    `dev.sh` action's single-object JSON schema and lifecycle: `up` waits ready
    without seeding and records whether it started; `seed` resets known data;
    `health` is read-only and exits zero iff ready; `down` stops only this

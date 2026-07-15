@@ -155,12 +155,14 @@ missing=""
 # the .sh mechanism files must carry the exec bit (check-harness.sh check #5).
 for f in check-harness.sh harness.conf install-lib.sh sync-agent-skills.sh \
          dev-instance.sh test-dev-instance.sh test-check-harness.sh \
-         test-install.sh test-verify.sh verify.sh; do
+         log-lib.sh test-log.sh audit-log.sh test-audit-log.sh \
+         doc-garden.sh test-doc-garden.sh test-install.sh test-verify.sh verify.sh; do
     [ -f "$F/scripts/$f" ] || missing="$missing $f(absent)"
 done
 for f in check-harness.sh install-lib.sh sync-agent-skills.sh dev-instance.sh \
          test-dev-instance.sh test-check-harness.sh test-install.sh \
-         test-verify.sh verify.sh; do
+         log-lib.sh test-log.sh audit-log.sh test-audit-log.sh \
+         doc-garden.sh test-doc-garden.sh test-verify.sh verify.sh; do
     [ -x "$F/scripts/$f" ] || missing="$missing $f(not-exec)"
 done
 [ -f "$F/scripts/hooks/lib.sh" ] || missing="$missing hooks/lib.sh(absent)"
@@ -176,6 +178,9 @@ if grep -q "scripts/install-lib.sh" "$F/scripts/.harness-manifest" \
     && grep -q "scripts/test-install.sh" "$F/scripts/.harness-manifest" \
     && grep -q "scripts/dev-instance.sh" "$F/scripts/.harness-manifest" \
     && grep -q "scripts/test-dev-instance.sh" "$F/scripts/.harness-manifest" \
+    && grep -q "scripts/audit-log.sh" "$F/scripts/.harness-manifest" \
+    && grep -q "scripts/doc-garden.sh" "$F/scripts/.harness-manifest" \
+    && grep -q "scripts/log-lib.sh" "$F/scripts/.harness-manifest" \
     && grep -q "scripts/harness.conf" "$F/scripts/.harness-manifest"; then
     pass "clean init: manifest enumerates install library, dev-instance helper/test, and harness.conf"
 else
@@ -344,11 +349,14 @@ rm -rf "$F" "$NEWKIT"
 # An old install's manifest can't list files the previous kit didn't ship. More
 # subtly, its OLD installed install-lib.sh does not know their names either, so
 # update must source the NEW kit's library before applying the new templates.
-# Simulate pre-v0.15 by removing both helper files and their pins, then prove
-# the new library discovers, installs, and chmods both.
+# Simulate an older install by removing newly-shipped files and their pins,
+# then prove the incoming library discovers, installs, chmods, and re-applies
+# them idempotently.
 F=$(make_fixture)
-rm "$F/scripts/dev-instance.sh" "$F/scripts/test-dev-instance.sh"
-grep -vE 'scripts/(test-)?dev-instance\.sh' "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
+NEW_FILES="dev-instance.sh test-dev-instance.sh log-lib.sh test-log.sh audit-log.sh test-audit-log.sh doc-garden.sh test-doc-garden.sh"
+for f in $NEW_FILES; do rm "$F/scripts/$f"; done
+grep -vE 'scripts/((test-)?dev-instance|log-lib|test-log|audit-log|test-audit-log|doc-garden|test-doc-garden)\.sh' \
+    "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
 mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
 NEWKIT=$(mktemp -d); cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
 (
@@ -358,10 +366,19 @@ NEWKIT=$(mktemp -d); cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
     . "$NEWKIT/scripts/install-lib.sh"
     harness_update_apply "$NEWKIT/scripts" "$F"
 ) >/dev/null
-if [ -x "$F/scripts/dev-instance.sh" ] && [ -x "$F/scripts/test-dev-instance.sh" ]; then
-    pass "migration: new-kit install library adds executable v0.15 helper and test"
+missing=""
+for f in $NEW_FILES; do [ -x "$F/scripts/$f" ] || missing="$missing $f"; done
+before=$(for f in $NEW_FILES; do sha_of "$F" "scripts/$f"; done)
+(
+    # shellcheck source=/dev/null
+    . "$NEWKIT/scripts/install-lib.sh"
+    harness_update_apply "$NEWKIT/scripts" "$F"
+) >/dev/null
+after=$(for f in $NEW_FILES; do sha_of "$F" "scripts/$f"; done)
+if [ -z "$missing" ] && [ "$before" = "$after" ]; then
+    pass "migration: new-kit inventory adds new executable mechanism idempotently"
 else
-    fail "migration: new-kit install library did not add both v0.15 files executable"
+    fail "migration: new-kit inventory missed, changed, or failed to chmod:$missing"
 fi
 rm -rf "$F" "$NEWKIT"
 

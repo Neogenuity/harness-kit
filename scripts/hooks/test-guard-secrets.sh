@@ -168,9 +168,15 @@ run_conf 0 "conf replaces defaults (.env allowed under custom conf)" "$(payload 
 
 # --- observability: a deny appends one valid JSON line; HARNESS_LOG=0 doesn't ---
 LOG="$WORK/log.jsonl"
-printf '%s' "$(payload "$WORK/.env")" | env HARNESS_LOG=1 HARNESS_LOG_FILE="$LOG" "$HOOK" >/dev/null 2>&1
+obs_payload=$(printf '%s' "$(payload "$WORK/.env")" | jq -c '.session_id="payload-session"')
+printf '%s' "$obs_payload" | env HARNESS_LOG=1 HARNESS_LOG_FILE="$LOG" \
+    HARNESS_PROVIDER=codex HARNESS_PLAN_SLUG=v017 "$HOOK" >/dev/null 2>&1
 if [ -f "$LOG" ] && [ "$(wc -l < "$LOG" | tr -d '[:space:]')" = "1" ] \
-    && jq -e 'select(.event == "deny" and .hook == "guard-secrets.sh")' "$LOG" >/dev/null 2>&1; then
+    && jq -e 'select(.version == 2 and .event == "deny" and .hook == "guard-secrets.sh"
+        and keys == ["context","data","detail","event","file","hook","ts","version"]
+        and .context.session_id == "payload-session" and .context.provenance.session_id == "payload"
+        and .context.provider == "codex" and .context.provenance.provider == "env"
+        and .context.plan_slug == "v017" and .context.provenance.plan_slug == "env")' "$LOG" >/dev/null 2>&1; then
     echo "ok:   deny appends one valid JSON log line"
 else
     echo "FAIL: deny did not append one valid JSON log line"

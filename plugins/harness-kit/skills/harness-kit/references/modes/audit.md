@@ -34,24 +34,56 @@ was adopted into the harness. Claude's credential tuple requires Claude Code
 2.1.187 or later.
 
 Report provider observability as a separate availability/scope table. Do not
-combine provider signals with `.harness/log.jsonl`, claim automatic session
-correlation, or recommend repo-stored endpoints, credentials, headers, or raw
-prompt capture. If a behavioral eval bank exists (`docs/evals/`), report its
-health too: number of golden tasks by suite (capability / regression) and
-polarity, whether `test-eval.sh` passes (grader validity), and the age of
-`docs/evals/baselines.json` — report the age of the OLDEST per-cell
-`recorded` date across `tasks.*.runs.*.recorded` (falling back to the file's
-top-level `recorded` for older baselines that predate per-cell dates); a
-stale or absent baseline means the harness is unmeasured — recommend a
-scheduled `eval-harness.sh` run. Then run
-`scripts/check-harness.sh` and the hook tests if they exist. If `.harness/log.jsonl` exists, summarize it: deny / advise /
-lint-findings counts by hook and by file — a repeatedly-denied path or a
-warning surfaced every session is the next mistake to engineer away
-(tighten a pattern, add a lint rule, write a convention doc). Output: a
-table of pattern element → status (present / drifted / missing) with the
-concrete fix for each, ordered by risk (secret exposure first, drift
-second, missing content last), plus the log summary when available. Offer
-to fix; don't fix unasked.
+combine provider signals with `.harness/log.jsonl`, import provider exports,
+claim automatic cross-stream correlation, or recommend repo-stored endpoints,
+credentials, headers, raw prompts, or tool content.
+
+Use the model-free local reducer for outcome arithmetic:
+
+```bash
+bash scripts/audit-log.sh --format table
+```
+
+Do not hand-calculate rates, retries, repeat paths, review counts, trailer
+joins, or eval drift from raw JSONL. Preserve the reducer's mixed-v1/v2 parser
+counters and stable ordering. Malformed rows in a readable log increment the
+appropriate parser counter and are skipped; an absent log is
+`log.status: no_data` with zero parser counters, empty gate/retry/deny sections,
+and review count zero, while Git/eval sections remain independently derived; an
+existing unreadable log is an operational error. A retry requires an explicit
+session id; plan-cycle timing is `not_available` because there is no
+machine-readable lifecycle. Exact `Harness-Session-Id:` trailers produce
+`session_commits.status: available` with `items`; no Git or shallow history
+produces `session_commits.status: not_available`. PR enrichment stays N/A
+without a versioned producer. Missing or invalid baseline/result inputs stay
+visibly unavailable/invalid instead of becoming zero or success. If the reducer
+is absent, report the v0.17 mechanism as missing rather than approximating it.
+Require the self-contained
+`docs/conventions/outcome-telemetry.md` and its AGENTS link when the v2
+mechanism is installed.
+
+If a behavioral eval bank exists (`docs/evals/`), also report its task counts by
+suite/polarity and whether `test-eval.sh` passes. The reducer/scorer owns
+baseline/result drift and the local review-finding count. Separately inspect the
+oldest baseline-cell age using per-cell `recorded`, falling back to the legacy
+top-level date; this remains an explicit eval-bank audit step, not reducer
+output. A stale/absent baseline means unmeasured; recommend a scheduled
+`eval-harness.sh` run, not provider telemetry ingestion.
+
+Then run `scripts/check-harness.sh` and the hook tests if they exist. Offer the
+offline, read-only `scripts/doc-garden.sh --format table` for root/non-`docs`
+Markdown, anchors, deleted-path references, and repo-wide verification stamps.
+Its repo-wide scan may overlap `check-harness.sh`; de-duplicate the presented
+findings by rule, file, line, and target rather than suppressing either check.
+External probes, edits, commits, pushes, and PRs are separate authorization
+steps. If the canonical `docs/skills/doc-garden/SKILL.md`, its
+AGENTS link, or generated stubs are partly present, report drift; if all are
+absent, report the optional skill as unadopted, not missing.
+
+Output a table of pattern element → status (present / drifted / missing) with
+the concrete fix for each, ordered by risk (secret exposure first, drift second,
+missing content last), followed by the reducer and optional doc-garden reports.
+Offer to fix; don't fix unasked.
 
 ## Execution-profile and devcontainer audit
 

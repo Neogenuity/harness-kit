@@ -29,6 +29,13 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    `HARNESS_ALLOW_MECHANISM_EDITS=1` for the session if `guard-config.sh` is
    wired — upgrading the mechanism is the intended use of that escape hatch.
 
+   For the v0.17 outcome/doc-garden inventory, newly introduced
+   `log-lib.sh`, `audit-log.sh`, `doc-garden.sh`, and their regression tests are
+   normal mechanism additions. A manifest-matching `hooks/lib.sh` is pristine
+   mechanism and may be replaced with the v2-capable version; a locally changed
+   copy remains diff-only under the checksum rule. Never make the old inventory
+   enumerate these files by hand.
+
    **Recovering the old templates (the diff base) — per install channel.** The
    diff needs the OLD kit version's templates, where the version is the manifest
    header (`harness_manifest_version` in `install-lib.sh`). How to obtain them
@@ -60,6 +67,11 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    `dev.sh`) — diff only. Never auto-add or
    overwrite content files, including conventions, skills, AGENTS links, and
    generated stubs; mechanism update and content adoption are separate acts.
+   In particular, `verify.sh` remains tailored policy: show the old-template →
+   new-template diff for v2 gate instrumentation and apply it only with explicit
+   approval. Installing the reducer/writer helpers alone does not prove gate
+   outcomes are emitted; if that diff is declined, audit reports gate trends as
+   no-data/N/A while continuing to read existing v1 hook/reviewer lines.
 4. Rewrite the manifest with the new version/checksums — `harness_repin_manifest`
    in `install-lib.sh` regenerates it while preserving every ` # tailored`
    marker — then persist the new templates as the NEXT update's diff base with
@@ -121,7 +133,17 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    A devcontainer-only adoption still installs/tailors the combined convention
    and its AGENTS link, without adding a provider declaration.
    Otherwise defer it explicitly; there is no placeholder template to copy.
-8. When the request is really a *standards* shift — a provider newly reads
+8. **Offer outcome-telemetry and doc-garden content separately.** Never rewrite
+   `.harness/log.jsonl`; v1 and v2 lines intentionally coexist. Offer the
+   self-contained `templates/docs/conventions/outcome-telemetry.md` plus its
+   AGENTS link after the v2 mechanism update. Separately offer
+   `templates/docs/skills/doc-garden/SKILL.md`, its conditional AGENTS link, and
+   regenerated provider stubs. Preserve any existing convention/skill and show
+   a proposed diff. Declining either content change is valid and does not remove
+   the newly installed helpers. Doc-garden adoption authorizes only its offline,
+   read-only report; schedules, external probes, edits, commits, pushes, and PRs
+   remain separate choices.
+9. When the request is really a *standards* shift — a provider newly reads
    `.agents/skills/` natively, Claude Code ships AGENTS.md support, a new
    harness appears — follow the matching playbook in
    [migrations.md](../migrations.md) instead of

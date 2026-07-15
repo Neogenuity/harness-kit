@@ -4,7 +4,8 @@ description: >-
     Engineers and continuously improves reliable coding-agent behavior across
     Claude Code, Cursor, Codex, OpenCode, and .agents: canonical project
     context, executable quality gates, in-turn feedback, layered guardrails,
-    observability, and CI-backed integrity. Includes generated provider stubs,
+    local outcome telemetry, doc gardening, and CI-backed integrity. Includes
+    generated provider stubs,
     shared permissions, an app-only development-runtime and live-verification
     workflow, optional execution profiles, and an authored devcontainer
     contract. Activates when asked to instrument, set up, standardize, or audit
@@ -46,6 +47,11 @@ misfire on the router alone, but the reference carries the steps.
   `dev-runtime`/`verify-live` docs, AGENTS links, and generated skill stubs.
   Non-app repos report runtime support as N/A; there is no generic `dev.sh`
   template.
+- **Local outcomes are versioned and private by default.** Fresh installs get
+  the self-contained `outcome-telemetry` convention and the model-free mixed-log
+  reducer. Keep provider telemetry separate. Offer the canonical `doc-garden`
+  skill as an explicit content choice; its default is an offline report, not a
+  mutation or publication workflow.
 - **Execution profiles are a separate explicit opt-in.** Declare only the
   confirmed provider subset in `EXECUTION_PROFILE_PROVIDERS`; unset/empty means
   unadopted. Merge provider tuples without clobbering hooks, permissions, MCP,
@@ -74,6 +80,11 @@ misfire on the router alone, but the reference carries the steps.
 - **Check the native permission deny-list mirrors the secret guard**, and report
   the MCP trust-inventory state, the governance docs, eval-bank health, and the
   age of the oldest `baselines.json` cell.
+- **Use `scripts/audit-log.sh` for outcome arithmetic.** Report its mixed-version
+  data quality, gate/retry, repeated-deny, and review-count results; report
+  session-trailer status/items, eval drift, and explicit N/A states. Inspect
+  oldest baseline age separately; never manufacture plan cycles or PR
+  attribution from prose.
 - **Grade declared execution profiles provider-by-provider** as adopted,
   drifted, unavailable, or unverifiable; unset/empty is unadopted. Keep the
   provider observability availability table separate from
@@ -86,6 +97,9 @@ misfire on the router alone, but the reference carries the steps.
   unpinned, invalid JSON, stopped, unhealthy, or ready. Existing apps opt in to
   adoption; audit never starts, seeds, stops, or adds runtime content.
 - **Offer to fix; don't fix unasked.**
+- **Doc gardening is read-only by default.** Reuse `check-harness.sh`, then the
+  offline `scripts/doc-garden.sh`; external probes, edits, commits, pushes, and
+  PRs are separately authorized actions.
 
 ## add-skill / add-agent / add-hook — extend → [references/modes/add.md](references/modes/add.md)
 
@@ -107,6 +121,11 @@ misfire on the router alone, but the reference carries the steps.
   Runtime convention/skill/script adoption is a separate explicit opt-in for
   existing apps; execution profiles and a devcontainer are separate explicit
   opt-ins too; content is never auto-added or overwritten.
+- **Outcome migration is split by ownership.** New reducer/scanner/log helpers
+  and tests join the mechanism inventory; a pristine hook library can replace.
+  `verify.sh` stays tailored policy, so v2 gate instrumentation is an approved
+  diff. The telemetry convention, doc-garden skill, AGENTS links, and generated
+  stubs remain opt-in content on an existing install.
 - **Re-pin the manifest afterward** (preserving every ` # tailored` marker) and
   re-run `check-harness.sh` + hook tests. A real *standards* shift routes to
   [references/migrations.md](references/migrations.md), not improvisation.
@@ -124,7 +143,10 @@ misfire on the router alone, but the reference carries the steps.
   experimental broad local/private-network compatibility disjunction. Name its
   broader reach and ownership-safe teardown limit. Never claim OpenCode permissions are an
   OS/network sandbox or Cursor repo config proves the effective UI/admin policy.
-- Provider telemetry is not `.harness/log.jsonl`: ship no exporter endpoint,
-  auth header, credential, real hostname, raw-prompt opt-in, or automatic join.
+- Provider telemetry is not `.harness/log.jsonl`: the local stream accepts mixed
+  exact-v1 and eight-key `version: 2` records, but ships no exporter endpoint,
+  auth header, credential, real hostname, raw-prompt opt-in, provider import, or
+  automatic cross-stream join. See the self-contained
+  `templates/docs/conventions/outcome-telemetry.md` contract.
 - Verify with the repo's own checks before declaring done, and report
   failures as failures.

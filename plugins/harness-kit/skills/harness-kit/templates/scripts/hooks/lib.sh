@@ -18,6 +18,15 @@ HOOK_ENV_HARNESS_LOG="${HARNESS_LOG:-}"
 HOOK_ENV_HARNESS_LOG_FILE="${HARNESS_LOG_FILE:-}"
 HOOK_ENV_HARNESS_STOP_MARKER_DIR="${HARNESS_STOP_MARKER_DIR:-}"
 
+# The outcome writer is separate from hook payload parsing so verify.sh and
+# other repo-local producers use the same v2 envelope. A partially-upgraded
+# install that lacks it keeps every guard live and merely loses telemetry.
+LOG_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)/log-lib.sh"
+[ -f "$LOG_LIB" ] || LOG_LIB="$(dirname "${BASH_SOURCE[0]}")/log-lib.sh"
+# Resolved relative to this installed script (or beside fixture lib.sh).
+# shellcheck disable=SC1090
+[ -f "$LOG_LIB" ] && . "$LOG_LIB" 2>/dev/null || true
+
 # Read the hook event JSON from stdin into HOOK_INPUT. Safe on empty stdin.
 hook_read_input() {
     HOOK_INPUT=$(cat 2>/dev/null || true)
@@ -93,6 +102,7 @@ hook_file_path() {
 # HARNESS_LOG_FILE. Requires jq; never fails the calling hook.
 hook_log() {
     local event="$1" file="${2:-}" detail="${3:-}" root logfile enabled
+    local run_id="" run_source="" session_id="" session_source="" provider="" plan_slug="" context count
     command -v jq >/dev/null 2>&1 || return 0
     root="$(cd "$(dirname "$0")/../.." 2>/dev/null && pwd)" || return 0
     if [ -n "$HOOK_ENV_HARNESS_LOG" ]; then
@@ -106,12 +116,33 @@ hook_log() {
     fi
     [ "$enabled" = "0" ] && return 0
     logfile="${HOOK_ENV_HARNESS_LOG_FILE:-${HARNESS_LOG_FILE:-$root/.harness/log.jsonl}}"
-    mkdir -p "$(dirname "$logfile")" 2>/dev/null || return 0
-    jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        --arg hook "$(basename "$0")" \
-        --arg event "$event" --arg file "$file" --arg detail "$detail" \
-        '{ts: $ts, hook: $hook, event: $event, file: $file, detail: $detail}' \
-        >> "$logfile" 2>/dev/null || true
+    command -v harness_log_v2 >/dev/null 2>&1 || return 0
+
+    # Diagnostics can contain source lines, paths, arguments, or secrets. The
+    # agent still receives the full feedback through hook_feedback; the durable
+    # local event keeps only a bounded categorical count.
+    if [ "$event" = "lint-findings" ]; then
+        count=$(printf '%s\n' "$detail" | awk 'NF { n++ } END { print n+0 }')
+        [ "$count" -le 9999 ] 2>/dev/null || count=9999
+        detail=$(jq -cn --argjson count "$count" '{category:"lint-findings",count:$count}' 2>/dev/null) \
+            || detail='{"category":"lint-findings","count":0}'
+    fi
+
+    if [ -n "${HARNESS_RUN_ID:-}" ]; then run_id=$HARNESS_RUN_ID; run_source="env"; fi
+    if [ -n "${HARNESS_SESSION_ID:-}" ]; then
+        session_id=$HARNESS_SESSION_ID; session_source="env"
+    elif [ -n "${HOOK_INPUT:-}" ]; then
+        session_id=$(printf '%s' "$HOOK_INPUT" | jq -r '
+            [.session_id, .conversation_id]
+            | map(select(type == "string" and length > 0)) | .[0] // empty' 2>/dev/null)
+        [ -n "$session_id" ] && session_source="payload"
+    fi
+    if [ -n "${HARNESS_PROVIDER:-}" ]; then provider=$HARNESS_PROVIDER; fi
+    if [ -n "${HARNESS_PLAN_SLUG:-}" ]; then plan_slug=$HARNESS_PLAN_SLUG; fi
+    context=$(harness_log_context "$run_id" "$run_source" "$session_id" "$session_source" \
+        "$provider" "${provider:+env}" "$plan_slug" "${plan_slug:+env}")
+    HARNESS_LOG="$enabled" HARNESS_LOG_FILE="$logfile" \
+        harness_log_v2 "$root" "$(basename "$0")" "$event" "$file" "$detail" "$context" '{}'
     return 0
 }
 

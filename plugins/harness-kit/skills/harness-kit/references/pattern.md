@@ -80,13 +80,17 @@ whatever ships next — without maintaining N parallel configurations.
    OpenCode's permission prompts
    are named honestly rather than presented as an OS or network sandbox.
 
-9. **Observability closes the loop.** Every deny, advisory, and lint finding
-   appends one JSON line to `.harness/log.jsonl` (git-ignored). The audit
-   workflow summarizes it: a guard that fires repeatedly on the same path is
-   the signal for what to engineer away permanently — tighten a pattern, add
-   a lint rule, write the convention doc. Provider telemetry remains a separate
-   stream with its own scope, schema, retention, and privacy controls; the kit
-   installs no collector and does not infer a session join.
+9. **Observability closes the loop.** Denies, advisories, lint findings, and
+   verification gate outcomes append JSON lines to `.harness/log.jsonl`
+   (git-ignored). Exact five-key v1 review findings coexist with an eight-key
+   `version: 2` event envelope; the deterministic `audit-log.sh` reducer owns
+   rates, retries, repeated paths, review counts, eval drift, and explicit N/A
+   states. A guard or gate that fails repeatedly is the signal for what to engineer away
+   permanently. Attribution is explicit-only: absent session/provider/plan
+   metadata remains unknown, and plan cycles or PRs are never invented from
+   prose. Provider telemetry remains a separate stream with its own scope,
+   schema, retention, and privacy controls; the kit installs no collector or
+   automatic cross-stream join.
 
 **Hooks are feedback; the sandbox is enforcement.** Pre-tool interception is a
 *guardrail, not a boundary* — an agent can usually reach the same effect
@@ -111,8 +115,10 @@ docs/
   conventions/                 # one doc per topic agents get wrong
     dev-runtime.md             # app-only dev.sh JSON/lifecycle contract [tailored]
     execution-profiles.md      # adopted provider floors + limits [tailored]
+    outcome-telemetry.md       # mixed local-event schema + privacy/trend contract
   skills/                      # canonical task workflows (frontmatter = trigger)
     <slug>/SKILL.md
+    doc-garden/SKILL.md        # optional offline doc-health workflow
     verify-live/SKILL.md       # app-only reproduce/observe/rerun workflow [tailored]
   agents/<name>.md             # canonical persona docs
   plans/                       # execution plans (surfaced by session-context.sh)
@@ -124,6 +130,9 @@ scripts/
   dev.sh                       # app-only runtime adapter: up/health/seed/down
                                #   (authored per repo; no generic template) [tailored]
   dev-instance.sh              # physical-worktree suffix + port candidate helper
+  log-lib.sh                   # fail-open v2 event writer helpers
+  audit-log.sh                 # deterministic local outcome/eval reducer
+  doc-garden.sh                # offline repository documentation scanner
   sync-agent-skills.sh         # stub + skill-resource mirror generator
                                #   (+ --check mode, orphan detection)
   check-harness.sh             # CI drift gate + manifest integrity + doctor
@@ -138,7 +147,7 @@ scripts/
                                #   recent commits, active plans)
     test-*.sh                  # regression tests, run by check-harness.sh
 .harness/                      # local harness state (git-ignored)
-  log.jsonl                    # hook event log
+  log.jsonl                    # mixed hook/review/verification outcome log
   dev/                         # app-only, worktree-scoped runtime state/logs/traces
 .claude/   settings.json (permissions + hooks + optional declared profile), skills/, agents/
 .cursor/   hooks.json, sandbox.json (optional declared profile), rules/, skills/, agents/, mcp.json

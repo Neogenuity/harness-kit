@@ -119,7 +119,8 @@ fi
 if [ -f "$ROOT/scripts/eval-harness.sh" ]; then
     help_out="$(bash "$ROOT/scripts/eval-harness.sh" --help 2>&1)"
     if printf '%s\n' "$help_out" | grep -q -- '--baseline' \
-            && printf '%s\n' "$help_out" | grep -q -- '--expected-trials'; then
+            && printf '%s\n' "$help_out" | grep -q -- '--expected-trials' \
+            && printf '%s\n' "$help_out" | grep -q -- '--format'; then
         ok "eval-harness.sh --help prints its full option block (not truncated by a stale sed range)"
     else
         bad "eval-harness.sh --help is missing --baseline/--expected-trials — its usage sed range is likely shorter than its header comment"
@@ -334,6 +335,16 @@ else
         else
             bad "eval-harness: run selection did not pick the newer run"
             printf '%s\n' "$out" | sed 's/^/    /'
+        fi
+        json="$(_harness --results-dir "$htmp/results" --baseline "$htmp/no-such-baseline.json" --format json 2>/dev/null)"
+        json_rc=$?
+        if [ "$json_rc" -eq 0 ] && printf '%s' "$json" | jq -e '
+            keys == ["cells","regressions","status","version","violations"]
+            and .status == "pass" and .cells[0].passes == 1 and .cells[0].trials == 2
+            and .cells[0].trend == "unbaselined"' >/dev/null 2>&1; then
+            ok "eval-harness: JSON mode reuses the latest-run scoring result"
+        else
+            bad "eval-harness: JSON mode drifted from table scoring"
         fi
         rm -rf "$htmp"
     fi

@@ -5,8 +5,33 @@ The harness landscape converges toward two open standards — hierarchical
 `scripts/`, `assets/`) under `.agents/skills/` — and every provider that
 adopts them natively makes part of this kit's shim layer unnecessary. That
 is the design working as intended: the kit's job is to shrink. This file
-records the sunset trigger and the exact steps for each shim, so migration
-is a config change, not a rethink.
+records release-adoption and shim-sunset steps, so migration is a bounded
+mechanism/policy/content decision rather than a rethink.
+
+## v0.17.0 local-outcome and doc-garden adoption
+
+For an install from v0.16 or earlier, keep mechanism, policy, and content
+decisions separate:
+
+1. Run update with the new kit's `install-lib.sh`. Its inventory adds
+   `scripts/log-lib.sh`, `scripts/audit-log.sh`, `scripts/doc-garden.sh`, and
+   their tests. It replaces a manifest-matching `scripts/hooks/lib.sh`; a
+   changed copy gets a diff. Do not rewrite the existing mixed local log.
+2. Treat `scripts/verify.sh` as tailored policy even when its old checksum is
+   known. Review and explicitly approve the v2 gate-instrumentation diff. If it
+   is declined, guard/reviewer data remains readable but gate trends are
+   no-data/N/A.
+3. Re-pin the approved mechanism/policy state and run the focused log, reducer,
+   scanner, update, and harness tests.
+4. Offer `docs/conventions/outcome-telemetry.md` and its AGENTS link as
+   self-contained content; never point an installed repo back into the plugin.
+5. Separately offer `docs/skills/doc-garden/SKILL.md`, its conditional AGENTS
+   link, and regenerated stubs. Declining the skill is valid. Adoption grants no
+   schedule, network probe, edit, commit, push, or PR authority.
+
+A second update must be a no-op. Existing content and generated stubs are never
+auto-added or overwritten; `hooks/lib.sh` and the new helpers follow manifest
+checksums, while `verify.sh` stays diff-only.
 
 ## Per-provider sunset playbooks
 

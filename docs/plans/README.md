@@ -58,9 +58,17 @@ Repo references that must stay honest belong in markdown links (the CI link
 check walks every doc under `docs/`); prose and backtick mentions of
 not-yet-existing paths are legal — queued plans name future files by design.
 
-## Roadmap (set 2026-07-10, re-sorted 2026-07-13)
+## Roadmap (set 2026-07-10, v0.17.0 released 2026-07-15)
 
-Shipped: **v0.16.0** — declared execution profiles (explicit per-provider
+Shipped: **v0.17.0** — backward-compatible local outcome telemetry, fail-open
+serial/parallel verification-gate events, deterministic mixed-log and eval
+reduction, exact local session-trailer joins with honest lifecycle/PR N/A
+states, plus the offline read-only doc-garden scanner and canonical skill.
+Mechanism/content implementation was delegated to Terra/Luna, reciprocally
+reviewed, dogfooded, and closed by a canonical reviewer with four confirmed
+findings fixed and mutation-checked
+([completed/v0.17.0-outcome-telemetry-and-doc-gardening.md](completed/v0.17.0-outcome-telemetry-and-doc-gardening.md));
+**v0.16.0** — declared execution profiles (explicit per-provider
 adoption for Claude Code, Cursor, Codex, and OpenCode; semantic drift checks;
 an honestly labeled Codex local/private-network compatibility weakening;
 authored devcontainer and provider-observability contracts; guarded
@@ -136,14 +144,11 @@ rows + strict Agent Skills validation + matrix stamping
 **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
 ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
-**Active:** [Launch readiness](active/launch-readiness.md) remains a parallel
+**Active:** [Launch readiness](active/launch-readiness.md) remains the parallel
 maintainer track; its demo, org move, and public flip are still open.
 
-The remaining mechanism queue follows.
-
-| # | Plan | Theme |
-| --- | --- | --- |
-| 1 | [outcome-telemetry-and-doc-gardening.md](outcome-telemetry-and-doc-gardening.md) | Outcome telemetry, audit trends, doc gardening — completes the story for 1.0 |
+The mechanism queue is empty after v0.17.0. New work enters as a
+theme-named queued plan and takes a version only when activated.
 
 **Ordering rationale.** Claim-to-implementation gaps went first — plans
 machinery (v0.6.0) closed the space between what the docs promise and what
@@ -189,9 +194,9 @@ per-provider sandbox profiles were split into their own plan and shipped as
 cost kept it behind runtime-legibility, and it depends only on that plan's
 `dev.sh` boot contract because runtime-legibility ships no devcontainer of its
 own.
-Outcome telemetry is last among the mechanism plans because outcome metrics
-are only worth collecting once gates, reviews, and evals emit outcomes worth
-measuring. Launch-readiness sits last in table order but parallel-tracks
+Outcome telemetry was last among the mechanism plans and shipped as v0.17.0
+because outcome metrics are only worth collecting once gates, reviews, and
+evals emit outcomes worth measuring. Launch-readiness parallel-tracks
 starting immediately (re-prioritized 2026-07-12, superseding its earlier
 "after reviewer-loop" sequencing) — it touches no mechanism, and v0.10.0 is
 already a credible launch baseline; see that plan's Decisions log.
