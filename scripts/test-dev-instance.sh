@@ -5,6 +5,14 @@ set -uo pipefail
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 HELPER="$SCRIPTS_DIR/dev-instance.sh"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/dev-instance-test.XXXXXX") || exit 1
+# No fixture may discover a Git repository ABOVE its own scratch base. $TMPDIR
+# itself may sit inside a worktree (an agent sandbox, a CI scratch dir, a ~/tmp
+# kept in dotfiles); without this cap, the "outside Git" case below finds THAT
+# repo and asserts nothing. The ceiling must name the first ancestor to stop at
+# ($WORK), not the probe dir: discovery checks the CWD, then consults this list
+# only as it ascends. Fixture repos under $WORK are still found — a directory
+# that is itself a repo resolves before any ascent.
+export GIT_CEILING_DIRECTORIES="$WORK"
 trap 'git -C "$MAIN" worktree remove --force "$LINKED" >/dev/null 2>&1 || true; rm -rf "$WORK"' EXIT
 
 fails=0

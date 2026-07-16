@@ -9,7 +9,7 @@ set -uo pipefail
 
 command -v git >/dev/null 2>&1 || { echo "SKIP: git not available"; exit 0; }
 HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORK=$(mktemp -d)
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-guard-project-policy.XXXXXX") || exit 1
 trap 'rm -rf "$WORK"' EXIT
 fails=0
 

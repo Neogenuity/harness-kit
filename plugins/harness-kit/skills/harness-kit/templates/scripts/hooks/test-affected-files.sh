@@ -19,7 +19,7 @@ set -uo pipefail
 command -v jq >/dev/null 2>&1 || { echo "SKIP: jq not available"; exit 0; }
 
 LIB="$(cd "$(dirname "$0")" && pwd)/lib.sh"
-WORK=$(mktemp -d)
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-affected-files.XXXXXX") || exit 1
 trap 'rm -rf "$WORK"' EXIT
 
 export HARNESS_LOG=0

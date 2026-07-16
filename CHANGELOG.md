@@ -3,6 +3,96 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.18.0 — 2026-07-16
+
+Fixture isolation — the regression tests can no longer run their `git` commands
+in your repository. When `mktemp` failed, an unguarded fixture did not abort: it
+fell back to the host repo and committed the working tree onto the checked-out
+branch. This release guards every scratch allocation, hardens every consumption
+site, adds the CI gate that makes the pattern unreintroducible, and pins the
+behavior with a test that fails on the pre-fix tree.
+
+### The defect
+
+- **What happened:** `WORK=$(mktemp -d)` swallows a failure and leaves `WORK`
+  empty; `cd ""` is a silent rc=0 no-op that stays in the current directory. So
+  `cd "$WORK" || exit 1` — a guard that looks sufficient — passes, and
+  `git init && git add -A && git commit` then runs in your repo. `git -C ""` is
+  the same hazard with a seatbelt: it resolves to the real repo and returns 0.
+  `set -u` does not help; the variable is assigned-but-empty, not unset.
+- **Why it stayed hidden:** the trigger is `mktemp` *failing*, which a stock
+  runner never does — so CI stays green while the class is live. It fails where
+  the temp dir is denied: bare `mktemp -d` on macOS resolves
+  `_CS_DARWIN_USER_TEMP_DIR` (`/var/folders/…`) and ignores `$TMPDIR` entirely,
+  so it dies even when `$TMPDIR` points somewhere writable — a sandbox, a
+  hardened runner. That is exactly the environment coding agents run in.
+  shellcheck cannot see it either: every variable involved is *correctly quoted*,
+  and quoting is what makes `cd ""` a well-formed no-op rather than an error.
+
+### Fixes
+
+- **Guarded allocation, 52 sites** (26 shipped + 26 installed twins): the idiom
+  is now `VAR=$(mktemp -d "${TMPDIR:-/tmp}/<name>.XXXXXX") || exit 1` — the same
+  form `eval.sh` has carried, with a comment naming this exact hazard, since
+  v0.8.0. Top-level suites take one guarded base; fixtures carve subdirectories
+  out of it.
+- **Guarded consumption:** `${VAR:?}` at every `cd`/`git`/`rm` consuming a
+  fixture root. Not redundant — `|| return 1` inside a `F=$(make_fixture)`
+  command substitution returns from the *subshell*, so callers still received an
+  empty path and `test-install.sh`'s own `git commit` was still live.
+- **`fixture-recipe.md` stopped teaching the bug.** The recipe built a path from
+  an unchecked `mktemp` and then ran `git add -A && git commit` — in whatever
+  repo the reader was standing in. It now builds inside `$( … )` with explicit
+  guards and enters via `cd "${FIX:?}"`. Guards are explicit rather than
+  `set -e`, whose assignment-from-command-substitution semantics are not
+  dependable across shells (the recipe is `bash`; it gets pasted into zsh).
+- **No fixture may discover a Git repository above its own scratch base.**
+  `test-audit-log.sh`, `test-dev-instance.sh`, and `test-codex-hooks-cwd.sh`
+  assert "outside a Git worktree" behavior in a scratch dir — which resolved the
+  *host* repo whenever `$TMPDIR` itself sat inside a worktree (an agent sandbox,
+  a `~/tmp` in dotfiles). `test-codex-hooks-cwd.sh` was passing vacuously.
+  Capped with `GIT_CEILING_DIRECTORIES`.
+
+### Enforcement
+
+- **check #5b (new, ERROR):** a `mktemp` in the scripts check #6 runs must carry
+  both an explicit `XXXXXX` template and a failure guard. It runs *before* #6 —
+  a static gate on a file set must precede the gate that executes it. Scope is
+  exactly what #6 runs; an adopter's own scripts are their business. Declare a
+  verified exception with a trailing `# harness-mktemp-ok`, the same stance as
+  the manifest's `# tailored`.
+- **`scripts/test-fixture-isolation.sh` (new):** runs every sibling suite from
+  inside a throwaway canary repo under a failing `mktemp` shim and asserts the
+  canary's HEAD and porcelain are untouched — `cd ""` lands a leak in the CWD, so
+  the canary is where it surfaces. It catches leaks whose damage is
+  self-contained (`git init`, `git add -A`, `git commit`, a stray write) — the
+  class that actually put commits on this repo's `main` — and its header states
+  where that stops; it is not a universal oracle. It also refuses to pass
+  vacuously: a run in which the shim was never invoked tested nothing and now
+  fails saying so, rather than reporting isolation it never exercised. Verified
+  in both directions: it passes here and **fails on v0.17.0**, catching the real
+  leaks by name.
+
+### Migration
+
+- Update mode replaces `check-harness.sh`, `install-lib.sh`, and the
+  manifest-matching `test-*.sh` mechanism files, and adds
+  `test-fixture-isolation.sh`. Locally changed or tailored mechanism stays
+  diff-only.
+- **check #5b may fail your build on first upgrade**, in two shapes that want
+  different answers. A test under `scripts/test-*.sh` or `scripts/hooks/test-*.sh`
+  that *calls* a bare `mktemp` is the gate working: it is reporting a script that
+  can commit to your branch. Adopt the guarded idiom, or annotate a verified
+  allocation with `# harness-mktemp-ok`. A test that only *writes* `mktemp` text
+  into a fixture — `printf '…$(mktemp -d)…' > "$f/run.sh"`, a heredoc body, even
+  a message string — is a false positive: the gate keeps quoted text deliberately,
+  because the `XXXXXX` template lives in quotes. Do not reach for the marker
+  there; it is line-scoped and unconditional, so it would also mask a real
+  `mktemp` added to that line later. Assemble the literal instead (`MK=mktemp`,
+  then `printf '%s -d …' "$MK"`) — this repo's own suite hit this on day one and
+  does exactly that. See `references/fixture-recipe.md`.
+- No tailored file, TAILOR block, or authored content is touched.
+
 ## 0.17.0 — 2026-07-15
 
 Local outcome telemetry and documentation gardening — the harness now records

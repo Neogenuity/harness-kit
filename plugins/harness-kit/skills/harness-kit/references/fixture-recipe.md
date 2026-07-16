@@ -15,24 +15,74 @@ leaves out, or bootstrap a scratch repo for another experiment.
 
 ## Build the fixture
 
-```bash
-FIX="$(mktemp -d)/harness-fixture"
-mkdir -p "$FIX" && cd "$FIX"
-git init -q
+The build runs inside `$( … )` so a failed step aborts it and yields an empty
+`$FIX` instead of a half-built one. Every `git` command below is destructive if
+it runs anywhere but the fresh scratch repo, and only `cd` landing makes that
+true — so `mktemp` and `cd` are guarded explicitly, with `|| exit 1`, rather
+than by `set -e`. That is deliberate: `set -e` does not reliably abort an
+assignment-from-command-substitution across shells (this recipe is `bash`, but
+it gets pasted into zsh, the macOS default), while `|| exit 1` behaves
+identically in both.
 
-# one manifest so recon detects a stack (swap for composer.json / pyproject.toml)
-cat > package.json <<'JSON'
+```bash
+FIX=$(
+  # Both halves of this line are load-bearing. Template it explicitly, because
+  # bare `mktemp -d` ignores $TMPDIR on macOS (it resolves
+  # _CS_DARWIN_USER_TEMP_DIR, i.e. /var/folders) and so fails outright wherever
+  # only $TMPDIR is writable — an agent sandbox, hardened CI. And guard it,
+  # because that failure is otherwise SILENT: an unguarded `base` would be empty,
+  # `cd ""` is a no-op the shell reports as SUCCESS, and `git init`/`git add -A`/
+  # `git commit` would then run in — and commit to — whatever repository you
+  # happen to be standing in.
+  base=$(mktemp -d "${TMPDIR:-/tmp}/harness-fixture.XXXXXX") || exit 1
+  fix="$base/harness-fixture"
+  mkdir -p "$fix" || exit 1
+  cd "$fix" || exit 1
+  git init -q || exit 1
+
+  # one manifest so recon detects a stack (swap for composer.json / pyproject.toml)
+  cat > package.json <<'JSON'
 { "name": "harness-fixture", "version": "0.0.0", "private": true,
   "scripts": { "lint": "true", "test": "true" } }
 JSON
 
-# one source file to have something to edit
-mkdir -p src
-printf 'export const hello = () => "hi";\n' > src/hello.ts
+  # one source file to have something to edit
+  mkdir -p src
+  printf 'export const hello = () => "hi";\n' > src/hello.ts
 
-git add -A && git commit -qm "fixture: bare repo"
-echo "fixture at $FIX"
+  git add -A && git commit -qm "fixture: bare repo" >/dev/null
+  printf '%s' "$fix"
+)
+
+# `:?` refuses to continue on an empty path rather than silently leaving you in
+# the current repo — the same reason the build guards its mktemp.
+cd "${FIX:?fixture build failed — see the error above}" && echo "fixture at $FIX"
 ```
+
+### If you automate this into a `scripts/test-*.sh`
+
+`check-harness.sh` check #5b enforces the guarded idiom above across
+`scripts/test-*.sh` and `scripts/hooks/test-*.sh`, and it scans quoted text on
+purpose — the `XXXXXX` template lives inside quotes, so it cannot skip strings
+without going blind to the thing it checks. A test that *generates* a fixture
+script therefore trips it on text it never executes:
+
+```bash
+# flagged by #5b — the mktemp is a payload, not a command
+printf 'W=$(mktemp -d)\n' > "$fix/run.sh"
+```
+
+Keep the literal out of command position rather than annotating the line:
+
+```bash
+MK=mktemp
+printf 'W=$(%s -d)\n' "$MK" > "$fix/run.sh"
+```
+
+`# harness-mktemp-ok` is the wrong tool here. It is line-scoped and
+unconditional, so on a generator line it would also mask a genuine unguarded
+`mktemp` added to that line later. Reserve it for real allocations you have
+verified.
 
 ## Point the harness at it
 
@@ -73,5 +123,5 @@ what `audit` flags.
 ## Tear down
 
 ```bash
-cd / && rm -rf "$FIX"
+cd / && rm -rf "${FIX:?}"    # :? — never let an empty $FIX turn this into `rm -rf /`
 ```

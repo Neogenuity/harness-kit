@@ -12,7 +12,7 @@ set -uo pipefail
 command -v jq >/dev/null 2>&1 || { echo "SKIP: jq not available"; exit 0; }
 
 HOOK="$(cd "$(dirname "$0")" && pwd)/guard-secrets.sh"
-WORK=$(mktemp -d)
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-guard-secrets.XXXXXX") || exit 1
 trap 'rm -rf "$WORK"' EXIT
 
 # Keep hook_log out of the repo during tests; explicit log cases opt back in.

@@ -30,7 +30,7 @@ checked=0
 
 # Throwaway repo whose scripts/hooks/ holds the real hook scripts, so a
 # Git-root-resolved command can locate and execute them from a nested CWD.
-WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-codex-hooks-cwd.XXXXXX") || exit 1; trap 'rm -rf "$WORK"' EXIT
 git -C "$WORK" init -q
 mkdir -p "$WORK/scripts/hooks" "$WORK/deep/nested/dir"
 cp "$HOOKS_DIR"/*.sh "$WORK/scripts/hooks/"
@@ -63,9 +63,17 @@ done < <(jq -r '.hooks | to_entries[] | .value[] | .hooks[] | .command' "$WIRING
 # exit 0 rather than run bash on an empty root (which would 127). Pins the
 # PR #6 Codex-review fix; a plain `bash "$(git rev-parse …)/…"` would 127 here.
 if [ "$checked" -gt 0 ]; then
-    NOGIT=$(mktemp -d)
+    NOGIT=$(mktemp -d "${TMPDIR:-/tmp}/test-codex-hooks-cwd-nogit.XXXXXX") || exit 1
     firstcmd=$(jq -r '.hooks | to_entries[] | .value[] | .hooks[] | .command' "$WIRING" | head -n 1)
-    ( cd "$NOGIT" && printf '' | eval "$firstcmd" ) >/dev/null 2>&1
+    # $TMPDIR itself may sit inside a Git worktree (a CI scratch dir, an agent
+    # sandbox, a ~/tmp kept in dotfiles) — then discovery from NOGIT finds THAT
+    # repo, so this case would silently test a repo-rooted CWD and assert
+    # nothing. Cap the upward walk. The ceiling must be NOGIT's PARENT, not
+    # NOGIT: discovery starts at the CWD and only consults the list when
+    # ascending, so a ceiling of NOGIT itself is never reached.
+    nogit_parent=$(dirname "$NOGIT")
+    ( cd "$NOGIT" && export GIT_CEILING_DIRECTORIES="$nogit_parent" \
+        && printf '' | eval "$firstcmd" ) >/dev/null 2>&1
     rc=$?
     rm -rf "$NOGIT"
     if [ "$rc" = "0" ]; then

@@ -21,7 +21,7 @@
 # harness_generate_manifest, which reads this list. The scripts/hooks/ tree is
 # always included wholesale (see harness_manifest_paths). Add a new top-level
 # mechanism file here and it is covered by the manifest and the installer at once.
-_HARNESS_MECHANISM_TOPLEVEL="harness.conf sync-agent-skills.sh check-harness.sh test-check-harness.sh install-lib.sh test-install.sh dev-instance.sh test-dev-instance.sh log-lib.sh test-log.sh audit-log.sh test-audit-log.sh doc-garden.sh test-doc-garden.sh eval-lib.sh eval.sh eval-harness.sh test-eval.sh test-verify.sh verify.sh"
+_HARNESS_MECHANISM_TOPLEVEL="harness.conf sync-agent-skills.sh check-harness.sh test-check-harness.sh install-lib.sh test-install.sh dev-instance.sh test-dev-instance.sh log-lib.sh test-log.sh audit-log.sh test-audit-log.sh doc-garden.sh test-doc-garden.sh eval-lib.sh eval.sh eval-harness.sh test-eval.sh test-verify.sh test-fixture-isolation.sh verify.sh"
 
 # Optional project-owned policy that is authored for an application repo, never
 # copied from this template directory. When present, it is still integrity-

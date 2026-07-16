@@ -2,6 +2,12 @@
 set -uo pipefail
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-audit-log.XXXXXX") || exit 1
+# No fixture may discover a Git repository ABOVE its own scratch base — $TMPDIR
+# itself may sit inside a worktree (an agent sandbox, a CI scratch dir, a ~/tmp
+# kept in dotfiles), and the no-Git case below would then resolve THAT repo and
+# assert nothing. Cap the ascent at $WORK; fixture repos under it still resolve,
+# because a directory that is itself a repo is found before any ascent.
+export GIT_CEILING_DIRECTORIES="$WORK"
 trap 'rm -rf "$WORK"' EXIT
 fails=0
 pass() { echo "ok:   $1"; }

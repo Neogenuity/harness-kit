@@ -14,6 +14,16 @@ export SKILLS_REF_BIN=__no_skills_ref_binary__
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 CHECK="$SCRIPTS_DIR/check-harness.sh"
 
+# One guarded scratch base for every fixture below. The guard is load-bearing,
+# not decoration: bare `mktemp -d` ignores $TMPDIR on macOS (it resolves
+# _CS_DARWIN_USER_TEMP_DIR, i.e. /var/folders) and fails outright in a sandbox.
+# An unguarded failure leaves the path EMPTY, and bash `cd ""` is a silent rc=0
+# no-op — so `( cd "$w" && git commit ... )` runs in the HOST repo. That put junk
+# commits on this repo's main branch twice before check #6b existed. Fixtures
+# carve subdirectories out of this base, so their own mktemp cannot fail loose.
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-check-harness.XXXXXX") || exit 1
+trap 'rm -rf "$WORK"' EXIT
+
 fails=0
 
 # new_fixture -> prints a fresh $WORK with an executable copy of check-harness.
@@ -21,7 +31,7 @@ fails=0
 # harness script — so chmod it, exactly as an install would.)
 new_fixture() {
     local work
-    work=$(mktemp -d)
+    work=$(mktemp -d "$WORK/fixture.XXXXXX") || return 1
     mkdir -p "$work/scripts" "$work/docs"
     cp "$CHECK" "$work/scripts/check-harness.sh"
     chmod +x "$work/scripts/check-harness.sh"
@@ -332,7 +342,7 @@ if command -v git >/dev/null 2>&1; then
 ## Next action
 Finish it.
 EOF
-    ( cd "$W" \
+    ( cd "${W:?}" \
         && git init -q \
         && git add -A \
         && GIT_AUTHOR_DATE="2020-01-01T00:00:00" GIT_COMMITTER_DATE="2020-01-01T00:00:00" \
@@ -578,7 +588,7 @@ EOF
     # (i) jq removed via a PATH shim (symlink only the utilities check-harness
     #     needs) with a JSON config present → unaudited WARN, exit 0. Proves the
     #     jq-absent path is loud, not silent.
-    shim=$(mktemp -d)
+    shim=$(mktemp -d "$WORK/shim.XXXXXX") || return 1
     for u in bash sh env dirname basename grep egrep awk sed sort find wc tr head cat date git shasum sha256sum mktemp rm chmod ls uname printf seq; do
         p=$(command -v "$u" 2>/dev/null) && ln -s "$p" "$shim/$u" 2>/dev/null
     done
@@ -644,7 +654,7 @@ EOF
     # (p) jq absent + configs whose maps are trivially empty (the shipped
     #     opencode template shape) → fully silent, not a perpetual unaudited
     #     WARN: the dependency-free empty-map fast path.
-    shim=$(mktemp -d)
+    shim=$(mktemp -d "$WORK/shim.XXXXXX") || return 1
     for u in bash sh env dirname basename grep egrep awk sed sort find wc tr head cat date git shasum sha256sum mktemp rm chmod ls uname printf seq; do
         p=$(command -v "$u" 2>/dev/null) && ln -s "$p" "$shim/$u" 2>/dev/null
     done
@@ -926,7 +936,7 @@ TOML
     # A declared Codex profile fails closed when the complete-file TOML parser
     # is unavailable; the narrow tuple reader alone must never approve it.
     W=$(new_execution_fixture ".codex")
-    pyshim=$(mktemp -d)
+    pyshim=$(mktemp -d "$WORK/pyshim.XXXXXX") || return 1
     printf '#!/bin/sh\nexit 1\n' > "$pyshim/python3"
     chmod +x "$pyshim/python3"
     out=$(PATH="$pyshim:$PATH" bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
@@ -1186,7 +1196,7 @@ tools: Read, Grep, Glob, Bash
 
 Body.
 MD
-        ( cd "$work" && bash scripts/sync-agent-skills.sh >/dev/null 2>&1 )
+        ( cd "${work:?}" && bash scripts/sync-agent-skills.sh >/dev/null 2>&1 )
         printf '%s' "$work"
     }
 
@@ -1248,6 +1258,93 @@ MD
         fails=$((fails + 1))
     fi
 fi
+
+# --- check #5b: unsafe scratch-path creation in the scripts check #6 RUNS ------
+# The defect this pins put junk commits on this repo's own main branch, twice:
+# bare `mktemp -d` fails wherever only $TMPDIR is writable (it resolves
+# /var/folders on macOS), the unguarded assignment leaves the path EMPTY, and
+# `cd ""` is a silent rc=0 no-op — so the fixture's `git commit` runs in the HOST
+# repo. shellcheck cannot see it (the variables are correctly quoted), so #5b is
+# the only static layer that can.
+#
+# Every fixture test script below must exit 0: check #6 RUNS them.
+#
+# #5b scans THIS file too, and these fixtures deliberately contain the pattern it
+# bans — so the literal is assembled via $MK rather than written out, keeping it
+# out of command position here. The '# harness-mktemp-ok' marker would be the
+# WRONG tool: this file allocates no scratch of its own, and a marker is
+# line-scoped and unconditional, so it would also mask a genuinely bad mktemp
+# added to that line later. Reserve the marker for real, verified allocations.
+MK=mktemp
+
+# A bare `mktemp -d` is an ERROR.
+W=$(new_fixture)
+printf '#!/usr/bin/env bash\nWORK=$(%s -d)\nexit 0\n' "$MK" > "$W/scripts/test-leaky.sh"
+chmod +x "$W/scripts/test-leaky.sh"
+assert_flags "check #5b: bare 'mktemp -d' is flagged" "$W" "creates a scratch path unsafely"
+
+# Templated but UNGUARDED is still an ERROR — the failure would just be silent.
+W=$(new_fixture)
+printf '#!/usr/bin/env bash\nWORK=$(%s -d "${TMPDIR:-/tmp}/x.XXXXXX")\nexit 0\n' "$MK" > "$W/scripts/test-unguarded.sh"
+chmod +x "$W/scripts/test-unguarded.sh"
+assert_flags "check #5b: templated but unguarded is flagged" "$W" "no failure guard"
+
+# Guarded but UNTEMPLATED is an ERROR — it simply fails wherever only $TMPDIR is
+# writable, which is where agents run.
+W=$(new_fixture)
+printf '#!/usr/bin/env bash\nWORK=$(%s -d) || exit 1\nexit 0\n' "$MK" > "$W/scripts/test-untemplated.sh"
+chmod +x "$W/scripts/test-untemplated.sh"
+assert_flags "check #5b: guarded but untemplated is flagged" "$W" "no explicit XXXXXX template"
+
+# The canonical form passes.
+W=$(new_fixture)
+printf '#!/usr/bin/env bash\nWORK=$(mktemp -d "${TMPDIR:-/tmp}/ok.XXXXXX") || exit 1\nexit 0\n' > "$W/scripts/test-safe.sh"
+chmod +x "$W/scripts/test-safe.sh"
+assert_ok "check #5b: the canonical guarded+templated form passes" "$W"
+
+# The `if ! VAR=$(mktemp ...) || [ -z "$VAR" ]; then die` form passes, and so does
+# templating into a directory OTHER than $TMPDIR on purpose (eval-harness.sh writes
+# its baseline temp beside the target so the `mv` is a same-filesystem rename).
+# What is pinned is an explicit XXXXXX template, NOT a literal $TMPDIR.
+W=$(new_fixture)
+cat > "$W/scripts/test-ifform.sh" <<'EOF'
+#!/usr/bin/env bash
+if ! T="$(mktemp "$(dirname "$0")/.b.XXXXXX")" || [ -z "$T" ]; then
+    echo "mktemp failed"; exit 1
+fi
+rm -f "$T"; exit 0
+EOF
+chmod +x "$W/scripts/test-ifform.sh"
+assert_ok "check #5b: the 'if !' guard form and a non-\$TMPDIR template pass" "$W"
+
+# No false positive on a NON-INVOCATION: mktemp named in a word list or a message
+# is not mktemp being run. Both shapes are live in this repo (the PATH-shim
+# utility lists, and `die "mktemp failed ..."`).
+W=$(new_fixture)
+cat > "$W/scripts/test-mentions.sh" <<'EOF'
+#!/usr/bin/env bash
+for u in bash sha256sum mktemp rm sleep; do :; done
+die() { echo "$1"; }
+# mktemp -d
+[ 1 = 2 ] && die "mktemp failed — cannot create a workspace"
+exit 0
+EOF
+chmod +x "$W/scripts/test-mentions.sh"
+assert_ok "check #5b: mktemp named in a word list, a message, or a comment is not flagged" "$W"
+
+# The declared exception, same stance as the manifest's '# tailored': one comment,
+# so an ERROR-severity gate can never wedge an adopter with a verified exception.
+W=$(new_fixture)
+printf '#!/usr/bin/env bash\nWORK=$(%s -d)  # harness-mktemp-ok\nexit 0\n' "$MK" > "$W/scripts/test-declared.sh"
+chmod +x "$W/scripts/test-declared.sh"
+assert_ok "check #5b: a '# harness-mktemp-ok' declared exception is honored" "$W"
+
+# Scope: #5b polices what check #6 RUNS, not an adopter's other scripts.
+W=$(new_fixture)
+printf '#!/usr/bin/env bash\nWORK=$(%s -d)\n' "$MK" > "$W/scripts/deploy.sh"
+chmod +x "$W/scripts/deploy.sh"
+assert_ok "check #5b: a non-test script the harness never runs is out of scope" "$W"
+
 
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails check-harness case(s)"

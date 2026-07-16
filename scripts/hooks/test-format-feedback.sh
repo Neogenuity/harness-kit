@@ -16,7 +16,7 @@ set -uo pipefail
 command -v jq >/dev/null 2>&1 || { echo "SKIP: jq not available"; exit 0; }
 
 HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORK=$(mktemp -d)
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-format-feedback.XXXXXX") || exit 1
 trap 'rm -rf "$WORK"' EXIT
 
 # Fixture hook: always has findings, so every case exercises the protocol.

@@ -30,6 +30,16 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS_DIR/install-lib.sh"
 KIT_VERSION="0.0.0-fixture"
 
+# One guarded scratch base for every fixture below. The guard is load-bearing,
+# not decoration: bare `mktemp -d` ignores $TMPDIR on macOS (it resolves
+# _CS_DARWIN_USER_TEMP_DIR, i.e. /var/folders) and fails outright in a sandbox.
+# An unguarded failure leaves the path EMPTY, and bash `cd ""` is a silent rc=0
+# no-op — so `( cd "$w" && git commit ... )` runs in the HOST repo. That put junk
+# commits on this repo's main branch twice before check #6b existed. Fixtures
+# carve subdirectories out of this base, so their own mktemp cannot fail loose.
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-install.XXXXXX") || exit 1
+trap 'rm -rf "$WORK"' EXIT
+
 fails=0
 pass() { echo "ok:   $1"; }
 fail() { echo "FAIL: $1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/        /'; fails=$((fails + 1)); }
@@ -44,8 +54,8 @@ sha_of() { ( cd "$1" && _harness_sha256 "$2" | awk '{print $1}' ); }
 # scripts/ dir, a generated manifest, and .harness/ git-ignored.
 make_fixture() {
     local w
-    w=$(mktemp -d)
-    ( cd "$w" && git init -q && mkdir -p src && printf 'echo hi\n' > src/app.sh )
+    w=$(mktemp -d "$WORK/fixture.XXXXXX") || return 1
+    ( cd "${w:?}" && git init -q && mkdir -p src && printf 'echo hi\n' > src/app.sh )
     harness_install_mechanism "$SCRIPTS_DIR" "$w"
     harness_append_gitignore "$w"
     # This is a bare install-MECHANICS fixture: no provider hook configs or agent
@@ -58,7 +68,7 @@ make_fixture() {
       printf 'HOOK_WIRED_PROVIDERS=""\nAGENT_PROVIDERS=""\nEXECUTION_PROFILE_PROVIDERS=""\n'
     } > "$w/scripts/harness.conf.tmp" && mv "$w/scripts/harness.conf.tmp" "$w/scripts/harness.conf"
     harness_generate_manifest "$w" "$KIT_VERSION" > "$w/scripts/.harness-manifest"
-    ( cd "$w" && git_c add -A && git_c commit -qm init >/dev/null )
+    ( cd "${w:?}" && git_c add -A && git_c commit -qm init >/dev/null )
     printf '%s' "$w"
 }
 
@@ -138,7 +148,7 @@ if command -v jq >/dev/null 2>&1; then
         pass "preflight: harness_missing_prereqs stays silent about a present jq"
     fi
 fi
-EMPTYPATH=$(mktemp -d)
+EMPTYPATH=$(mktemp -d "$WORK/emptypath.XXXXXX") || exit 1
 if PATH="$EMPTYPATH" harness_missing_prereqs | grep -qx 'jq'; then
     pass "preflight: harness_missing_prereqs names jq when it is off PATH"
 else
@@ -149,7 +159,7 @@ rm -rf "$EMPTYPATH"
 # --- (a) clean init -----------------------------------------------------------
 F=$(make_fixture)
 write_mirrored_claude_settings "$F"
-( cd "$F" && git_c add -A && git_c commit -qm claude >/dev/null )
+( cd "${F:?}" && git_c add -A && git_c commit -qm claude >/dev/null )
 missing=""
 # harness.conf is a sourced config (not executable, like every non-.sh file);
 # the .sh mechanism files must carry the exec bit (check-harness.sh check #5).
@@ -196,8 +206,8 @@ rm -rf "$F"
 
 # --- (b) non-clobber floor ----------------------------------------------------
 # A partial-harness repo's hand-written files must survive install byte-for-byte.
-F=$(mktemp -d)
-( cd "$F" && git init -q && mkdir -p src && printf 'echo hi\n' > src/app.sh )
+F=$(mktemp -d "$WORK/partial.XXXXXX") || exit 1
+( cd "${F:?}" && git init -q && mkdir -p src && printf 'echo hi\n' > src/app.sh )
 mkdir -p "$F/.claude"
 printf '{ "hand": "written", "permissions": { "deny": [] } }\n' > "$F/.claude/settings.json"
 printf '# My Project\n\nHand-authored AGENTS.md.\n' > "$F/AGENTS.md"
@@ -221,7 +231,7 @@ F=$(make_fixture)
 harness_update_apply "$SCRIPTS_DIR" "$F" >/dev/null
 harness_repin_manifest "$F" "$KIT_VERSION" > "$F/scripts/.hm" \
     && mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
-dirty=$( cd "$F" && git status --porcelain )
+dirty=$( cd "${F:?}" && git status --porcelain )
 if [ -z "$dirty" ]; then
     pass "no-op update: idempotent (clean git status)"
 else
@@ -233,7 +243,7 @@ rm -rf "$F"
 # An untailored file still matching its pin is replaced with the newer kit
 # version and the manifest re-pinned to the new checksum.
 F=$(make_fixture)
-NEWKIT=$(mktemp -d); cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
 printf '\n# UPGRADED\n' >> "$NEWKIT/scripts/sync-agent-skills.sh"
 harness_update_apply "$NEWKIT/scripts" "$F" >/dev/null
 harness_repin_manifest "$F" "9.9.9" > "$F/scripts/.hm" \
@@ -256,7 +266,7 @@ newsha=$(sha_of "$F" "scripts/verify.sh")
 grep -v "scripts/verify.sh" "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
 printf '%s  scripts/verify.sh # tailored\n' "$newsha" >> "$F/scripts/.hm"
 mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
-NEWKIT=$(mktemp -d); cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"   # pristine verify.sh differs
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"   # pristine verify.sh differs
 harness_update_apply "$NEWKIT/scripts" "$F" >/dev/null
 kept=$(sha_of "$F" "scripts/verify.sh")
 if grep -q "LOCAL FORK" "$F/scripts/verify.sh" && [ "$kept" = "$newsha" ]; then
@@ -275,7 +285,7 @@ rm -rf "$F" "$NEWKIT"
 F=$(make_fixture)
 harness_persist_base "$SCRIPTS_DIR" "$F" "$KIT_VERSION"   # the init-time snapshot
 rm -rf "$F/.git"                                          # no local git at all
-REC=$(mktemp -d)
+REC=$(mktemp -d "$WORK/recover.XXXXXX") || exit 1
 recv=$(harness_recover_old_templates "$F" "$REC/old"); rc=$?
 # Recovery must (a) succeed with no .git, (b) report the manifest-header version,
 # and (c) reproduce the installed templates byte-for-byte (a faithful diff base)
@@ -292,7 +302,7 @@ rm -rf "$REC"
 # never checked out) → recovery returns non-zero so update falls back to the
 # git-tag / upstream-fetch channels instead of silently diffing nothing.
 rm -rf "$F/.harness/base"
-REC2=$(mktemp -d)
+REC2=$(mktemp -d "$WORK/recover2.XXXXXX") || exit 1
 harness_recover_old_templates "$F" "$REC2/old" >/dev/null 2>&1; rc=$?
 if [ "$rc" != "0" ]; then
     pass "old-template recovery: an absent base returns non-zero so update can fall back"
@@ -335,7 +345,7 @@ rm -rf "$F"
 # guard-secrets.sh is a policy file (SKILL update step 3): a kit change to it must
 # be diffed, never auto-applied, regardless of the '# tailored' marker.
 F=$(make_fixture)
-NEWKIT=$(mktemp -d); cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
 printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/hooks/guard-secrets.sh"
 harness_update_apply "$NEWKIT/scripts" "$F" >/dev/null
 if ! grep -q "KIT CHANGE" "$F/scripts/hooks/guard-secrets.sh"; then
@@ -358,7 +368,7 @@ for f in $NEW_FILES; do rm "$F/scripts/$f"; done
 grep -vE 'scripts/((test-)?dev-instance|log-lib|test-log|audit-log|test-audit-log|doc-garden|test-doc-garden)\.sh' \
     "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
 mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
-NEWKIT=$(mktemp -d); cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
 (
     # This source is the behavior under test: update orchestration must use the
     # incoming kit's list, not the legacy target's install-lib.sh.
@@ -387,10 +397,10 @@ rm -rf "$F" "$NEWKIT"
 # a useful generic body. A same-named file in a source dir is therefore ignored
 # by install/persist/add; once a target authors one, manifest generation includes
 # it and update is diff-only (even if pristine and unmarked).
-ROGUE=$(mktemp -d); cp -R "$SCRIPTS_DIR" "$ROGUE/scripts"
+ROGUE=$(mktemp -d "$WORK/rogue.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$ROGUE/scripts"
 printf '#!/usr/bin/env bash\necho WRONG-GENERIC-TEMPLATE\n' > "$ROGUE/scripts/dev.sh"
 chmod +x "$ROGUE/scripts/dev.sh"
-F=$(mktemp -d); ( cd "$F" && git init -q )
+F=$(mktemp -d "$WORK/rogue-install.XXXXXX") || exit 1; ( cd "${F:?}" && git init -q )
 harness_install_mechanism "$ROGUE/scripts" "$F"
 if [ ! -e "$F/scripts/dev.sh" ]; then
     pass "project policy: install never copies a source scripts/dev.sh template"
@@ -457,7 +467,7 @@ if command -v jq >/dev/null 2>&1; then
     fi
     write_provider_hook_configs "$F"
     rm "$F/.cursor/hooks.json"            # pre-migration deletion of one config
-    out=$(cd "$F" && bash scripts/check-harness.sh 2>&1); rc=$?
+    out=$(cd "${F:?}" && bash scripts/check-harness.sh 2>&1); rc=$?
     if [ "$rc" != "0" ] && printf '%s' "$out" | grep -qF "declares no HOOK_WIRED_PROVIDERS"; then
         pass "migration: undeclared adopted harness stays a loud error (deletion not silently adopted)"
     else
@@ -468,7 +478,7 @@ if command -v jq >/dev/null 2>&1; then
     harness_conf_declare "$F" HOOK_WIRED_PROVIDERS ".claude .cursor .codex"
     harness_conf_declare "$F" AGENT_PROVIDERS ""
     repin "$F"
-    out=$(cd "$F" && bash scripts/check-harness.sh 2>&1); rc=$?
+    out=$(cd "${F:?}" && bash scripts/check-harness.sh 2>&1); rc=$?
     if [ "$rc" != "0" ] && printf '%s' "$out" | grep -qF ".cursor/hooks.json is missing"; then
         pass "migration: after confirming the full set, the deleted .cursor config surfaces as an ERROR"
     else
@@ -486,12 +496,12 @@ if command -v jq >/dev/null 2>&1; then
     fi
     # Restore the config → the migrated harness is green.
     write_provider_hook_configs "$F"
-    out=$(cd "$F" && bash scripts/check-harness.sh 2>&1); rc=$?
+    out=$(cd "${F:?}" && bash scripts/check-harness.sh 2>&1); rc=$?
     [ "$rc" = "0" ] && pass "migration: restoring the config makes the migrated harness green" \
         || fail "migration: restored config still failing (rc=$rc)" "$out"
     # Legacy-upgrade bite: post-migration, deleting the hooks object is caught.
     jq 'del(.hooks)' "$F/.claude/settings.json" > "$F/.claude/s" && mv "$F/.claude/s" "$F/.claude/settings.json"
-    out=$(cd "$F" && bash scripts/check-harness.sh 2>&1); rc=$?
+    out=$(cd "${F:?}" && bash scripts/check-harness.sh 2>&1); rc=$?
     if [ "$rc" != "0" ] && printf '%s' "$out" | grep -qF "is not wired in .claude/settings.json"; then
         pass "migration: legacy-upgrade — deleting hooks post-migration is flagged"
     else
@@ -508,8 +518,8 @@ fi
 # gate; skipped in a user install that ships only scripts/.
 PROVIDERS_TPL="$SCRIPTS_DIR/../providers"
 if command -v jq >/dev/null 2>&1 && [ -d "$PROVIDERS_TPL" ]; then
-    F=$(mktemp -d)
-    ( cd "$F" && git init -q )
+    F=$(mktemp -d "$WORK/providers.XXXXXX") || exit 1
+    ( cd "${F:?}" && git init -q )
     harness_install_mechanism "$SCRIPTS_DIR" "$F"
     harness_append_gitignore "$F"
     { grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS|EXECUTION_PROFILE_PROVIDERS)=' "$F/scripts/harness.conf"
@@ -520,14 +530,14 @@ if command -v jq >/dev/null 2>&1 && [ -d "$PROVIDERS_TPL" ]; then
     cp "$PROVIDERS_TPL/cursor/hooks.json" "$F/.cursor/hooks.json"
     cp "$PROVIDERS_TPL/codex/hooks.json" "$F/.codex/hooks.json"
     harness_generate_manifest "$F" "$KIT_VERSION" > "$F/scripts/.harness-manifest"
-    out=$(cd "$F" && bash scripts/check-harness.sh 2>&1); rc=$?
+    out=$(cd "${F:?}" && bash scripts/check-harness.sh 2>&1); rc=$?
     if [ "$rc" = "0" ]; then
         pass "real templates: shipped provider hook configs validate all tuples (#8d)"
     else
         fail "real templates: shipped hook configs failed check-harness" "$out"
     fi
     jq 'del(.hooks)' "$F/.claude/settings.json" > "$F/.claude/s" && mv "$F/.claude/s" "$F/.claude/settings.json"
-    out=$(cd "$F" && bash scripts/check-harness.sh 2>&1); rc=$?
+    out=$(cd "${F:?}" && bash scripts/check-harness.sh 2>&1); rc=$?
     if [ "$rc" != "0" ] && printf '%s' "$out" | grep -qF "is not wired in .claude/settings.json"; then
         pass "real templates: deleting .hooks from the shipped settings.json is flagged"
     else

@@ -58,9 +58,23 @@ Repo references that must stay honest belong in markdown links (the CI link
 check walks every doc under `docs/`); prose and backtick mentions of
 not-yet-existing paths are legal — queued plans name future files by design.
 
-## Roadmap (set 2026-07-10, v0.17.0 released 2026-07-15)
+## Roadmap (set 2026-07-10, v0.18.0 released 2026-07-16)
 
-Shipped: **v0.17.0** — backward-compatible local outcome telemetry, fail-open
+Shipped: **v0.18.0** — fixture isolation: the shipped regression tests could run
+their `git init`/`add`/`commit` in the **host repository** when `mktemp` failed,
+because `cd ""` is a silent rc=0 no-op that defeats the `|| exit 1` guard that
+looks like it catches it. Found by a launch-readiness review whose own
+`verify.sh` runs reproduced it live on this repo's `main` — twice — which is why
+the mechanism is pinned rather than theorized. 52 allocation sites guarded, every
+consumption site `${VAR:?}`-hardened, the shipped `fixture-recipe.md` stopped
+teaching the anti-pattern, three suites capped with `GIT_CEILING_DIRECTORIES`
+(one had been passing vacuously), plus check #5b and a behavioral
+`test-fixture-isolation.sh` verified to fail on v0.17.0 and pass here. The class
+was invisible to both CI (hosted runners have a writable temp dir, so it never
+fires there) and shellcheck (the variables are correctly quoted — that is what
+makes `cd ""` well-formed)
+([completed/v0.18.0-fixture-isolation.md](completed/v0.18.0-fixture-isolation.md));
+**v0.17.0** — backward-compatible local outcome telemetry, fail-open
 serial/parallel verification-gate events, deterministic mixed-log and eval
 reduction, exact local session-trailer joins with honest lifecycle/PR N/A
 states, plus the offline read-only doc-garden scanner and canonical skill.
@@ -147,8 +161,13 @@ rows + strict Agent Skills validation + matrix stamping
 **Active:** [Launch readiness](active/launch-readiness.md) remains the parallel
 maintainer track; its demo, org move, and public flip are still open.
 
-The mechanism queue is empty after v0.17.0. New work enters as a
-theme-named queued plan and takes a version only when activated.
+The mechanism queue is empty after v0.18.0. New work enters as a
+theme-named queued plan and takes a version only when activated. v0.18.0 was
+unqueued and unplanned — it jumped straight to active because it was the one
+defect class where the kit violated its own core promise (never damage the repo
+it protects), it was reproduced on `main` rather than argued for, and its scope
+was mechanism-only, displacing no dependency chain — the same profile that let
+v0.11.0 jump the queue.
 
 **Ordering rationale.** Claim-to-implementation gaps went first — plans
 machinery (v0.6.0) closed the space between what the docs promise and what

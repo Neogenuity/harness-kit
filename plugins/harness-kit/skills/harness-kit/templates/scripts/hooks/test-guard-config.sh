@@ -10,7 +10,7 @@ set -uo pipefail
 command -v jq >/dev/null 2>&1 || { echo "SKIP: jq not available"; exit 0; }
 
 HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORK=$(mktemp -d)
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-guard-config.XXXXXX") || exit 1
 trap 'rm -rf "$WORK"' EXIT
 
 # Run from a fake repo root so ROOT resolution and rel-path stripping are
