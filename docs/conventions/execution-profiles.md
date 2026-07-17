@@ -36,7 +36,8 @@ Required tuples:
 
 - `sandbox.enabled` is `true`.
 - `sandbox.failIfUnavailable` is `true`.
-- `sandbox.allowUnsandboxedCommands` is `false`.
+- `sandbox.allowUnsandboxedCommands` is `true`, retaining Claude Code's normal
+  permission-gated escape for commands that cannot operate inside the sandbox.
 - `sandbox.excludedCommands` is absent or an empty array; listed commands always
   bypass the sandbox, even when the general unsandboxed escape hatch is off.
 - `sandbox.filesystem.allowWrite` is an empty array.
@@ -50,14 +51,18 @@ Required tuples:
 - `sandbox.credentials.files` denies `~/.aws/credentials` and `~/.ssh`.
 - `sandbox.credentials.envVars` denies `GITHUB_TOKEN` and `NPM_TOKEN`.
 
-This makes sandbox unavailability a hard failure, disables the normal
-unsandboxed retry escape hatch, adds no writable roots, closes network egress,
-and removes named credentials from sandboxed commands. Claude otherwise reads
-broadly by default, so keep the native `permissions.deny` mirror of
-`SECRET_PATTERNS`; add repo-specific credentials to both controls when recon
-finds them.
+This makes sandbox unavailability a hard failure, adds no writable roots,
+closes sandboxed network egress, and removes named credentials from sandboxed
+commands. A command that genuinely needs network or host integration — for
+example `git push`, a provider CLI, or an eval runner that launches one — may
+retry outside the sandbox only through Claude Code's normal permission flow and
+an explicit user approval. Keep `excludedCommands` empty: predeclared bypasses
+run unsandboxed automatically and skip that per-command decision. Claude
+otherwise reads broadly by default, so keep the native `permissions.deny`
+mirror of `SECRET_PATTERNS`; add repo-specific credentials to both controls
+when recon finds them.
 
-The official Claude settings and sandboxing references, re-verified 2026-07-14,
+The official Claude settings and sandboxing references, re-verified 2026-07-17,
 make these exclusions security-significant. Unix-socket exceptions can expose
 powerful host services and even create sandbox-bypass paths; Mach lookup entries
 grant additional macOS XPC/Mach service access. The weaker network-isolation

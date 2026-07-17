@@ -3,6 +3,30 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.19.0 — 2026-07-17
+
+### Fixes
+
+- **User-approved host integration:** Claude's adopted execution profile now
+  retains its normal permission-gated unsandboxed retry while keeping
+  sandboxed egress closed, credentials denied, and `excludedCommands` empty.
+  This lets a user approve necessary host-integrated commands such as `git
+  push`, a nested provider CLI, or an eval runner without pre-authorizing an
+  always-unsandboxed command. Codex's existing `approval_policy =
+  "on-request"` provides the equivalent explicit escalation.
+- **macOS guard fixture paths:** normalize the scratch-root spelling in the
+  guard-config test so a trailing-slash `TMPDIR` cannot create a lexical `//`
+  mismatch between an absolute fixture path and the hook's computed root.
+
+### Migration
+
+- Update mode replaces the manifest-matching `check-harness.sh`,
+  `test-check-harness.sh`, and `hooks/test-guard-config.sh` mechanism files.
+  The Claude execution-profile change is policy content: merge
+  `allowUnsandboxedCommands: true` into an adopted `.claude/settings.json`
+  only when the repository wants user-approved host integration; keep
+  `excludedCommands` empty.
+
 ## 0.18.0 — 2026-07-16
 
 Fixture isolation — the regression tests can no longer run their `git` commands

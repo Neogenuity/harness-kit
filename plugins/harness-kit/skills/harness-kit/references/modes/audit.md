@@ -100,9 +100,10 @@ and the documented operability envelope. Codex validation requires Python
 profile as unverifiable, never green. Only provably additive deny hardening
 is accepted without changing the profile, such as extra Claude credential or
 domain denies and extra Cursor `networkPolicy.deny` entries. Any extra writable
-or readable root, public/wildcard network allowance, unsandboxed fallback or
-nonempty Claude `excludedCommands`,
-disabled approval, or globally allowed OpenCode shell is drift.
+or readable root, public/wildcard network allowance, disabled Claude
+user-approved unsandboxed retry, nonempty Claude `excludedCommands`, disabled
+Codex approval, or globally allowed OpenCode shell is drift. Claude's retry is
+an explicit per-command approval path, not a preapproved sandbox exclusion.
 
 For the Codex compatibility variant, report that it is not localhost-only and
 does not prove the full `scripts/dev.sh` lifecycle. The 2026-07-14 live check

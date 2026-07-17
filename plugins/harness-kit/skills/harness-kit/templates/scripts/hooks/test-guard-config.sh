@@ -11,6 +11,10 @@ command -v jq >/dev/null 2>&1 || { echo "SKIP: jq not available"; exit 0; }
 
 HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-guard-config.XXXXXX") || exit 1
+# macOS TMPDIR normally ends in `/`, so the template above can yield a lexical
+# `//` segment. Normalize it once: guard-config computes its repo root through
+# `cd && pwd`, and absolute-path fixtures must use that same spelling.
+WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 # Run from a fake repo root so ROOT resolution and rel-path stripping are

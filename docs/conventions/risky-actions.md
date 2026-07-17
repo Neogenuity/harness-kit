@@ -40,9 +40,15 @@ nobody mistakes a warning for a wall:
 This repo explicitly adopts all four provider profiles; the safe posture is
 provider-specific and loosened only deliberately:
 
-- **Claude Code and Codex:** writes stay inside the workspace plus declared
-  isolated temp roots, command egress is closed, and unsandboxed fallback is
-  disabled. *[pre-action enforcement — OS sandbox / network policy]*
+- **Claude Code:** writes stay inside the workspace plus declared isolated temp
+  roots and sandboxed command egress is closed. A command that cannot run there
+  may retry unsandboxed only through the normal user-approval flow; no command
+  is pre-excluded from the sandbox. *[pre-action enforcement — OS sandbox,
+  network policy, then explicit approval]*
+- **Codex:** writes stay inside the workspace plus declared isolated temp roots
+  and command egress is closed; `approval_policy = "on-request"` retains
+  explicit escalation for a command that needs broader execution. *[pre-action
+  enforcement — OS sandbox, network policy, then explicit approval]*
 - **Cursor:** the committed file declares workspace-plus-temp writes and closed
   egress; effective closed egress additionally requires **sandbox.json Only**
   UI mode or administrator policy. *[pre-action enforcement — conditional

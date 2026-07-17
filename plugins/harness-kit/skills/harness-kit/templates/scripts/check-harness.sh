@@ -780,7 +780,7 @@ execution_check_claude() {
     execution_check_json_config "$provider" "$cfg" || return
     execution_json_require "$provider" "$cfg" "sandbox.enabled = true" '.sandbox.enabled? == true'
     execution_json_require "$provider" "$cfg" "sandbox.failIfUnavailable = true" '.sandbox.failIfUnavailable? == true'
-    execution_json_require "$provider" "$cfg" "sandbox.allowUnsandboxedCommands = false" '.sandbox.allowUnsandboxedCommands? == false'
+    execution_json_require "$provider" "$cfg" "sandbox.allowUnsandboxedCommands = true" '.sandbox.allowUnsandboxedCommands? == true'
     execution_json_require "$provider" "$cfg" "sandbox.excludedCommands is absent or []" '(.sandbox | (has("excludedCommands") | not) or (.excludedCommands == []))'
     execution_json_require "$provider" "$cfg" "sandbox.filesystem.allowWrite = []" '.sandbox.filesystem.allowWrite? == []'
     execution_json_require "$provider" "$cfg" "sandbox.network.allowedDomains = []" '.sandbox.network.allowedDomains? == []'

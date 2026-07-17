@@ -29,7 +29,7 @@ check jq -e '
     and .hooks.SessionStart[0].hooks[0].command == "scripts/hooks/session-context.sh"
     and .sandbox.enabled == true
     and .sandbox.failIfUnavailable == true
-    and .sandbox.allowUnsandboxedCommands == false
+    and .sandbox.allowUnsandboxedCommands == true
     and .sandbox.excludedCommands == []
     and .sandbox.autoAllowBashIfSandboxed == false
     and .sandbox.filesystem.allowWrite == []

@@ -9,7 +9,7 @@ tmp="$(mktemp "${TMPDIR:-/tmp}/profile-claude-XXXXXX")"
 jq '
   .sandbox.enabled = true
   | .sandbox.failIfUnavailable = true
-  | .sandbox.allowUnsandboxedCommands = false
+  | .sandbox.allowUnsandboxedCommands = true
   | .sandbox.excludedCommands = []
   | .sandbox.filesystem.allowWrite = []
   | .sandbox.network.allowedDomains = []

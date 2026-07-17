@@ -29,6 +29,11 @@ Execution-profile adoption is explicit in the tailored
   floor: required sandbox/approval state where the provider has one, and the
   strongest honest permission posture where it does not. Missing, malformed,
   or policy outside an explicitly accepted tuple is an error.
+- Claude's stable profile closes sandboxed egress but retains its standard
+  permission-gated unsandboxed retry. This keeps host-integrated operations
+  such as a push or nested provider eval possible after explicit user approval;
+  `excludedCommands` remains empty so no command bypasses the sandbox
+  automatically.
 - Codex has two exact accepted network tuples: the stable network-off floor and,
   only after separate user confirmation, an experimental compatibility
   disjunction with network access on, broad local/private binding, exact

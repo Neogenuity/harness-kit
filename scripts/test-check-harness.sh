@@ -823,7 +823,7 @@ if command -v jq >/dev/null 2>&1; then
   "sandbox": {
     "enabled": true,
     "failIfUnavailable": true,
-    "allowUnsandboxedCommands": false,
+    "allowUnsandboxedCommands": true,
     "filesystem": {"allowWrite": []},
     "network": {
       "allowedDomains": [],
@@ -995,8 +995,8 @@ TOML
         '.sandbox.enabled = false' "sandbox.enabled = true"
     assert_execution_json_weakening "8e: Claude sandbox-unavailable fallback is rejected" ".claude" ".claude/settings.json" \
         '.sandbox.failIfUnavailable = false' "sandbox.failIfUnavailable = true"
-    assert_execution_json_weakening "8e: Claude unsandboxed-command fallback is rejected" ".claude" ".claude/settings.json" \
-        '.sandbox.allowUnsandboxedCommands = true' "sandbox.allowUnsandboxedCommands = false"
+    assert_execution_json_weakening "8e: disabled Claude user-approved unsandboxed retry is rejected" ".claude" ".claude/settings.json" \
+        '.sandbox.allowUnsandboxedCommands = false' "sandbox.allowUnsandboxedCommands = true"
     assert_execution_json_weakening "8e: Claude excluded-command sandbox bypass is rejected" ".claude" ".claude/settings.json" \
         '.sandbox.excludedCommands = ["company-runner"]' "sandbox.excludedCommands is absent or []"
     assert_execution_json_weakening "8e: null Claude excluded-command policy is rejected" ".claude" ".claude/settings.json" \

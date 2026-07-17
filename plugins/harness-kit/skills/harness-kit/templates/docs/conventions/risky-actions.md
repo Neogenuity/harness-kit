@@ -45,9 +45,15 @@ nobody mistakes a warning for a wall:
 When explicitly adopted, the safe profile is provider-specific and loosened
 only deliberately:
 
-- **Claude Code and Codex:** workspace plus declared isolated temp roots, closed
-  command egress, and no unsandboxed fallback. *[pre-action enforcement — OS
-  sandbox / network policy]*
+- **Claude Code:** workspace plus declared isolated temp roots and closed
+  sandboxed command egress. A command that cannot run there may retry
+  unsandboxed only through the normal user-approval flow; no command is
+  pre-excluded from the sandbox. *[pre-action enforcement — OS sandbox,
+  network policy, then explicit approval]*
+- **Codex:** workspace plus declared isolated temp roots and closed command
+  egress; `approval_policy = "on-request"` retains explicit escalation for a
+  command that needs broader execution. *[pre-action enforcement — OS sandbox,
+  network policy, then explicit approval]*
 - **Cursor:** the committed file declares workspace-plus-temp writes and closed
   egress, but effective closed egress also requires **sandbox.json Only** UI
   mode or administrator policy. *[pre-action enforcement — conditional native
