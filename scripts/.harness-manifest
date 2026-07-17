@@ -1,4 +1,4 @@
-# harness-kit 0.19.0
+# harness-kit 0.20.0
 2be53f3e8ea2552ce8b3206a65557d68b45a3a11550fe4c002c02bbae646e71d  scripts/audit-log.sh
 8ed5b0bc5812726848b51503ed504d06baf3bc4579ddb36cc73c643bec342a3a  scripts/check-harness.sh
 7b6f0ef248121b10a267c0a53fab98f9ad86458a5970ea3eb3ff99befe9a57e0  scripts/check-packaging.sh # tailored

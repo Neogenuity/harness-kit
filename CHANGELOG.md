@@ -3,6 +3,58 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.20.0 — 2026-07-17
+
+### Changed
+
+- **Install suite split:** the 554-line `test-install.sh` monolith is now a
+  shared `install-test-lib.sh` plus three focused suites —
+  `test-install-core.sh` (prereqs, clean init, non-clobber, gitignore, conf
+  helpers), `test-install-update.sh` (update decisions and apply), and
+  `test-install-recovery.sh` (persisted-base recovery and the `dev.sh` policy
+  block). Fixture `check-harness.sh` invocations drop from 9 to 1, cutting the
+  install suites from ~231s to ~46s serial (~28s max parallel under
+  `verify.sh`'s gates).
+- **Checker cases live with the checker:** the `.claude` deny-list drift pair
+  and the hooks-glob manifest-completeness case moved into
+  `test-check-harness.sh` (both are new coverage there); the
+  `HOOK_WIRED_PROVIDERS` migration checker assertions and the provider-template
+  negative half were deleted as duplicates of check #8d's existing cases.
+- **Provider templates get a maintainer gate:** the positive
+  real-provider-template validation is now the root-only
+  `scripts/test-provider-templates.sh` (tailored-pinned, wired into
+  `verify.sh`), no longer shipped to adopters as a block that self-skips in
+  every repo without a providers dir.
+- **New branch coverage:** `harness_update_decision`'s local-drift-preserve
+  arm, `harness_append_gitignore` no-trailing-newline + idempotency, git/sha
+  prerequisite reporting, arbitrary tailored-pin carry-forward in
+  `harness_repin_manifest`, and the hooks add-pass via a synthetic future file
+  (replacing eight hard-coded historical filenames); clean-init assertions now
+  iterate `_HARNESS_MECHANISM_TOPLEVEL` instead of hand-maintained lists.
+
+### Fixes
+
+- **check #5b could be silently disabled under bash 3.2:** a shell comment
+  containing an apostrophe inside the check's `<(...)` process substitution
+  made bash 3.2's naive paren scan lose the closing paren; bash reported a
+  parse error and kept going, so the whole scratch-path check was skipped
+  without failing anything. The comment moved out of the substitution (with a
+  comment pinning why) and a regression case now pins the shared-lib scan arm.
+- Hardened the new suites per an adversarial Codex (gpt-5.6-sol) review: every
+  `make_fixture` assignment is `|| exit 1`-guarded and suffixed destructive
+  sites use `${F:?}`, closing an empty-path `rm -rf` hazard when a nested
+  `mktemp` fails.
+
+### Migration
+
+- Update mode replaces the pinned mechanism files and **adds**
+  `install-test-lib.sh`, `test-install-core.sh`, `test-install-update.sh`, and
+  `test-install-recovery.sh` (executable). `test-install.sh` left the shipped
+  inventory: update keeps the old on-disk copy and check #9 then flags it as
+  present-but-unpinned. Delete `scripts/test-install.sh` by hand after
+  updating, then re-pin. (Pre-launch this repo is the only install; a proper
+  retired-file mechanism is queued in `docs/plans/adopter-test-descope.md`.)
+
 ## 0.19.0 — 2026-07-17
 
 ### Fixes
