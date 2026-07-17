@@ -41,14 +41,17 @@
 # Boundary on "nested", measured rather than assumed: it fails the first
 # carve-out a suite REACHES, so it pins that site and shadows every later one.
 # Where a suite's first carve-out is a top-level `|| exit 1`, the suite aborts
-# right there and the factory below it is never called — test-install.sh's
-# emptypath alloc fires before its first `F=$(make_fixture)`, so this mode proves
-# that guard and never enters make_fixture. test-check-harness.sh has no earlier
-# site, so its new_fixture IS entered, on every case. The shadowed half is not
-# unguarded, it is guarded ELSEWHERE: check #5b is a static gate over this same
-# file set and rejects a carve-out that loses its `|| return 1` (ERROR, and it
-# runs before #6 launches these). Behavioral here, static there — neither alone
-# covers both, which is why #5b is ordered ahead of #6 rather than folded in.
+# right there and the factory below it is never called — test-install-core.sh's
+# emptypath alloc fires before its first `F=$(make_fixture)`, so this mode
+# proves that guard and never enters make_fixture. test-install-update.sh,
+# test-install-recovery.sh (no preflight allocation of their own — their first
+# carve-out IS the fixture factory), and test-check-harness.sh have no earlier
+# site, so their fixture factory IS entered, on every case. The shadowed half
+# is not unguarded, it is guarded ELSEWHERE: check #5b is a static gate over
+# this same file set and rejects a carve-out that loses its `|| return 1`
+# (ERROR, and it runs before #6 launches these). Behavioral here, static
+# there — neither alone covers both, which is why #5b is ordered ahead of #6
+# rather than folded in.
 #
 # This test cannot fall for the bug it tests: its own base is allocated with the
 # guarded form BEFORE any shim exists, the shim is applied per-invocation via
@@ -169,9 +172,10 @@ run_case() {
         return 1
     fi
     : > "$CALLS"
-    # HARNESS_NESTED_FIXTURE is unset so test-install.sh runs its real body
-    # instead of exiting 0 with "skipped" — which would read as a silent pass.
-    # PATH keeps its real tail: only mktemp is broken, exactly as in the sandbox.
+    # HARNESS_NESTED_FIXTURE is unset so each test-install-*.sh suite runs its
+    # real body instead of exiting 0 with "skipped" — which would read as a
+    # silent pass. PATH keeps its real tail: only mktemp is broken, exactly as
+    # in the sandbox.
     out=$( cd "${CANARY:?}" && env -u HARNESS_NESTED_FIXTURE \
         PATH="$SHIM:$PATH" SHIM_CALLS="$CALLS" SHIM_MODE="$mode" \
         SHIM_GRANTED="$GRANTED" bash "$script" 2>&1 )

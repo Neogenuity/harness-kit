@@ -203,6 +203,10 @@ for t in plugins/harness-kit/skills/harness-kit/templates/scripts/test-*.sh \
          plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/test-*.sh; do
     parallel_full_gate "template-test: ${t#plugins/harness-kit/skills/harness-kit/templates/scripts/}" bash "$t"
 done
+# Root-only dogfood gate validating the shipped provider templates against
+# check #8d. Self-skips under the harness gate's HARNESS_NESTED_FIXTURE=1, so
+# this explicit gate is its only verify-time run.
+parallel_full_gate "provider-templates" bash scripts/test-provider-templates.sh
 # Behavioral-eval grader validity for THIS repo's real golden-task bank. The
 # template test above only runs the shipped _template (empty bank), and
 # the nested harness gate below skips the root test-eval.sh (its graders call

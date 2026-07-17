@@ -222,12 +222,22 @@ done
 #     heredocs, and `|| true` defeats it. A verified exception is DECLARED with a
 #     trailing '# harness-mktemp-ok' (same stance as the manifest's '# tailored'
 #     in #9): one comment, so ERROR severity never leaves an adopter wedged.
+#
+#     install-test-lib.sh is scanned explicitly: not itself a test-*.sh (by
+#     design, so #6 and this scan never execute it standalone), but every
+#     test-install-*.sh suite sources it and it holds their shared WORK mktemp —
+#     the exact scratch-path hygiene this check exists to catch. This comment
+#     stays OUTSIDE the process substitution below on purpose: bash 3.2 finds
+#     the closing paren of <(...) with a naive scan, and a stray quote in a
+#     shell comment there (an apostrophe suffices) swallows it, silently
+#     skipping the whole check.
 while IFS= read -r mktemp_finding; do
     [ -n "$mktemp_finding" ] || continue
     echo "$mktemp_finding"
     ERRORS=$((ERRORS + 1))
 done < <(
-    for tscript in "$ROOT"/scripts/test-*.sh "$ROOT"/scripts/hooks/test-*.sh; do
+    for tscript in "$ROOT"/scripts/test-*.sh "$ROOT"/scripts/hooks/test-*.sh \
+                   "$ROOT"/scripts/install-test-lib.sh; do
         [ -f "$tscript" ] || continue
         awk -v rel="${tscript#"$ROOT"/}" '
             function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
@@ -295,19 +305,26 @@ done < <(
 
 # 6. Regression tests must pass — both hook guards (scripts/hooks/test-*.sh)
 #    and top-level mechanism tests (scripts/test-*.sh, e.g. test-check-harness.sh).
-#    test-install.sh drives fixtures that run check-harness.sh inside a throwaway
-#    install; test-eval.sh clones fixtures whose graders run check-harness.sh.
-#    HARNESS_NESTED_FIXTURE (set by test-install.sh, and by every eval grader that
-#    calls check-harness.sh) makes THIS check skip only the tests that themselves
-#    invoke check-harness.sh — test-install.sh and test-eval.sh (would recurse)
-#    and test-check-harness.sh (already run at the top level, pure redundancy
-#    inside a fixture). Every guard behavioral test (test-guard-*.sh, the catch
-#    for a re-pinned guard weakening) always runs, so no single env var can switch
-#    off the security-relevant regression layer. Unset in normal and CI runs.
+#    test-install-core.sh's clean-init case runs check-harness.sh inside a
+#    throwaway install — the ONE remaining fixture checker invocation among the
+#    test-install-*.sh suites; test-eval.sh clones fixtures whose graders run
+#    check-harness.sh. HARNESS_NESTED_FIXTURE (set by install-test-lib.sh, the
+#    preamble every test-install-*.sh suite sources, and by every eval grader
+#    that calls check-harness.sh) makes THIS check skip only the tests that
+#    would otherwise recurse or run pure fixture redundancy:
+#    test-install-core.sh (would recurse — its fixture's nested check-harness.sh
+#    reaches this same loop), test-install-update.sh and test-install-recovery.sh
+#    (no fixture checker run of their own, so a nested run is pure redundancy —
+#    the exact same install-lib.sh behavior verified a second time), test-eval.sh
+#    (would recurse), and test-check-harness.sh (already run at the top level,
+#    pure redundancy inside a fixture). Every guard behavioral test
+#    (test-guard-*.sh, the catch for a re-pinned guard weakening) always runs,
+#    so no single env var can switch off the security-relevant regression
+#    layer. Unset in normal and CI runs.
 for test in "$ROOT"/scripts/test-*.sh "$ROOT"/scripts/hooks/test-*.sh; do
     [ -f "$test" ] || continue
     case "$(basename "$test")" in
-        test-install.sh|test-check-harness.sh|test-eval.sh)
+        test-install-core.sh|test-install-update.sh|test-install-recovery.sh|test-check-harness.sh|test-eval.sh)
             [ -n "${HARNESS_NESTED_FIXTURE:-}" ] && continue ;;
     esac
     if ! bash "$test" >/dev/null 2>&1; then
@@ -1080,6 +1097,7 @@ if [ -f "$MANIFEST" ] && [ -d "$ROOT/scripts/hooks" ]; then
     for mech in "$ROOT"/scripts/hooks/* \
                 "$ROOT"/scripts/harness.conf "$ROOT"/scripts/check-harness.sh \
                 "$ROOT"/scripts/sync-agent-skills.sh "$ROOT"/scripts/install-lib.sh \
+                "$ROOT"/scripts/install-test-lib.sh \
                 "$ROOT"/scripts/dev-instance.sh "$ROOT"/scripts/dev.sh \
                 "$ROOT"/scripts/eval-lib.sh "$ROOT"/scripts/eval.sh \
                 "$ROOT"/scripts/eval-harness.sh \

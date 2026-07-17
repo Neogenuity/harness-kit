@@ -163,6 +163,23 @@ EOF
 EOF
     assert_ok "opencode.json mirroring every pattern passes" "$W"
 
+    # --- check #8: .claude/settings.json deny list must mirror SECRET_PATTERNS ---
+    W=$(new_fixture)
+    printf 'SECRET_PATTERNS=".env auth.json"\n' > "$W/scripts/harness.conf"
+    mkdir -p "$W/.claude"
+    cat > "$W/.claude/settings.json" <<'EOF'
+{ "permissions": { "deny": ["Read(.env)"] } }
+EOF
+    assert_flags ".claude/settings.json missing a secret pattern is flagged" "$W" "entry in .claude/settings.json permissions.deny"
+
+    W=$(new_fixture)
+    printf 'SECRET_PATTERNS=".env auth.json"\n' > "$W/scripts/harness.conf"
+    mkdir -p "$W/.claude"
+    cat > "$W/.claude/settings.json" <<'EOF'
+{ "permissions": { "deny": ["Read(.env)", "Read(auth.json)"] } }
+EOF
+    assert_ok ".claude/settings.json mirroring every pattern passes" "$W"
+
     # --- deleting a wired provider's native deny file is an error, not a skip ---
     W=$(new_fixture)
     printf 'SECRET_PATTERNS=".env"\n' > "$W/scripts/harness.conf"
@@ -233,6 +250,17 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
     printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n' \
         "$(sha "$W/scripts/check-harness.sh")" > "$W/scripts/.harness-manifest"
     assert_flags "manifest completeness: optional dev.sh missing-line is flagged" "$W" "dev.sh' is present but not pinned"
+
+    # The scripts/hooks/* glob arm itself: an executable hook script present on
+    # disk but never given a manifest line must be flagged too, not just the
+    # named top-level files exercised above.
+    W=$(new_fixture)
+    mkdir -p "$W/scripts/hooks"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$W/scripts/hooks/guard-secrets.sh"
+    chmod +x "$W/scripts/hooks/guard-secrets.sh"
+    printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n' \
+        "$(sha "$W/scripts/check-harness.sh")" > "$W/scripts/.harness-manifest"
+    assert_flags "manifest completeness: scripts/hooks/*.sh glob arm flags an unpinned hook" "$W" "guard-secrets.sh' is present but not pinned"
 fi
 
 # --- check #9: a missing manifest is an ERROR once the harness is adopted ---

@@ -106,10 +106,11 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    `chmod +x scripts/hooks/*.sh scripts/*.sh`.
    `install-lib.sh` is the deterministic, model-free core of this flow —
    `harness_install_mechanism` copies exactly this set, and step 8's
-   `harness_generate_manifest` and `update` mode both call it; `test-install.sh`
-   is its fixture suite. Tailor `harness.conf` (providers, plans dir, secret
-   patterns). Append `.harness/` to the repo's `.gitignore` — the hook
-   observability log lives there.
+   `harness_generate_manifest` and `update` mode both call it; the
+   `test-install-core.sh` / `test-install-update.sh` / `test-install-recovery.sh`
+   suites (sharing `install-test-lib.sh`) are its fixture coverage. Tailor
+   `harness.conf` (providers, plans dir, secret patterns). Append `.harness/`
+   to the repo's `.gitignore` — the hook observability log lives there.
 
 4. **Tailor policy** in the marked `TAILOR` blocks:
    - `verify.sh`: write the interviewed quality gates as `gate` (fast:

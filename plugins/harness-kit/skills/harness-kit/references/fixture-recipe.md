@@ -6,10 +6,12 @@ seeded plan. It is deliberately tiny — a git repo, one manifest, one source
 file — so the harness's behavior is the only variable.
 
 This is a **manual** recipe. Automated deterministic fixture tests of the
-`init`/`update` *mechanics* now ship as `scripts/test-install.sh` (driving the
-pure-filesystem functions in `scripts/install-lib.sh` — clean init, non-clobber
-floor, no-op update, mechanism upgrade, tailored-file preservation, drift
-detection). Use this manual recipe when you want to smoke-test a change by hand,
+`init`/`update` *mechanics* now ship as `scripts/test-install-core.sh`,
+`scripts/test-install-update.sh`, and `scripts/test-install-recovery.sh`
+(sharing `scripts/install-test-lib.sh`, driving the pure-filesystem functions
+in `scripts/install-lib.sh` — clean init, non-clobber floor, no-op update,
+mechanism upgrade, tailored-file preservation, drift detection). Use this
+manual recipe when you want to smoke-test a change by hand,
 exercise the model-driven authoring steps the automated suite deliberately
 leaves out, or bootstrap a scratch repo for another experiment.
 

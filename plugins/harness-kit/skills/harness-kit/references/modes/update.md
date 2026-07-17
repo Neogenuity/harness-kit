@@ -25,7 +25,7 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    matrix below, and use them as the diff base for tailored files).
    `harness_update_apply` from the NEW `install-lib.sh` runs this decision
    deterministically (`harness_update_decision` classifies each line
-   replace-vs-diff); it is the same code `test-install.sh` pins. Set
+   replace-vs-diff); it is the same code `test-install-update.sh` pins. Set
    `HARNESS_ALLOW_MECHANISM_EDITS=1` for the session if `guard-config.sh` is
    wired — upgrading the mechanism is the intended use of that escape hatch.
 
@@ -54,8 +54,9 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    The **channel-independent** path is the locally-persisted base:
    `harness_recover_old_templates <repo_root> <out_dir>` (`install-lib.sh`)
    reproduces the version's templates from `.harness/base/<version>/scripts/`
-   with NO git and NO network — it is the code `test-install.sh` pins for the
-   no-local-git channel. init writes that snapshot at install time and step 4
+   with NO git and NO network — it is the code `test-install-recovery.sh`
+   pins for the no-local-git channel. init writes that snapshot at install
+   time and step 4
    refreshes it after each update. It returns non-zero when the base is missing
    (e.g. a teammate's fresh clone, where the git-ignored base was never checked
    out); fall back to the git-tag or upstream-fetch channels, or — as a last

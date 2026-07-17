@@ -1,10 +1,10 @@
 # Behavioral evals
 
-The coherence checks (`check-harness.sh`, the hook tests, `test-install.sh`)
-prove the harness is *internally consistent* — stubs synced, links live,
-checksums honest. They do **not** prove it *works*: that a skill, convention
-doc, or guard actually changes what an agent does. This directory is the layer
-that measures behavior.
+The coherence checks (`check-harness.sh`, the hook tests, the
+`test-install-*.sh` suites) prove the harness is *internally consistent* —
+stubs synced, links live, checksums honest. They do **not** prove it *works*:
+that a skill, convention doc, or guard actually changes what an agent does.
+This directory is the layer that measures behavior.
 
 A single run is not a measurement. Agent behavior is non-deterministic, so every
 task runs over **multiple independent trials**, each in a **fresh isolated

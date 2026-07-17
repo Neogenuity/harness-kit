@@ -8,8 +8,8 @@
 # capturing transcripts — lives in eval.sh, which sources this. eval-harness.sh
 # (the pass-rate/regression comparator) and test-eval.sh (the deterministic
 # fixture suite wired into verify.sh) source it too. Same split as
-# install-lib.sh / test-install.sh: the pure functions here are unit-testable,
-# so the machinery that measures the harness is itself measured.
+# install-lib.sh / the test-install-*.sh suites: the pure functions here are
+# unit-testable, so the machinery that measures the harness is itself measured.
 #
 # Source it — it defines functions and runs nothing:
 #   . scripts/eval-lib.sh

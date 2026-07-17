@@ -8,7 +8,9 @@
 # merging a hand-written .claude/settings.json without clobbering it, the audit
 # gap table — is judgment and stays prose in the kit SKILL. It is deliberately
 # NOT here: this file is only the part a test can pin without a model in the loop
-# (scripts/test-install.sh drives these functions against throwaway fixtures).
+# (the test-install-core.sh / test-install-update.sh / test-install-recovery.sh
+# suites, sharing install-test-lib.sh, drive these functions against throwaway
+# fixtures).
 #
 # Source it — it defines functions and runs nothing:
 #   . scripts/install-lib.sh
@@ -21,7 +23,7 @@
 # harness_generate_manifest, which reads this list. The scripts/hooks/ tree is
 # always included wholesale (see harness_manifest_paths). Add a new top-level
 # mechanism file here and it is covered by the manifest and the installer at once.
-_HARNESS_MECHANISM_TOPLEVEL="harness.conf sync-agent-skills.sh check-harness.sh test-check-harness.sh install-lib.sh test-install.sh dev-instance.sh test-dev-instance.sh log-lib.sh test-log.sh audit-log.sh test-audit-log.sh doc-garden.sh test-doc-garden.sh eval-lib.sh eval.sh eval-harness.sh test-eval.sh test-verify.sh test-fixture-isolation.sh verify.sh"
+_HARNESS_MECHANISM_TOPLEVEL="harness.conf sync-agent-skills.sh check-harness.sh test-check-harness.sh install-lib.sh install-test-lib.sh test-install-core.sh test-install-update.sh test-install-recovery.sh dev-instance.sh test-dev-instance.sh log-lib.sh test-log.sh audit-log.sh test-audit-log.sh doc-garden.sh test-doc-garden.sh eval-lib.sh eval.sh eval-harness.sh test-eval.sh test-verify.sh test-fixture-isolation.sh verify.sh"
 
 # Optional project-owned policy that is authored for an application repo, never
 # copied from this template directory. When present, it is still integrity-
@@ -303,8 +305,8 @@ harness_update_decision() {
 # says "replace"; leave policy/tailored/locally-drifted files untouched (the
 # caller diffs those for the user). Then installs any mechanism file the new kit
 # ships that the target doesn't have yet — the old manifest can't list a file the
-# previous kit version didn't ship, so a v0.6->v0.7 upgrade must still pick up
-# install-lib.sh / test-install.sh. Prints one "replace|keep|add <path>" line per
+# previous kit version didn't ship, so an upgrade must still pick up newly shipped
+# files (e.g. the test-install-* suites). Prints one "replace|keep|add <path>" line per
 # file. Does NOT re-pin the manifest — call harness_repin_manifest afterward
 # (it will pin the newly-added files).
 harness_update_apply() {
