@@ -23,7 +23,7 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # --- (a) no-op update ---------------------------------------------------------
 # Update at the same version, from the same source, changes nothing.
-F=$(make_fixture)
+F=$(make_fixture) || exit 1
 harness_update_apply "$SCRIPTS_DIR" "$F" >/dev/null
 repin "$F"
 dirty=$( cd "${F:?}" && git status --porcelain )
@@ -37,7 +37,7 @@ rm -rf "$F"
 # --- (b) mechanism upgrade ----------------------------------------------------
 # An untailored file still matching its pin is replaced with the newer kit
 # version and the manifest re-pinned to the new checksum.
-F=$(make_fixture)
+F=$(make_fixture) || exit 1
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
 printf '\n# UPGRADED\n' >> "$NEWKIT/scripts/sync-agent-skills.sh"
 harness_update_apply "$NEWKIT/scripts" "$F" >/dev/null
@@ -54,7 +54,7 @@ rm -rf "$F" "$NEWKIT"
 # --- (c) tailored-file preservation -------------------------------------------
 # A '# tailored' file whose content differs from the template is NOT replaced by
 # update; it is left for the user to diff, and its own checksum pin is honored.
-F=$(make_fixture)
+F=$(make_fixture) || exit 1
 printf '\n# LOCAL FORK\n' >> "$F/scripts/verify.sh"
 newsha=$(sha_of "$F" "scripts/verify.sh")
 grep -v "scripts/verify.sh" "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
@@ -73,7 +73,7 @@ rm -rf "$F" "$NEWKIT"
 # --- (d) policy files are diff-only in update, even pristine + unmarked --------
 # guard-secrets.sh is a policy file (SKILL update step 3): a kit change to it must
 # be diffed, never auto-applied, regardless of the '# tailored' marker.
-F=$(make_fixture)
+F=$(make_fixture) || exit 1
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
 printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/hooks/guard-secrets.sh"
 harness_update_apply "$NEWKIT/scripts" "$F" >/dev/null
@@ -93,7 +93,7 @@ rm -rf "$F" "$NEWKIT"
 # CONFIRMED-MISSING before the split: local, undeclared drift — the file was
 # hand-edited after install with no repin — must be preserved too, not
 # silently overwritten by the next update.
-F=$(make_fixture)
+F=$(make_fixture) || exit 1
 printf '\n# LOCAL DRIFT\n' >> "$F/scripts/sync-agent-skills.sh"
 line=$(grep 'scripts/sync-agent-skills.sh' "$F/scripts/.harness-manifest")
 decision=$(harness_update_decision "$F" "$line")
@@ -122,7 +122,7 @@ rm -rf "$F"
 # kit release that ships a new top-level mechanism file AND a new hook (the
 # hooks add pass at install-lib.sh:337-347 — never covered before this suite,
 # since every historical NEW_FILES case was toplevel-only).
-F=$(make_fixture)
+F=$(make_fixture) || exit 1
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
 printf '#!/usr/bin/env bash\necho future-mech\n' > "$NEWKIT/scripts/future-mech.sh"
 chmod +x "$NEWKIT/scripts/future-mech.sh"
@@ -189,7 +189,7 @@ rm -rf "$F" "$NEWKIT"
 # local checks (a packaging or template-sync gate) as '# tailored'
 # (install-lib.sh:115-138). Name deliberately avoids the test-*.sh glob: this
 # is a repo-owned gate, not a kit regression test.
-F=$(make_fixture)
+F=$(make_fixture) || exit 1
 printf '#!/usr/bin/env bash\necho local-gate\n' > "$F/scripts/check-local-gate.sh"
 chmod +x "$F/scripts/check-local-gate.sh"
 gatesha=$(sha_of "$F" "scripts/check-local-gate.sh")

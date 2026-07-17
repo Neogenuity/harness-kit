@@ -25,9 +25,9 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 # installs copy only plugins/harness-kit/ into a cache and copied installs need
 # not keep .git — so the base is PERSISTED at init and recovered with no git in
 # the loop. This drives exactly that no-local-git channel.
-F=$(make_fixture)
+F=$(make_fixture) || exit 1
 harness_persist_base "$SCRIPTS_DIR" "$F" "$KIT_VERSION"   # the init-time snapshot
-rm -rf "$F/.git"                                          # no local git at all
+rm -rf "${F:?}/.git"                                          # no local git at all
 REC=$(mktemp -d "$WORK/recover.XXXXXX") || exit 1
 recv=$(harness_recover_old_templates "$F" "$REC/old"); rc=$?
 # Recovery must (a) succeed with no .git, (b) report the manifest-header version,
@@ -44,7 +44,7 @@ rm -rf "$REC"
 # No persisted base (e.g. a teammate's fresh clone, where the git-ignored base was
 # never checked out) → recovery returns non-zero so update falls back to the
 # git-tag / upstream-fetch channels instead of silently diffing nothing.
-rm -rf "$F/.harness/base"
+rm -rf "${F:?}/.harness/base"
 REC2=$(mktemp -d "$WORK/recover2.XXXXXX") || exit 1
 harness_recover_old_templates "$F" "$REC2/old" >/dev/null 2>&1; rc=$?
 if [ "$rc" != "0" ]; then

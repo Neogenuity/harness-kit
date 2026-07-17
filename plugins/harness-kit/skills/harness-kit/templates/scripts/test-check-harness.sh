@@ -1311,6 +1311,16 @@ printf '#!/usr/bin/env bash\nWORK=$(%s -d)\nexit 0\n' "$MK" > "$W/scripts/test-l
 chmod +x "$W/scripts/test-leaky.sh"
 assert_flags "check #5b: bare 'mktemp -d' is flagged" "$W" "creates a scratch path unsafely"
 
+# The shared install-test-lib.sh is scanned by an EXPLICIT arm (it is not
+# test-*.sh, so the glob alone would miss it, yet it holds the suites' shared
+# WORK mktemp). This pins that arm: deleting it from check-harness.sh must turn
+# this red, not silently shrink #5b's scope. The needle names the file AND line
+# so a hit on some other scanned script cannot satisfy it.
+W=$(new_fixture)
+printf '#!/usr/bin/env bash\nWORK=$(%s -d)\nexit 0\n' "$MK" > "$W/scripts/install-test-lib.sh"
+chmod +x "$W/scripts/install-test-lib.sh"
+assert_flags "check #5b: an unsafe mktemp in the shared install-test-lib.sh is flagged" "$W" "install-test-lib.sh:2 creates a scratch path unsafely"
+
 # Templated but UNGUARDED is still an ERROR — the failure would just be silent.
 W=$(new_fixture)
 printf '#!/usr/bin/env bash\nWORK=$(%s -d "${TMPDIR:-/tmp}/x.XXXXXX")\nexit 0\n' "$MK" > "$W/scripts/test-unguarded.sh"

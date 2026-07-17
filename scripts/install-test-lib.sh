@@ -18,7 +18,7 @@
 # Direct execution (`bash scripts/install-test-lib.sh`) is a harmless no-op:
 # there is no caller-set SCRIPTS_DIR to source install-lib.sh from, so rather
 # than fail confusingly this just exits 0 without doing anything.
-if [ "${BASH_SOURCE[0]:-}" = "$0" ]; then
+if [ "${BASH_SOURCE:-}" = "$0" ]; then
     exit 0
 fi
 

@@ -75,7 +75,7 @@ rm -rf "$EMPTYPATH"
 # Inventory-driven: every presence/exec-bit/manifest-completeness assertion
 # iterates install-lib.sh's own _HARNESS_MECHANISM_TOPLEVEL rather than a
 # second hard-coded file list, so a new mechanism file is covered on arrival.
-F=$(make_fixture)
+F=$(make_fixture) || exit 1
 write_mirrored_claude_settings "$F"
 ( cd "${F:?}" && git_c add -A && git_c commit -qm claude >/dev/null )
 missing=""
@@ -163,7 +163,7 @@ rm -rf "$F"
 # --- (e) harness_conf_declared: pre-declaration conf reads as undeclared -------
 # jq-gate dropped from the old migration block: harness_conf_declared is pure
 # grep/printf, so it needs no jq to pin.
-F=$(make_fixture)
+F=$(make_fixture) || exit 1
 # Simulate the legacy state: strip the declaration entirely (make_fixture
 # leaves it set-but-empty; a pre-v0.14 conf had no line at all).
 grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS)=' "$F/scripts/harness.conf" > "$F/scripts/hc" \
@@ -179,7 +179,7 @@ rm -rf "$F"
 # --- (f) harness_conf_declare: idempotent --------------------------------------
 # A second declare must neither duplicate the line nor reset a value the user
 # has since edited (migration confirms the set ONCE).
-F=$(make_fixture)
+F=$(make_fixture) || exit 1
 grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS)=' "$F/scripts/harness.conf" > "$F/scripts/hc" \
     && mv "$F/scripts/hc" "$F/scripts/harness.conf"
 harness_conf_declare "$F" HOOK_WIRED_PROVIDERS ".claude .cursor .codex"
