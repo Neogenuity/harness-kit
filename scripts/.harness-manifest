@@ -1,6 +1,6 @@
-# harness-kit 0.20.0
+# harness-kit 0.20.1
 2be53f3e8ea2552ce8b3206a65557d68b45a3a11550fe4c002c02bbae646e71d  scripts/audit-log.sh
-d19fc34cf44dc5f74e541647e6ed9eb5d70f259267f5b1dbf5ff29b6904f12b1  scripts/check-harness.sh
+83c71954b7a851e7bd932b10172e6d01c0594d79cd6fe8fc3174d01628bd7216  scripts/check-harness.sh
 7b6f0ef248121b10a267c0a53fab98f9ad86458a5970ea3eb3ff99befe9a57e0  scripts/check-packaging.sh # tailored
 298bc6520091d54cf72e7dcc6269ff116872136a475d76e989af8169282babe7  scripts/dev-instance.sh
 13b0d160129ffa656949a97b2d2219d3d9e62bd940f77c1202f1458053a54211  scripts/doc-garden.sh
@@ -34,7 +34,7 @@ e16fd34c1fa7bc295d433689f4803892de3e25f518a5f2e153b9a2ee8eb82581  scripts/sync-a
 76a83870660ca88f5eaa587671e9743316fab414fb4861ce1ede6853b9fb924e  scripts/test-doc-garden.sh
 698810ecc66acca4a3902289c21af358b51ce85ba008da80501ef60dcf90a363  scripts/test-eval.sh
 fcd3dfa5bc694f604477e737f00e47b6883946905a3b99396f2064d3a2f5c2f9  scripts/test-fixture-isolation.sh
-12ebe9c6af6eb06f8ca9d73b81ff2632dcf3ddabef1b3ee755dbf0302c5c8471  scripts/test-install-core.sh
+271cc086aad52953f3a861544540ef6f7e203d3a2503823b4134e0c738d4f6d4  scripts/test-install-core.sh
 fcc71d02f516946ae655a4bd23f294a1868aa5004ebfc7fb54b86914f642588b  scripts/test-install-recovery.sh
 63a1e33c512d72f84e4cccaae052c70739ece73d4f98e7b8eb7ec1e0021bd6d2  scripts/test-install-update.sh
 3556040a3ddce11b45045359483f1a595ec576e368f6e4ff3435d8930b1702d9  scripts/test-log.sh

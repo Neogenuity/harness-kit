@@ -90,8 +90,12 @@ for f in $_HARNESS_MECHANISM_TOPLEVEL; do
         harness.conf) ;;
         *) [ -x "$F/scripts/$f" ] || missing="$missing $f(not-exec)" ;;
     esac
-    printf '%s\n' "$manifest_paths" | grep -qxF "scripts/$f" \
-        || unpinned="$unpinned $f"
+    # Pipe-free exact-line membership (printf|grep -q + pipefail turns an
+    # ignored-SIGPIPE EPIPE into a phantom miss — see check #9's note).
+    case $'\n'"$manifest_paths"$'\n' in
+        *$'\n'"scripts/$f"$'\n'*) ;;
+        *) unpinned="$unpinned $f" ;;
+    esac
 done
 [ -f "$F/scripts/hooks/lib.sh" ] || missing="$missing hooks/lib.sh(absent)"
 if [ -z "$missing" ]; then

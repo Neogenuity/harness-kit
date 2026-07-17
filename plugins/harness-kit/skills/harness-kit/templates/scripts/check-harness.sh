@@ -373,10 +373,14 @@ if command -v jq >/dev/null 2>&1 && [ -n "${SECRET_PATTERNS:-}" ]; then
         deny_list=$(jq -r '.permissions.deny[]? // empty' "$ROOT/.claude/settings.json" 2>/dev/null)
         set -f
         for pat in $SECRET_PATTERNS; do
-            if ! printf '%s\n' "$deny_list" | grep -qF "$pat"; then
-                echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching Read(...) entry in .claude/settings.json permissions.deny — add one; the native deny list must mirror the guard"
-                ERRORS=$((ERRORS + 1))
-            fi
+            # Pipe-free membership test — see the check #9 completeness note
+            # for why printf|grep -q is banned in this script.
+            case "$deny_list" in
+                *"$pat"*) ;;
+                *)
+                    echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching Read(...) entry in .claude/settings.json permissions.deny — add one; the native deny list must mirror the guard"
+                    ERRORS=$((ERRORS + 1)) ;;
+            esac
         done
         set +f
     elif [ -d "$ROOT/.claude" ]; then
@@ -396,10 +400,13 @@ if command -v jq >/dev/null 2>&1 && [ -n "${SECRET_PATTERNS:-}" ]; then
         oc_deny=$(jq -r '.permission.read // {} | to_entries[]? | select(.value == "deny") | .key' "$ROOT/opencode.json" 2>/dev/null)
         set -f
         for pat in $SECRET_PATTERNS; do
-            if ! printf '%s\n' "$oc_deny" | grep -qF "$pat"; then
-                echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching \"deny\" entry in opencode.json permission.read — add one; the native deny list must mirror the guard"
-                ERRORS=$((ERRORS + 1))
-            fi
+            # Pipe-free membership test — see the check #9 completeness note.
+            case "$oc_deny" in
+                *"$pat"*) ;;
+                *)
+                    echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching \"deny\" entry in opencode.json permission.read — add one; the native deny list must mirror the guard"
+                    ERRORS=$((ERRORS + 1)) ;;
+            esac
         done
         set +f
     elif [ -d "$ROOT/.opencode" ]; then
@@ -493,9 +500,12 @@ mcp_apply_severity() {
         [ "$mcp_inventory_declared" -eq 1 ] || continue   # no inventory: WARN once, later
         if pin=$(mcp_inventory_lookup "$name"); then
             # Fixed-string, glob-disabled: the identity must CONTAIN the pin.
-            set -f
-            printf '%s' "$identity" | grep -qF -- "$pin"; matched=$?
-            set +f
+            # Pipe-free (see the check #9 completeness note); a quoted case
+            # pattern is literal, matching what grep -qF gave here.
+            case "$identity" in
+                *"$pin"*) matched=0 ;;
+                *)        matched=1 ;;
+            esac
             if [ "$matched" -ne 0 ]; then
                 echo "ERROR: MCP server '$name' in $file has a configured identity ('$identity') that does not contain its pinned substring '$pin' (harness.conf MCP_ALLOWED_SERVERS) — identity drift; the server may be repointed. Re-verify and update its inventory line."
                 ERRORS=$((ERRORS + 1))
@@ -1109,10 +1119,19 @@ if [ -f "$MANIFEST" ] && [ -d "$ROOT/scripts/hooks" ]; then
                 "$ROOT"/scripts/verify.sh "$ROOT"/scripts/test-*.sh; do
         [ -f "$mech" ] || continue
         rel="scripts/${mech#"$ROOT"/scripts/}"
-        printf '%s\n' "$pinned_paths" | grep -qxF "$rel" || {
-            echo "ERROR: mechanism file '$rel' is present but not pinned in scripts/.harness-manifest — every mechanism file on disk must be integrity-pinned; an unpinned file is silently exempt from checksum verification. Re-pin it (init step 8)"
-            ERRORS=$((ERRORS + 1))
-        }
+        # Pipe-free exact-line membership test. `printf ... | grep -q` is
+        # banned in this script: grep -q exits on first match, and when the
+        # process tree inherits an IGNORED SIGPIPE (GitHub's Actions runner
+        # does this), printf survives the EPIPE with a nonzero status that
+        # pipefail then turns into a phantom failure — precisely when the
+        # entry WAS found. Caught live twice (v0.16.0 macOS, v0.20.0 ubuntu),
+        # both inside fixture checkers at peak parallel-gate load.
+        case $'\n'"$pinned_paths"$'\n' in
+            *$'\n'"$rel"$'\n'*) ;;
+            *)
+                echo "ERROR: mechanism file '$rel' is present but not pinned in scripts/.harness-manifest — every mechanism file on disk must be integrity-pinned; an unpinned file is silently exempt from checksum verification. Re-pin it (init step 8)"
+                ERRORS=$((ERRORS + 1)) ;;
+        esac
     done
 fi
 

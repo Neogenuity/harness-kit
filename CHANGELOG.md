@@ -3,6 +3,30 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.20.1 — 2026-07-17
+
+### Fixes
+
+- **Phantom check failures under CI parallel load** (the v0.20.0 ubuntu-only
+  flake): `printf '…' | grep -q` membership tests in `check-harness.sh`
+  (checks #8, #8b, MCP identity pinning, #9 completeness) and
+  `test-install-core.sh` are now pure-shell `case` matches. `grep -q` exits on
+  first match; when the process tree inherits an IGNORED SIGPIPE (GitHub's
+  Actions runner does this), `printf` survives the EPIPE with a nonzero status
+  and `pipefail` then turns the pipeline red precisely when the entry WAS
+  found. Caught live at v0.16.0 (macOS: a pinned guard reported "not pinned",
+  with `printf: write error: Broken pipe` in the log) and v0.20.0 (ubuntu:
+  `test-advise-once.sh` inside the clean-init fixture); reproduced locally at
+  3000/3000 trials with over-pipe-capacity payloads under an ignored SIGPIPE.
+- **check #6 prints a failing test's output tail** instead of "run it
+  directly for details" — unactionable advice when the failure happens inside
+  a throwaway fixture that no longer exists by the time the message is read.
+
+### Migration
+
+- Update mode replaces the manifest-matching `check-harness.sh` and
+  `test-install-core.sh`; no policy files change.
+
 ## 0.20.0 — 2026-07-17
 
 ### Changed
