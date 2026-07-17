@@ -1,6 +1,6 @@
 # harness-kit 0.20.0
 2be53f3e8ea2552ce8b3206a65557d68b45a3a11550fe4c002c02bbae646e71d  scripts/audit-log.sh
-8ed5b0bc5812726848b51503ed504d06baf3bc4579ddb36cc73c643bec342a3a  scripts/check-harness.sh
+d19fc34cf44dc5f74e541647e6ed9eb5d70f259267f5b1dbf5ff29b6904f12b1  scripts/check-harness.sh
 7b6f0ef248121b10a267c0a53fab98f9ad86458a5970ea3eb3ff99befe9a57e0  scripts/check-packaging.sh # tailored
 298bc6520091d54cf72e7dcc6269ff116872136a475d76e989af8169282babe7  scripts/dev-instance.sh
 13b0d160129ffa656949a97b2d2219d3d9e62bd940f77c1202f1458053a54211  scripts/doc-garden.sh

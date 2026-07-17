@@ -327,8 +327,13 @@ for test in "$ROOT"/scripts/test-*.sh "$ROOT"/scripts/hooks/test-*.sh; do
         test-install-core.sh|test-install-update.sh|test-install-recovery.sh|test-check-harness.sh|test-eval.sh)
             [ -n "${HARNESS_NESTED_FIXTURE:-}" ] && continue ;;
     esac
-    if ! bash "$test" >/dev/null 2>&1; then
-        echo "ERROR: ${test#"$ROOT"/} failed — run it directly for details"
+    # Capture output instead of discarding it: when the failure happens inside
+    # a throwaway fixture (a nested checker run), "run it directly" is advice
+    # nobody can follow — the fixture is gone by the time the message is read.
+    test_out=$(bash "$test" 2>&1)
+    if [ $? -ne 0 ]; then
+        echo "ERROR: ${test#"$ROOT"/} failed — last lines of its output:"
+        printf '%s\n' "$test_out" | tail -15 | sed 's/^/        /'
         ERRORS=$((ERRORS + 1))
     fi
 done
