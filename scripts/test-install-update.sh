@@ -21,6 +21,15 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=/dev/null
 . "$SCRIPTS_DIR/install-test-lib.sh"
 
+# has_line <haystack> <line> — pure-shell exact-line membership (the $'\n'
+# sandwich). Replaces `printf '%s\n' | grep -qxF`, whose early exit + an
+# inherited ignored SIGPIPE + pipefail phantom-fails on a MATCH once the
+# update plan outgrows the pipe buffer — the plan grows one line per shipped
+# mechanism file. See the check #9 completeness note in check-harness.sh.
+has_line() {
+    case $'\n'"$1"$'\n' in *$'\n'"$2"$'\n'*) return 0 ;; *) return 1 ;; esac
+}
+
 # --- (a) no-op update ---------------------------------------------------------
 # Update at the same version, from the same source, changes nothing.
 F=$(make_fixture) || exit 1
@@ -103,7 +112,7 @@ else
     fail "local-drift-preserve: harness_update_decision returned '$decision', expected diff"
 fi
 out=$(harness_update_apply "$SCRIPTS_DIR" "$F")
-if printf '%s\n' "$out" | grep -qxF "keep scripts/sync-agent-skills.sh"; then
+if has_line "$out" "keep scripts/sync-agent-skills.sh"; then
     pass "local-drift-preserve: harness_update_apply reports 'keep', not 'replace'"
 else
     fail "local-drift-preserve: harness_update_apply did not report 'keep scripts/sync-agent-skills.sh'" "$out"
@@ -139,12 +148,12 @@ out1=$(
     . "$NEWKIT/scripts/install-lib.sh"
     harness_update_apply "$NEWKIT/scripts" "$F"
 )
-if printf '%s\n' "$out1" | grep -qxF "add scripts/future-mech.sh"; then
+if has_line "$out1" "add scripts/future-mech.sh"; then
     pass "synthetic-future-file: new-kit inventory adds the new toplevel file"
 else
     fail "synthetic-future-file: 'add scripts/future-mech.sh' missing" "$out1"
 fi
-if printf '%s\n' "$out1" | grep -qxF "add scripts/hooks/future-hook.sh"; then
+if has_line "$out1" "add scripts/hooks/future-hook.sh"; then
     pass "synthetic-future-file: new-kit inventory adds the new hook (hooks add pass)"
 else
     fail "synthetic-future-file: 'add scripts/hooks/future-hook.sh' missing" "$out1"
@@ -163,7 +172,7 @@ out2=$(
 )
 after_mech=$(sha_of "$F" "scripts/future-mech.sh")
 after_hook=$(sha_of "$F" "scripts/hooks/future-hook.sh")
-if ! printf '%s\n' "$out2" | grep -qxF "add scripts/future-mech.sh" \
+if ! has_line "$out2" "add scripts/future-mech.sh" \
         && [ "$before_mech" = "$after_mech" ] && [ "$before_hook" = "$after_hook" ]; then
     pass "synthetic-future-file: a second apply is idempotent (no re-add, shas unchanged)"
 else

@@ -96,6 +96,15 @@ fails=0
 pass() { echo "ok:   $1"; }
 fail() { echo "FAIL: $1"; fails=$((fails + 1)); }
 
+# has <haystack> <needle> — pure-shell substring test. `printf '%s' "$out" |
+# grep -q` is banned here: grep -q's early exit + an inherited ignored
+# SIGPIPE + pipefail turns a MATCH into a phantom failure once $out (a full
+# sibling-suite transcript) outgrows the pipe buffer. See the check #9
+# completeness note in check-harness.sh.
+has() {
+    case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac
+}
+
 # The failing mktemp. One file serves both modes (behavior is env-driven), so
 # nothing has to be escaped into it.
 mkdir -p "$SHIM" || exit 1
@@ -199,7 +208,7 @@ run_case() {
     # call log is the oracle — a suite that never allocates scratch space
     # (calls == 0) has nothing to prove here, so it is not judged.
     if [ "$mode" = "all" ] && [ "$calls" -ge 1 ] && [ "$rc" -eq 0 ] \
-            && ! printf '%s\n' "$out" | grep -q 'SKIP:'; then
+            && ! has "$out" 'SKIP:'; then
         fail "$rel [$mode]: reported success (exit 0) though every mktemp failed"
         printf '%s\n' "$out" | tail -3 | sed 's/^/        /'
         return 1

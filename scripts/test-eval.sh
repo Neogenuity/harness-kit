@@ -27,6 +27,15 @@ fails=0
 ok()   { printf 'ok:   %s\n' "$1"; }
 bad()  { printf 'FAIL: %s\n' "$1"; fails=$((fails+1)); }
 
+# has <haystack> <needle> — pure-shell substring test. `printf | grep -q` is
+# banned here: grep -q's early exit + an inherited ignored SIGPIPE + pipefail
+# turns a MATCH into a phantom failure once the haystack (e.g. a ~4.6KB --help
+# block) outgrows the pipe buffer. See the check #9 completeness note in
+# check-harness.sh.
+has() {
+    case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac
+}
+
 # ---- unit: pass@k / pass^k / rate ------------------------------------------
 { [ "$(eval_passk 3 0)" = 0 ] && [ "$(eval_passk 3 1)" = 1 ] && [ "$(eval_passk 3 3)" = 1 ]; } \
     && ok "pass@k math" || bad "pass@k math"
@@ -118,9 +127,9 @@ fi
 # canary: it is the first thing to disappear if END is ever short again.
 if [ -f "$ROOT/scripts/eval-harness.sh" ]; then
     help_out="$(bash "$ROOT/scripts/eval-harness.sh" --help 2>&1)"
-    if printf '%s\n' "$help_out" | grep -q -- '--baseline' \
-            && printf '%s\n' "$help_out" | grep -q -- '--expected-trials' \
-            && printf '%s\n' "$help_out" | grep -q -- '--format'; then
+    if has "$help_out" '--baseline' \
+            && has "$help_out" '--expected-trials' \
+            && has "$help_out" '--format'; then
         ok "eval-harness.sh --help prints its full option block (not truncated by a stale sed range)"
     else
         bad "eval-harness.sh --help is missing --baseline/--expected-trials — its usage sed range is likely shorter than its header comment"
@@ -130,8 +139,8 @@ else
 fi
 if [ -f "$ROOT/scripts/eval.sh" ]; then
     help_out="$(bash "$ROOT/scripts/eval.sh" --help 2>&1)"
-    if printf '%s\n' "$help_out" | grep -q -- '--variant' \
-            && printf '%s\n' "$help_out" | grep -q -- '--allow-provider-config-write'; then
+    if has "$help_out" '--variant' \
+            && has "$help_out" '--allow-provider-config-write'; then
         ok "eval.sh --help prints its full option block, including --variant and --allow-provider-config-write"
     else
         bad "eval.sh --help is missing --variant or --allow-provider-config-write — its usage sed range is likely shorter than its header comment"
@@ -1266,7 +1275,9 @@ fi
 if [ -z "$BANK_TASKS" ]; then
     ok "no golden tasks under $TASKS_DIR — TASK.md parsing / grader-validity checks skipped"
 else
-    tdir0="$(printf '%s\n' "$BANK_TASKS" | head -1)"
+    # First line, pure shell — head -1 is an early-exiting reader (see the
+    # check #9 completeness note in check-harness.sh).
+    tdir0="${BANK_TASKS%%$'\n'*}"
 
     # ---- unit: TASK.md parsing ----------------------------------------------
     td="$TASKS_DIR/$tdir0"

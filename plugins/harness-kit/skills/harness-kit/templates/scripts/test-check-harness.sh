@@ -52,13 +52,25 @@ assert_ok() {
     rm -rf "$work"
 }
 
+# has <haystack> <needle> — pure-shell substring test (the quoted case pattern
+# keeps the needle literal). `printf '%s' "$out" | grep -qF` is banned in this
+# suite for the same reason as in check-harness.sh: grep -q exits on first
+# match, and under an inherited ignored SIGPIPE (GitHub's Actions runner)
+# printf's EPIPE becomes a nonzero status that pipefail turns into a phantom
+# failure — precisely when the needle WAS found. $out here is a full checker
+# transcript, which does outgrow the pipe buffer. See the check #9
+# completeness note in check-harness.sh.
+has() {
+    case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac
+}
+
 # assert_flags <description> <work> <needle>  — check-harness must fail (exit 1)
 # and its output must mention <needle> (proves it flagged the real breakage,
 # not something incidental).
 assert_flags() {
     local desc="$1" work="$2" needle="$3" out rc
     out=$(bash "$work/scripts/check-harness.sh" 2>&1); rc=$?
-    if [ "$rc" = "1" ] && printf '%s' "$out" | grep -qF "$needle"; then
+    if [ "$rc" = "1" ] && has "$out" "$needle"; then
         echo "ok:   $desc"
     else
         echo "FAIL: $desc — expected exit 1 mentioning '$needle', got exit $rc"
@@ -75,7 +87,7 @@ assert_flags() {
 assert_warns() {
     local desc="$1" work="$2" needle="$3" out rc
     out=$(bash "$work/scripts/check-harness.sh" 2>&1); rc=$?
-    if [ "$rc" = "0" ] && printf '%s' "$out" | grep -qF "$needle"; then
+    if [ "$rc" = "0" ] && has "$out" "$needle"; then
         echo "ok:   $desc"
     else
         echo "FAIL: $desc — expected exit 0 with '$needle', got exit $rc"
@@ -91,7 +103,7 @@ assert_warns() {
 assert_ok_without() {
     local desc="$1" work="$2" needle="$3" out rc
     out=$(bash "$work/scripts/check-harness.sh" 2>&1); rc=$?
-    if [ "$rc" = "0" ] && ! printf '%s' "$out" | grep -qF "$needle"; then
+    if [ "$rc" = "0" ] && ! has "$out" "$needle"; then
         echo "ok:   $desc"
     else
         echo "FAIL: $desc — expected exit 0 without '$needle', got exit $rc"
@@ -603,8 +615,8 @@ EOF
 EOF
     out=$(bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
     if [ "$rc" = "1" ] \
-        && printf '%s' "$out" | grep -qF ".mcp.json could not be parsed" \
-        && printf '%s' "$out" | grep -qF "'beta' in .cursor/mcp.json"; then
+        && has "$out" ".mcp.json could not be parsed" \
+        && has "$out" "'beta' in .cursor/mcp.json"; then
         echo "ok:   8c(h) malformed config WARNs unaudited; valid config still checked"
     else
         echo "FAIL: 8c(h) malformed+valid — rc=$rc"
@@ -627,7 +639,7 @@ EOF
 EOF
     out=$(env PATH="$shim" bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
     if [ "$rc" = "0" ] \
-        && printf '%s' "$out" | grep -qF ".mcp.json is an MCP config but jq is unavailable"; then
+        && has "$out" ".mcp.json is an MCP config but jq is unavailable"; then
         echo "ok:   8c(i) jq absent + JSON config → unaudited WARN, exit 0"
     else
         echo "FAIL: 8c(i) no-jq shim — rc=$rc (jq-in-shim: $(PATH="$shim" command -v jq || echo none))"
@@ -649,8 +661,8 @@ EOF
 EOF
     out=$(bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
     if [ "$rc" = "1" ] \
-        && printf '%s' "$out" | grep -qF "'dup' in .cursor/mcp.json" \
-        && ! printf '%s' "$out" | grep -qF "'dup' in .mcp.json"; then
+        && has "$out" "'dup' in .cursor/mcp.json" \
+        && ! has "$out" "'dup' in .mcp.json"; then
         echo "ok:   8c(j) only the mismatching provider ERRORs"
     else
         echo "FAIL: 8c(j) dup name across providers — rc=$rc"
@@ -669,8 +681,8 @@ EOF
 EOF
     out=$(bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
     if [ "$rc" = "1" ] \
-        && printf '%s' "$out" | grep -qF "'evil' in .mcp.json" \
-        && ! printf '%s' "$out" | grep -qF "could not be parsed"; then
+        && has "$out" "'evil' in .mcp.json" \
+        && ! has "$out" "could not be parsed"; then
         echo "ok:   8c(o) junk non-object sibling ignored; evil server still ERRORs"
     else
         echo "FAIL: 8c(o) junk sibling downgrade — rc=$rc"
@@ -695,8 +707,8 @@ EOF
 EOF
     out=$(env PATH="$shim" bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
     if [ "$rc" = "0" ] \
-        && ! printf '%s' "$out" | grep -qF "jq is unavailable" \
-        && ! printf '%s' "$out" | grep -qF "trust inventory"; then
+        && ! has "$out" "jq is unavailable" \
+        && ! has "$out" "trust inventory"; then
         echo "ok:   8c(p) jq absent + empty mcp maps → silent (no unaudited WARN)"
     else
         echo "FAIL: 8c(p) no-jq empty-map fast path — rc=$rc"
@@ -968,7 +980,7 @@ TOML
     printf '#!/bin/sh\nexit 1\n' > "$pyshim/python3"
     chmod +x "$pyshim/python3"
     out=$(PATH="$pyshim:$PATH" bash "$W/scripts/check-harness.sh" 2>&1); rc=$?
-    if [ "$rc" = "1" ] && printf '%s' "$out" | grep -qF "Python 3.11+ with tomllib"; then
+    if [ "$rc" = "1" ] && has "$out" "Python 3.11+ with tomllib"; then
         echo "ok:   8e: declared Codex profile without a TOML parser is unverifiable"
     else
         echo "FAIL: 8e: declared Codex profile without a TOML parser should fail as unverifiable"

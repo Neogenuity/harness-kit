@@ -17,6 +17,15 @@ trap cleanup EXIT
 pass() { echo "ok:   $1"; }
 fail() { echo "FAIL: $1"; fails=$((fails + 1)); }
 
+# has <haystack> <needle> — pure-shell substring test. `printf '%s' "$out" |
+# grep -qF` is banned here: grep -q's early exit + an inherited ignored
+# SIGPIPE + pipefail turns a MATCH into a phantom failure once $out (a full
+# verify transcript) outgrows the pipe buffer. See the check #9 completeness
+# note in check-harness.sh.
+has() {
+    case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac
+}
+
 # build_verify <commands-file> <output-file> — replace only the TAILOR gate
 # block, leaving the orchestration framework under test byte-for-byte intact.
 build_verify() {
@@ -47,9 +56,9 @@ build_verify "$WORK/success.gates" "$WORK/verify-success.sh"
 : > "$HARNESS_LOG_FILE"
 out=$(bash "$WORK/verify-success.sh" 2>&1); rc=$?
 if [ "$rc" -eq 0 ] \
-        && printf '%s\n' "$out" | grep -qF 'ok:   first' \
-        && printf '%s\n' "$out" | grep -qF 'ok:   second' \
-        && ! printf '%s\n' "$out" | grep -qF 'first-detail'; then
+        && has "$out" 'ok:   first' \
+        && has "$out" 'ok:   second' \
+        && ! has "$out" 'first-detail'; then
     pass "parallel full gates overlap and keep successful output quiet"
 else
     fail "parallel full gates did not overlap or report cleanly"
@@ -100,8 +109,8 @@ build_verify "$WORK/barrier.gates" "$WORK/verify-barrier.sh"
 
 out=$(bash "$WORK/verify-barrier.sh" 2>&1); rc=$?
 if [ "$rc" -eq 0 ] \
-        && printf '%s\n' "$out" | grep -qF 'ok:   producer' \
-        && printf '%s\n' "$out" | grep -qF 'ok:   consumer'; then
+        && has "$out" 'ok:   producer' \
+        && has "$out" 'ok:   consumer'; then
     pass "serial full gates wait for queued dependencies"
 else
     fail "a serial full gate raced a queued dependency"
@@ -113,7 +122,7 @@ rm -f "$WORK/fast" "$WORK/first.started" "$WORK/second.started"
 out=$(bash "$WORK/verify-success.sh" --fast 2>&1); rc=$?
 if [ "$rc" -eq 0 ] && [ -f "$WORK/fast" ] \
         && [ ! -e "$WORK/first.started" ] && [ ! -e "$WORK/second.started" ] \
-        && printf '%s\n' "$out" | grep -qF 'OK: all quality gates passed (fast)'; then
+        && has "$out" 'OK: all quality gates passed (fast)'; then
     pass "--fast runs serial fast gates and skips parallel full gates"
 else
     fail "--fast did not preserve its gate boundary"
@@ -136,12 +145,15 @@ build_verify "$WORK/failure.gates" "$WORK/verify-failure.sh"
 
 : > "$HARNESS_LOG_FILE"
 out=$(bash "$WORK/verify-failure.sh" 2>&1); rc=$?
-rerun=$(printf '%s\n' "$out" | sed -n 's/^FAIL: broken — fix, then re-run: //p' | head -1)
+# sed reads the whole input (no early exit); the first-line trim is pure shell
+# so no early-exiting reader ever sits downstream of the printf.
+rerun=$(printf '%s\n' "$out" | sed -n 's/^FAIL: broken — fix, then re-run: //p')
+rerun=${rerun%%$'\n'*}
 rerun_out=$(bash -c "$rerun" 2>&1); rerun_rc=$?
 if [ "$rc" -eq 1 ] && [ -f "$WORK/finished" ] \
-        && printf '%s\n' "$out" | grep -qF 'broken-detail' \
-        && printf '%s\n' "$out" | grep -qF 'FAIL: broken — fix, then re-run:' \
-        && printf '%s\n' "$out" | grep -qF 'ok:   finisher' \
+        && has "$out" 'broken-detail' \
+        && has "$out" 'FAIL: broken — fix, then re-run:' \
+        && has "$out" 'ok:   finisher' \
         && [ "$rerun_rc" -eq 7 ] && [ "$rerun_out" = "broken-detail" ]; then
     pass "parallel failure reports a copy-safe rerun and waits for every peer"
 else
@@ -167,7 +179,7 @@ EOF
 build_verify "$WORK/serial-failure.gates" "$WORK/verify-serial-failure.sh"
 : > "$HARNESS_LOG_FILE"
 out=$(bash "$WORK/verify-serial-failure.sh" 2>&1); rc=$?
-if [ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -qF serial-secret-output \
+if [ "$rc" -eq 1 ] && has "$out" 'serial-secret-output' \
         && jq -e -s 'length == 1 and .[0].data.name == "serial-broken"
             and .[0].data.outcome == "fail" and .[0].data.exit_code == 9
             and ([.[0] | tostring] | all(.[]; contains("serial-secret-output") | not))' \

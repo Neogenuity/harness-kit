@@ -3,6 +3,32 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.20.2 — 2026-07-18
+
+### Fixes
+
+- **Test-suite sweep of the v0.20.1 SIGPIPE fix:** the regression suites still
+  asserted with the shape 0.20.1 banned from `check-harness.sh` —
+  `printf '%s' "$out" | grep -q…` where `$out` is a multi-KB transcript that
+  can outgrow the pipe buffer, so a match could phantom-fail under an
+  inherited ignored SIGPIPE + `pipefail`. Converted to pure-shell matching
+  (bash 3.2 `case`; the `$'\n'` sandwich for exact-line): all transcript
+  assertions in `test-check-harness.sh` (the `assert_flags`/`assert_warns`/
+  `assert_ok_without` helpers and the direct 8c/8e sites), `test-verify.sh`,
+  `test-fixture-isolation.sh`, the `--help`-completeness checks in
+  `test-eval.sh` (a ~4.6KB haystack), and the exact-line update-plan
+  assertions in `test-install-update.sh`. Two `… | head -1` first-line grabs
+  (`test-eval.sh`, `test-verify.sh`) became pure-shell `${var%%$'\n'*}` trims
+  so no early-exiting reader sits downstream of a `printf` of a large
+  variable. Small single-atomic-write payloads (hook outputs, single manifest
+  lines) can't chunk and keep the pipe form.
+
+### Migration
+
+- Update mode replaces the manifest-matching `test-check-harness.sh`,
+  `test-verify.sh`, `test-eval.sh`, `test-install-update.sh`, and
+  `test-fixture-isolation.sh`; no policy files change.
+
 ## 0.20.1 — 2026-07-17
 
 ### Fixes
