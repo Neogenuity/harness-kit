@@ -1150,9 +1150,14 @@ fi
 #     derives its expected set from and update mode derives replace/add/remove
 #     decisions from, and it is itself pinned mechanism (#9a) and
 #     guard-protected. Retired paths still on disk are surfaced as WARNINGs,
-#     not ERRORs: update deliberately keeps a drifted or tailored copy for
-#     manual review (retirement must never delete local changes), and the
-#     warning is the standing nudge that the review is still owed.
+#     not ERRORs: update deliberately keeps a drifted copy for manual review
+#     (retirement must never delete local changes), and the warning is the
+#     standing nudge that the review is still owed. A retired path pinned
+#     ' # tailored' is the RESOLVED state — a deliberate repo-owned fork of a
+#     file the kit stopped shipping (the kit repo's own maintainer-only
+#     conformance suites are the canonical case) — so it does not warn:
+#     warning forever on a resolved state trains people to ignore the
+#     warning that matters.
 if [ -d "$ROOT/scripts/hooks" ]; then
     if [ ! -f "$ROOT/scripts/kit-manifest" ]; then
         echo "ERROR: harness is adopted (scripts/hooks/ present) but scripts/kit-manifest is missing — it is the ship contract that completeness check #9c derives its expected file set from and the kit's update mode derives replace/add/remove decisions from; without it neither can run. Restore it via the kit's update mode, then re-pin"
@@ -1165,9 +1170,14 @@ if [ -d "$ROOT/scripts/hooks" ]; then
         fi
         while IFS= read -r rel; do
             [ -n "$rel" ] || continue
-            if [ -f "$ROOT/$rel" ]; then
-                echo "WARNING: retired path '$rel' is still present — the kit no longer ships it; update keeps drifted or tailored copies for manual review. Fold your local changes forward (or delete the file), then re-pin"
+            [ -f "$ROOT/$rel" ] || continue
+            # A ' # tailored' pin on a retired path is a deliberate,
+            # integrity-verified fork — resolved, no warning.
+            if [ -f "$MANIFEST" ] \
+                    && awk -v p="$rel" '$2 == p && /# tailored$/ {found=1} END {exit !found}' "$MANIFEST"; then
+                continue
             fi
+            echo "WARNING: retired path '$rel' is still present — the kit no longer ships it; update keeps drifted copies for manual review. Fold your local changes forward and delete the file (or keep it deliberately by re-pinning its line ' # tailored')"
         done <<EOF
 $(awk '$1=="retired" {print $2}' "$ROOT/scripts/kit-manifest")
 EOF

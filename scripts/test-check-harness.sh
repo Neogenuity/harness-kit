@@ -310,6 +310,19 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
     printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n%s  scripts/kit-manifest\n%s  scripts/harness.conf\n' \
         "$(sha "$W/scripts/check-harness.sh")" "$(sha "$W/scripts/kit-manifest")" "$(sha "$W/scripts/harness.conf")" > "$W/scripts/.harness-manifest"
     assert_warns "9d: a still-present retired path warns without failing" "$W" "retired path 'scripts/old-mech.sh' is still present"
+
+    # The RESOLVED state: the same retired path pinned ' # tailored' — a
+    # deliberate, integrity-verified maintainer fork (this repo's own
+    # descoped conformance suites are the canonical case) — must NOT warn.
+    W=$(new_fixture)
+    mkdir -p "$W/scripts/hooks"
+    printf 'HOOK_WIRED_PROVIDERS=""\nAGENT_PROVIDERS=""\nEXECUTION_PROFILE_PROVIDERS=""\n' > "$W/scripts/harness.conf"
+    write_kmf "$W" "policy scripts/harness.conf" "retired scripts/old-mech.sh"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$W/scripts/old-mech.sh"
+    chmod +x "$W/scripts/old-mech.sh"
+    printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n%s  scripts/kit-manifest\n%s  scripts/harness.conf\n%s  scripts/old-mech.sh # tailored\n' \
+        "$(sha "$W/scripts/check-harness.sh")" "$(sha "$W/scripts/kit-manifest")" "$(sha "$W/scripts/harness.conf")" "$(sha "$W/scripts/old-mech.sh")" > "$W/scripts/.harness-manifest"
+    assert_ok_without "9d: a tailored-pinned retired path is resolved — no warning" "$W" "retired path"
 fi
 
 # --- check #9: a missing manifest is an ERROR once the harness is adopted ---

@@ -323,4 +323,38 @@ else
 fi
 rm -rf "$F" "$NEWKIT"
 
+# --- (k) v0.22.0 descope migration: a pre-descope install updates clean --------
+# Simulate the real migration this suite's own descope shipped: a
+# v0.21.0-layout install still carries the seven conformance-suite files,
+# pinned and pristine; updating to THIS kit must remove every one and leave
+# no retired-but-pinned residue after repin. (The smoke-suite add pass is the
+# generic add behavior case (f) already pins — make_fixture installs the
+# current shipped set, so the smoke test is present from the start here.)
+F=$(make_fixture) || exit 1
+DESCOPED="scripts/install-test-lib.sh scripts/test-install-core.sh scripts/test-install-update.sh scripts/test-install-recovery.sh scripts/test-check-harness.sh scripts/test-eval.sh scripts/test-fixture-isolation.sh"
+for p in $DESCOPED; do
+    printf '#!/usr/bin/env bash\necho old-suite\n' > "$F/$p"
+    chmod +x "$F/$p"
+    printf '%s  %s\n' "$(sha_of "$F" "$p")" "$p" >> "$F/scripts/.harness-manifest"
+done
+out=$(harness_update_apply "$SCRIPTS_DIR" "$F")
+missing=""
+for p in $DESCOPED; do
+    has_line "$out" "remove $p" || missing="$missing $p(no-remove)"
+    if [ -f "$F/$p" ]; then missing="$missing $p(still-present)"; fi
+done
+if [ -z "$missing" ]; then
+    pass "descope migration: all seven pre-descope suites removed and reported"
+else
+    fail "descope migration: incomplete removal —$missing" "$out"
+fi
+repin "$F"
+leftover=$(awk '$2 ~ /install-test-lib|test-install-(core|update|recovery)|test-check-harness|test-eval\.sh|test-fixture-isolation/ {print $2}' "$F/scripts/.harness-manifest")
+if [ -z "$leftover" ]; then
+    pass "descope migration: repin leaves no pins for the removed suites"
+else
+    fail "descope migration: stale pins survive repin" "$leftover"
+fi
+rm -rf "$F"
+
 finish "install-update"

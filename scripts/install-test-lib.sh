@@ -10,10 +10,10 @@
 # SOURCED, never run standalone — deliberately NOT named test-*.sh so
 # check-harness.sh's check #5b (static mktemp-hygiene scan) and check #6
 # (regression-test runner) and test-fixture-isolation.sh's sibling glob all
-# skip it by name; it has no case count of its own to report. It IS a
-# mechanism entry in the kit-manifest (the ship contract), so it ships with
-# every install and is manifest-pinned like any other mechanism file — #9c
-# reaches it through the kit-manifest for the same reason #6 does not.
+# skip it by name; it has no case count of its own to report. Maintainer-only
+# since v0.22.0 (retired from the ship contract with the suites that source
+# it): this root copy is a deliberate ' # tailored' fork, pinned like the
+# other root-only gates.
 #
 # Direct execution (`bash scripts/install-test-lib.sh`) is a harmless no-op:
 # there is no caller-set SCRIPTS_DIR to source install-lib.sh from, so rather

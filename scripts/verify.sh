@@ -207,6 +207,17 @@ done
 # check #8d. Self-skips under the harness gate's HARNESS_NESTED_FIXTURE=1, so
 # this explicit gate is its only verify-time run.
 parallel_full_gate "provider-templates" bash scripts/test-provider-templates.sh
+# Maintainer-only conformance suites (descoped from the shipped set in
+# v0.22.0 — adopters run the shipped test-harness-smoke.sh instead; these
+# root-only tailored copies keep proving the kit's own install/update/
+# recovery and checker contracts). The harness gate below runs nested
+# (HARNESS_NESTED_FIXTURE=1), which skips exactly these suites, so the
+# explicit gates here are their only verify-time run — mirroring how the
+# root test-eval.sh already has its own explicit gate.
+parallel_full_gate "install-suite-core" bash scripts/test-install-core.sh
+parallel_full_gate "install-suite-update" bash scripts/test-install-update.sh
+parallel_full_gate "install-suite-recovery" bash scripts/test-install-recovery.sh
+parallel_full_gate "checker-suite" bash scripts/test-check-harness.sh
 # Behavioral-eval grader validity for THIS repo's real golden-task bank. The
 # template test above only runs the shipped _template (empty bank), and
 # the nested harness gate below skips the root test-eval.sh (its graders call

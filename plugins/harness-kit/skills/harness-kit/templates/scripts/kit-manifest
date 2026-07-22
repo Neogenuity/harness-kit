@@ -45,18 +45,16 @@ mechanism scripts/eval.sh
 mechanism scripts/eval-harness.sh
 
 # --- mechanism: regression suites ---------------------------------------------
-mechanism scripts/install-test-lib.sh
-mechanism scripts/test-install-core.sh
-mechanism scripts/test-install-update.sh
-mechanism scripts/test-install-recovery.sh
-mechanism scripts/test-check-harness.sh
+# The kit's own conformance suites (install/update/recovery, the checker
+# suite, eval integrity, fixture isolation) are maintainer-only since
+# v0.22.0 — see the retired section. Adopters keep the hook behavioral
+# tests, the runtime suites below, and the post-init/post-update smoke test.
+mechanism scripts/test-harness-smoke.sh
 mechanism scripts/test-dev-instance.sh
 mechanism scripts/test-log.sh
 mechanism scripts/test-audit-log.sh
 mechanism scripts/test-doc-garden.sh
-mechanism scripts/test-eval.sh
 mechanism scripts/test-verify.sh
-mechanism scripts/test-fixture-isolation.sh
 
 # --- mechanism: hooks (policy hooks are listed under policy below) ------------
 mechanism scripts/hooks/lib.sh
@@ -86,7 +84,28 @@ policy scripts/hooks/guard-project-policy.sh
 # --- optional-policy: authored per repo, pinned when present ------------------
 optional-policy scripts/dev.sh
 
+# --- content: authored/copied by the SKILL's init flow, never by install ------
+# <path> is template-root-relative (unlike the scripts/ entries above, whose
+# paths are their own repo-relative destinations); dest= names where the
+# authored copy lands. Listed here so the rename map is declared data, not
+# prose — install-lib and the integrity checks ignore the content layer.
+content AGENTS.md.tmpl dest=AGENTS.md
+content CLAUDE.md.tmpl dest=CLAUDE.md
+content ci/github-actions-harness-check.yml dest=.github/workflows/harness-check.yml
+content ci/github-actions-review.yml dest=.github/workflows/review.yml
+content ci/github-actions-eval-cron.yml dest=.github/workflows/eval-cron.yml
+
 # --- retired: no longer shipped; update removes pristine, untailored copies ---
-# v0.20.0 split test-install.sh into the three focused suites above; this
-# entry closes that release's manual-`rm` migration caveat.
+# v0.20.0 split test-install.sh into the three focused suites; this entry
+# closes that release's manual-`rm` migration caveat.
 retired scripts/test-install.sh
+# v0.22.0 adopter test descope: the kit's own conformance suites became
+# maintainer-only. Pristine copies are removed on update; the kit repo's own
+# root copies are deliberate ' # tailored' forks and stay.
+retired scripts/install-test-lib.sh
+retired scripts/test-install-core.sh
+retired scripts/test-install-update.sh
+retired scripts/test-install-recovery.sh
+retired scripts/test-check-harness.sh
+retired scripts/test-eval.sh
+retired scripts/test-fixture-isolation.sh

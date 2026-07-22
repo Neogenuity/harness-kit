@@ -143,4 +143,6 @@ fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Next action
 
-Execute Phase 1 per [active/v0.21.0-ship-manifest-and-retirement.md](active/v0.21.0-ship-manifest-and-retirement.md).
+Execute Phase 2 per [active/v0.22.0-adopter-test-descope.md](active/v0.22.0-adopter-test-descope.md)
+(Phase 1 shipped — see
+[completed/v0.21.0-ship-manifest-and-retirement.md](completed/v0.21.0-ship-manifest-and-retirement.md)).

@@ -317,11 +317,15 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    `execution-profiles.md` convention and keep its AGENTS link for this
    devcontainer boundary.
 
-7. **CI gate**: install `templates/ci/github-actions-harness-check.yml` as
-   `.github/workflows/harness-check.yml` (or add the `check-harness.sh` step
-   to existing CI; translate for other CI systems). If the `code-reviewer`
+7. **CI gate**: install `templates/ci/github-actions-harness-check.yml` at
+   its declared destination (`.github/workflows/harness-check.yml` — the
+   template→destination rename map is the kit-manifest's `content` layer
+   `dest=` entries, the same file step 3 installed; read renames from there,
+   don't restate them). Or add the `check-harness.sh` step
+   to existing CI; translate for other CI systems. If the `code-reviewer`
    persona is wired, optionally add `templates/ci/github-actions-review.yml`
-   (the persona as a PR reviewer — SHA-pinned, `pull_request` not
+   at its declared destination (the persona as a PR reviewer — SHA-pinned,
+   `pull_request` not
    `pull_request_target`, minimal permissions; opt-in, cost notes in its
    header).
 
