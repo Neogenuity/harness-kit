@@ -40,15 +40,14 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 [ -f "$ROOT/scripts/harness.conf" ] && . "$ROOT/scripts/harness.conf" 2>/dev/null
 DENY_HINT="${GUARD_DENY_HINT:-}"
 
-# -- TAILOR: paths agents may not edit -----------------------------------------
+# Built-in mechanism set (kit knowledge, not repo policy — repo additions
+# belong in harness.conf's GUARD_PROTECTED_EXTRA, appended below).
 # Repo-relative globs. Patterns without a slash also match by basename (so
 # nested lint configs are covered); a LEADING SLASH anchors a pattern to the
 # repo root — exact path, no basename fallback — so a same-named file nested
 # elsewhere (e.g. a shipped template copy) stays editable. The harness mechanism is protected by
 # default — including .github/workflows/*, because CI runs the gates and an
-# agent that can edit a workflow can disarm the enforcing layer. Uncomment or
-# extend the second list with the lint and formatter configs an agent could
-# edit to make findings disappear.
+# agent that can edit a workflow can disarm the enforcing layer.
 PROTECTED_PATHS="
 scripts/hooks/*.sh
 scripts/check-harness.sh
@@ -88,8 +87,9 @@ scripts/harness.conf
 .cursor/mcp.json
 .codex/config.toml
 "
-# PROTECTED_PATHS="$PROTECTED_PATHS .eslintrc* eslint.config.* biome.json ruff.toml pint.json .php-cs-fixer.php phpstan.neon"
-# ------------------------------------------------------------------------------
+# Repo-owned additions (lint/formatter configs and other disarmable files)
+# come from harness.conf — data, not a fork of this mechanism file.
+PROTECTED_PATHS="$PROTECTED_PATHS ${GUARD_PROTECTED_EXTRA:-}"
 
 # Globs must reach `case` verbatim; without noglob the unquoted expansion of
 # PROTECTED_PATHS would glob against the CWD.

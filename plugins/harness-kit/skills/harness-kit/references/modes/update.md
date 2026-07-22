@@ -73,13 +73,16 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    resort — diff the tailored file against the NEW template only and say so.
    Never present a silent empty diff.
 3. Never auto-overwrite policy files (the kit-manifest's policy and
-   optional-policy layers: `verify.sh`, `format.sh`,
+   optional-policy layers: `verify.sh`,
    `guard-project-policy.sh`, `harness.conf`, an app repo's authored
    `dev.sh` — plus provider
    configs, `.cursor/sandbox.json`, and `.devcontainer/*`, which are never
-   pinned) — diff only. (`guard-secrets.sh` is mechanism since v0.21.0: its
-   policy lives entirely in `harness.conf`'s `SECRET_PATTERNS`, so a pristine
-   copy upgrades like any other mechanism file.) Never auto-add or
+   pinned) — diff only. (`guard-secrets.sh` is mechanism since v0.21.0 and
+   `format.sh` since v0.23.0: their policy lives entirely in `harness.conf` —
+   `SECRET_PATTERNS`, `FORMAT_RULES`/`LINT_RULES`, `GUARD_PROTECTED_EXTRA` —
+   so a pristine copy upgrades like any other mechanism file. A pre-v0.23.0
+   install's tailored `format.sh` case arms migrate into `harness.conf`
+   rules as part of the update diff.) Never auto-add or
    overwrite content files, including conventions, skills, AGENTS links, and
    generated stubs; mechanism update and content adoption are separate acts.
    In particular, `verify.sh` remains tailored policy: show the old-template →

@@ -80,26 +80,32 @@ fi
 rm -rf "$F" "$NEWKIT"
 
 # --- (d) policy layer is diff-only in update, even pristine + unmarked ---------
-# format.sh is policy in the kit-manifest (SKILL update step 3): a kit change
-# to it must be diffed, never auto-applied, regardless of the '# tailored'
-# marker. guard-secrets.sh is the counter-case: reclassified policy→mechanism
-# in v0.21.0 (its policy is fully externalized to SECRET_PATTERNS in
-# harness.conf), so a pristine copy IS auto-replaced — pin both directions so
-# neither classification silently flips.
+# guard-project-policy.sh is the one policy-layer hook left (SKILL update
+# step 3): a kit change to it must be diffed, never auto-applied, regardless
+# of the '# tailored' marker. guard-secrets.sh (v0.21.0) and format.sh
+# (v0.23.0) are the counter-cases: reclassified policy→mechanism once their
+# policy moved fully into harness.conf data, so a pristine copy IS
+# auto-replaced — pin all three so no classification silently flips.
 F=$(make_fixture) || exit 1
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
-printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/hooks/format.sh"
+printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/hooks/guard-project-policy.sh"
 printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/hooks/guard-secrets.sh"
+printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/hooks/format.sh"
 harness_update_apply "$NEWKIT/scripts" "$F" >/dev/null
-if ! grep -q "KIT CHANGE" "$F/scripts/hooks/format.sh"; then
-    pass "policy diff-only: update does not auto-replace a pristine format.sh"
+if ! grep -q "KIT CHANGE" "$F/scripts/hooks/guard-project-policy.sh"; then
+    pass "policy diff-only: update does not auto-replace a pristine guard-project-policy.sh"
 else
-    fail "policy diff-only: format.sh was auto-replaced by update"
+    fail "policy diff-only: guard-project-policy.sh was auto-replaced by update"
 fi
 if grep -q "KIT CHANGE" "$F/scripts/hooks/guard-secrets.sh"; then
     pass "mechanism reclassification: pristine guard-secrets.sh IS auto-replaced (v0.21.0 layer change)"
 else
     fail "mechanism reclassification: pristine guard-secrets.sh was not replaced — did it fall back into a policy layer?"
+fi
+if grep -q "KIT CHANGE" "$F/scripts/hooks/format.sh"; then
+    pass "mechanism reclassification: pristine format.sh IS auto-replaced (v0.23.0 layer change)"
+else
+    fail "mechanism reclassification: pristine format.sh was not replaced — did it fall back into a policy layer?"
 fi
 rm -rf "$F" "$NEWKIT"
 

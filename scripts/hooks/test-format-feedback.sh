@@ -129,6 +129,36 @@ else
     echo "ok:   format.sh with a Codex patch on a missing file stays silent"
 fi
 
+# Conf-driven policy (v0.23.0): format.sh reads FORMAT_RULES/LINT_RULES from
+# harness.conf as data — a matching lint rule's failure must feed back
+# (Claude layout: stderr + exit 2), proving the rules actually fire without a
+# tailored fork of the hook body.
+R="$WORK/repo"
+mkdir -p "$R/scripts/hooks"
+cp "$HOOKS_DIR/format.sh" "$HOOKS_DIR/lib.sh" "$R/scripts/hooks/"
+cp "$HOOKS_DIR/../log-lib.sh" "$R/scripts/log-lib.sh"
+chmod +x "$R/scripts/hooks/format.sh"
+printf 'LINT_RULES="*.zzz=./zzz-linter"\nFORMAT_RULES="*.zzz=./zzz-formatter"\n' > "$R/scripts/harness.conf"
+printf '#!/usr/bin/env bash\necho "ZZZ FINDING"\nexit 1\n' > "$R/zzz-linter"
+printf '#!/usr/bin/env bash\nprintf formatted > "$1".touched\n' > "$R/zzz-formatter"
+chmod +x "$R/zzz-linter" "$R/zzz-formatter"
+printf 'x\n' > "$R/thing.zzz"
+fmt_err=$(printf '{"session_id":1,"tool_input":{"file_path":"thing.zzz"}}' \
+    | "$R/scripts/hooks/format.sh" 2>&1 >/dev/null)
+fmt_rc=$?
+if [ "$fmt_rc" = "2" ] && printf '%s' "$fmt_err" | grep -q 'ZZZ FINDING'; then
+    echo "ok:   conf-driven LINT_RULES fire and feed back"
+else
+    echo "FAIL: conf-driven LINT_RULES — expected exit 2 with the finding, got exit $fmt_rc: $fmt_err"
+    fails=$((fails + 1))
+fi
+if [ -f "$R/thing.zzz.touched" ]; then
+    echo "ok:   conf-driven FORMAT_RULES run the matching formatter"
+else
+    echo "FAIL: conf-driven FORMAT_RULES did not run the matching formatter"
+    fails=$((fails + 1))
+fi
+
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails format-feedback case(s)"
     exit 1

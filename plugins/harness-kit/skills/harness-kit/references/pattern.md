@@ -140,7 +140,7 @@ scripts/
   .harness-manifest            # kit version + checksums (upgrade + CI integrity)
   hooks/
     lib.sh                     # stdin parsing, deny, feedback, advise-once, hook_log
-    format.sh                  # post-edit format + lint feedback  [tailored]
+    format.sh                  # post-edit format + lint feedback (rules from harness.conf)
     guard-secrets.sh           # pre-read secret denial (patterns from harness.conf)
     guard-config.sh            # pre-edit mechanism/lint-config protection [tailored]
     guard-project-policy.sh    # advisory stop-hook invariants     [tailored]
@@ -162,7 +162,7 @@ scripts/
 | Layer | Examples | Packaging treatment |
 | --- | --- | --- |
 | **Mechanism** | sync script, check script, lib.sh, hook tests, `dev-instance.sh` | Copied verbatim; upgraded via manifest; integrity-checked in CI |
-| **Policy** | quality gates (verify.sh), secret patterns, formatter/lint maps, protected paths, permission allowlist, plans dir; app-only authored `dev.sh` | Templates with marked `TAILOR` blocks, or repo-authored adapters where no generic mechanism can fit; pinned after init and never auto-overwritten |
+| **Policy** | quality gates (verify.sh), secret patterns, formatter/lint maps and extra protected paths (harness.conf data), permission allowlist, plans dir; app-only authored `dev.sh` | Templates with marked `TAILOR` blocks, or repo-authored adapters where no generic mechanism can fit; pinned after init and never auto-overwritten |
 | **Content** | AGENTS.md, conventions, skills, personas, invariant checks; app-only tailored runtime convention/skill | Authored or tailored per-project; kit provides skeletons + interview |
 
 ## Why stubs instead of symlinks or full copies

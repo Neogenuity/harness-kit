@@ -56,11 +56,12 @@ mechanism scripts/test-audit-log.sh
 mechanism scripts/test-doc-garden.sh
 mechanism scripts/test-verify.sh
 
-# --- mechanism: hooks (policy hooks are listed under policy below) ------------
+# --- mechanism: hooks (the one policy hook is listed under policy below) ------
 mechanism scripts/hooks/lib.sh
 mechanism scripts/hooks/README.md
 mechanism scripts/hooks/guard-secrets.sh
 mechanism scripts/hooks/guard-config.sh
+mechanism scripts/hooks/format.sh
 mechanism scripts/hooks/session-context.sh
 mechanism scripts/hooks/test-advise-once.sh
 mechanism scripts/hooks/test-affected-files.sh
@@ -73,12 +74,12 @@ mechanism scripts/hooks/test-guard-secrets.sh
 mechanism scripts/hooks/test-session-context.sh
 
 # --- policy: repo-owned after init; update diffs, never replaces --------------
-# (guard-secrets.sh is mechanism, not policy, since v0.21.0: its policy is
-# fully externalized to SECRET_PATTERNS/SECRET_ALLOW_PATTERNS in harness.conf,
-# so the script body is generic and safe to upgrade like any other mechanism.)
+# (guard-secrets.sh is mechanism since v0.21.0 and format.sh since v0.23.0:
+# their policy is fully externalized to harness.conf — SECRET_PATTERNS /
+# SECRET_ALLOW_PATTERNS and FORMAT_RULES / LINT_RULES / GUARD_PROTECTED_EXTRA
+# — so the script bodies are generic and upgrade like any other mechanism.)
 policy scripts/verify.sh
 policy scripts/harness.conf
-policy scripts/hooks/format.sh
 policy scripts/hooks/guard-project-policy.sh
 
 # --- optional-policy: authored per repo, pinned when present ------------------

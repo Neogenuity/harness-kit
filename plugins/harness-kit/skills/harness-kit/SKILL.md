@@ -114,7 +114,7 @@ misfire on the router alone, but the reference carries the steps.
 - **Checksum matches manifest → replace** with the new kit version; **differs,
   or the manifest line is ` # tailored` → diff only**, never auto-overwrite.
 - **Never auto-overwrite policy files** (the kit-manifest's policy layers:
-  `verify.sh`, `format.sh`, `guard-project-policy.sh`, `harness.conf`, an
+  `verify.sh`, `guard-project-policy.sh`, `harness.conf`, an
   authored `dev.sh` — plus provider
   configs, `.cursor/sandbox.json`, and `.devcontainer/*`, which are never pinned).
 - **Retired paths are removed only when pristine and untailored** (the NEW

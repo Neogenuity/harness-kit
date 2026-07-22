@@ -127,8 +127,11 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      the template's v2 gate-event wrapper intact: it emits name, mode, outcome,
      exit code, and integer duration without logging command arguments/output or
      changing a gate result.
-   - `hooks/format.sh`: uncomment/add extension → formatter lines for the
-     detected stack.
+   - `harness.conf` `FORMAT_RULES` / `LINT_RULES`: one
+     `<glob[|glob...]>=<command>` line per formatter / fast linter for the
+     detected stack (the format hook is mechanism; its policy is this data).
+     `GUARD_PROTECTED_EXTRA`: the repo's lint/formatter configs an agent
+     could edit to make findings disappear.
    - `harness.conf` `SECRET_PATTERNS` / `SECRET_ALLOW_PATTERNS`: extend for
      the repo's actual secret files — this is the single source
      (`guard-secrets.sh` enforces it, `check-harness.sh` verifies the native

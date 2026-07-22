@@ -23,6 +23,29 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # apply_patch paths are repo-relative — resolve every file against the root.
 cd "$ROOT" || exit 0
 
+# The format/lint policy lives in harness.conf as data (FORMAT_RULES /
+# LINT_RULES, one `<glob[|glob...]>=<command>` per line — the edited file is
+# appended as the command's last argument). This script is pure mechanism:
+# absent conf or empty rules mean no-op, never an error.
+# shellcheck source=/dev/null
+[ -f "$ROOT/scripts/harness.conf" ] && . "$ROOT/scripts/harness.conf" 2>/dev/null
+FORMAT_RULES="${FORMAT_RULES:-}"
+LINT_RULES="${LINT_RULES:-}"
+
+# match_pat <file> <glob[|glob...]> — case-glob match with '|' alternation
+# (a '|' inside an expanded case pattern is literal, so split and loop).
+match_pat() {
+    local file="$1" alts="$2" p
+    local IFS='|'
+    set -f
+    for p in $alts; do
+        # shellcheck disable=SC2254
+        case "$file" in $p) set +f; return 0 ;; esac
+    done
+    set +f
+    return 1
+}
+
 # Run a formatter only if its binary exists (project-relative or on PATH);
 # swallow failures so the edit is never blocked.
 run() {
@@ -46,31 +69,34 @@ $out"
     fi
 }
 
+apply_rules() {
+    # apply_rules <runner: run|lint> <rules> <file> — first matching rule wins
+    # per list. The command template is word-split by design (no quoting
+    # support: a formatter needing space-containing arguments gets a small
+    # repo-owned wrapper script instead).
+    local runner="$1" rules="$2" file="$3" rule pat cmd
+    [ -n "$rules" ] || return 0
+    while IFS= read -r rule; do
+        case "$rule" in ''|\#*) continue ;; esac
+        pat=${rule%%=*}
+        cmd=${rule#*=}
+        [ -n "$pat" ] && [ -n "$cmd" ] && [ "$pat" != "$rule" ] || continue
+        if match_pat "$file" "$pat"; then
+            # shellcheck disable=SC2086
+            "$runner" $cmd "$file"
+            return 0
+        fi
+    done <<EOF
+$rules
+EOF
+    return 0
+}
+
 process_one() {
     local file="$1"
     [ -f "$file" ] || return 0
-
-    # -- TAILOR: map file extensions to your formatters ---------------------------
-    # Uncomment / add lines for the stacks in this repo. Examples:
-    case "$file" in
-        # *.php)                        run vendor/bin/pint "$file" ;;
-        # *.ts|*.tsx|*.js|*.jsx|*.css)  run npx prettier --write "$file" ;;
-        # *.py)                         run ruff format "$file" ;;
-        # *.go)                         run gofmt -w "$file" ;;
-        # *.rs)                         run rustfmt "$file" ;;
-        *) : ;;
-    esac
-    # ------------------------------------------------------------------------------
-
-    # -- TAILOR: map file extensions to a FAST linter (the feedback loop) ---------
-    # Millisecond-fast linters only — slow static analysis belongs in verify.sh,
-    # not on every edit.
-    case "$file" in
-        *.sh)   lint shellcheck -x --severity=warning "$file" ;;
-        *.json) lint jq empty "$file" ;;
-        *) : ;;
-    esac
-    # ------------------------------------------------------------------------------
+    apply_rules run  "$FORMAT_RULES" "$file"
+    apply_rules lint "$LINT_RULES" "$file"
 }
 
 while IFS= read -r f; do
