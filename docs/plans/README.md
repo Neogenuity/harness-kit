@@ -58,9 +58,20 @@ Repo references that must stay honest belong in markdown links (the CI link
 check walks every doc under `docs/`); prose and backtick mentions of
 not-yet-existing paths are legal — queued plans name future files by design.
 
-## Roadmap (set 2026-07-10, v0.18.0 released 2026-07-16)
+## Roadmap (set 2026-07-10; restructure track added 2026-07-22)
 
-Shipped: **v0.18.0** — fixture isolation: the shipped regression tests could run
+Shipped: **v0.21.0** (2026-07-22) — declarative kit-manifest ship contract +
+retired-file mechanism, Phase 1 of the
+[standard-consumer-layout](standard-consumer-layout.md) umbrella plan, which
+now owns the mechanism queue (Phases 2–6: adopter test descope,
+`scripts/harness/` command surface, content/IA migration, single provider
+declaration + generated adapters, launch acceptance) and gates the
+launch-readiness public flip
+([completed/v0.21.0-ship-manifest-and-retirement.md](completed/v0.21.0-ship-manifest-and-retirement.md));
+**v0.19.0/v0.20.x** (2026-07-17/18) — Claude execution-profile
+retry retention; the install-suite split (231s→46s) with root-only
+provider-template validation; the SIGPIPE phantom-failure fixes swept through
+checker and suites (see CHANGELOG.md); **v0.18.0** — fixture isolation: the shipped regression tests could run
 their `git init`/`add`/`commit` in the **host repository** when `mktemp` failed,
 because `cd ""` is a silent rc=0 no-op that defeats the `|| exit 1` guard that
 looks like it catches it. Found by a launch-readiness review whose own

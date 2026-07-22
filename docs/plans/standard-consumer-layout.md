@@ -37,8 +37,9 @@ breaking change multiplied by every adopter's tailored files.
 Phased; each phase is one minor release cut via
 [the release skill](../skills/release/SKILL.md) and leaves `verify.sh` green.
 
-- [ ] **Phase 1 — declarative ship-manifest + retirement** (activates as
-  v0.21.0). A shipped `kit-manifest` (plain text: layer, path, optional
+- [x] **Phase 1 — declarative ship-manifest + retirement** — **shipped
+  2026-07-22 as v0.21.0** (tag v0.21.0, 91aad35; see
+  [completed/v0.21.0-ship-manifest-and-retirement.md](completed/v0.21.0-ship-manifest-and-retirement.md)). A shipped `kit-manifest` (plain text: layer, path, optional
   `dest=`, plus a `retired` section) becomes the single source for what ships
   and what layer owns it; `install-lib.sh` parses it instead of the three
   hard-coded lists; `harness_update_apply` gains `remove` for pristine,
@@ -111,6 +112,10 @@ fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Progress
 
+- 2026-07-22 — **Phase 1 shipped as v0.21.0** (tag v0.21.0, 91aad35): ship
+  contract + retirement mechanism live, all suites and the full gate green;
+  the v0.20.0 manual-`rm` caveat is now a regression test. Phase 2 (adopter
+  test descope) is next.
 - 2026-07-22 — Umbrella plan authored from the approved restructure design
   (three parallel codebase explorations + plan review; user decisions
   recorded below). Phase 1 activated as v0.21.0.
