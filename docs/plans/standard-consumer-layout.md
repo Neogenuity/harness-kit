@@ -46,12 +46,12 @@ Phased; each phase is one minor release cut via
   non-tailored retired files; check #9c derives its set from it. Acceptance:
   retirement fixtures (pristine-removed / drifted-kept / tailored-kept) pass;
   `scripts/test-install.sh` listed retired proves the v0.20.0 caveat is closed.
-- [ ] **Phase 2 — adopter test descope + cleanups** (absorbs
-  [adopter-test-descope.md](adopter-test-descope.md)). Conformance suites
-  become maintainer-only; adopters get a small smoke suite; `dev.sh`'s three
-  special cases collapse to one `optional-policy` manifest line; rename
-  conventions become `dest=` data. Acceptance: a fixture updating from the
-  Phase 1 layout removes the descoped suites cleanly and stays checker-green.
+- [x] **Phase 2 — adopter test descope + cleanups** — **shipped 2026-07-22 as
+  v0.22.0** (tag v0.22.0, eb59b3b; see
+  [completed/v0.22.0-adopter-test-descope.md](completed/v0.22.0-adopter-test-descope.md)).
+  Absorbed [adopter-test-descope.md](adopter-test-descope.md); conformance
+  suites are maintainer-only, adopters run the shipped smoke suite, rename
+  conventions are `dest=` data.
 - [ ] **Phase 3 — mechanism re-home**: `scripts/harness/` extensionless verb
   commands (`bootstrap`, `verify`, `sync`, `check-instructions`, `check-docs`,
   `detect-drift`, `validate-plan`, `run-evals`) over shared `lib/`; mechanism
@@ -112,6 +112,9 @@ fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Progress
 
+- 2026-07-22 — **Phase 2 shipped as v0.22.0** (tag v0.22.0, eb59b3b): seven
+  conformance suites descoped to maintainer-only, shipped smoke test in,
+  descope migration fixture-proven. Phase 3 (mechanism re-home) activated.
 - 2026-07-22 — **Phase 1 shipped as v0.21.0** (tag v0.21.0, 91aad35): ship
   contract + retirement mechanism live, all suites and the full gate green;
   the v0.20.0 manual-`rm` caveat is now a regression test. Phase 2 (adopter
@@ -143,6 +146,8 @@ fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Next action
 
-Execute Phase 2 per [active/v0.22.0-adopter-test-descope.md](active/v0.22.0-adopter-test-descope.md)
-(Phase 1 shipped — see
-[completed/v0.21.0-ship-manifest-and-retirement.md](completed/v0.21.0-ship-manifest-and-retirement.md)).
+Execute Phase 3 per [active/v0.23.0-mechanism-rehome.md](active/v0.23.0-mechanism-rehome.md)
+(Phases 1–2 shipped — see
+[completed/v0.21.0-ship-manifest-and-retirement.md](completed/v0.21.0-ship-manifest-and-retirement.md)
+and
+[completed/v0.22.0-adopter-test-descope.md](completed/v0.22.0-adopter-test-descope.md)).
