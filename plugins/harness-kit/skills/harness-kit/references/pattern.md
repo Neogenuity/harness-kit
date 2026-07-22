@@ -136,6 +136,7 @@ scripts/
   sync-agent-skills.sh         # stub + skill-resource mirror generator
                                #   (+ --check mode, orphan detection)
   check-harness.sh             # CI drift gate + manifest integrity + doctor
+  kit-manifest                 # ship contract: layer per shipped path + retired set
   .harness-manifest            # kit version + checksums (upgrade + CI integrity)
   hooks/
     lib.sh                     # stdin parsing, deny, feedback, advise-once, hook_log
@@ -205,7 +206,11 @@ whose checksum still matches the manifest are
 upgraded in place; files that differ (or are marked tailored) get a diff
 instead of an overwrite. Policy templates (TAILOR blocks) and authored policy
 adapters are always treated as tailored after init. Update uses the NEW kit's
-`templates/scripts/install-lib.sh` to enumerate the new version's mechanism —
-an old installed helper cannot discover files that did not exist when it
-shipped. New content such as the app-only convention and skill is offered as
-an explicit opt-in and is never auto-added or overwritten.
+`templates/scripts/install-lib.sh` and its `kit-manifest` — the declarative
+ship contract every file set derives from — to enumerate the new version's
+mechanism: an old installed helper cannot discover files that did not exist
+when it shipped. The kit-manifest's `retired` section lets update *remove* a
+file the kit no longer ships, but only a pristine, untailored copy — drifted
+or tailored copies are kept and reported, so retirement can never delete
+local changes. New content such as the app-only convention and skill is
+offered as an explicit opt-in and is never auto-added or overwritten.

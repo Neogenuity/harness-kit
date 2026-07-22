@@ -15,8 +15,8 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
 
 1. Read the target's `scripts/.harness-manifest` (version + checksums). If
    missing, fall back to audit and offer to adopt the manifest.
-2. Use the NEW `install-lib.sh`'s `harness_update_apply` inventory for each
-   mechanism file; never reconstruct
+2. Use the NEW kit's `kit-manifest` (read through the NEW `install-lib.sh`'s
+   `harness_update_apply`) as the inventory; never reconstruct
    the new version's file set from the old manifest or an old hard-coded list.
    Checksum matches manifest → replace with the
    new kit version; differs, or its manifest line is marked ` # tailored` →
@@ -25,14 +25,24 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    matrix below, and use them as the diff base for tailored files).
    `harness_update_apply` from the NEW `install-lib.sh` runs this decision
    deterministically (`harness_update_decision` classifies each line
-   replace-vs-diff); it is the same code `test-install-update.sh` pins. Set
+   replace-vs-diff against the NEW kit-manifest's layers); it is the same code
+   `test-install-update.sh` pins. Set
    `HARNESS_ALLOW_MECHANISM_EDITS=1` for the session if `guard-config.sh` is
    wired — upgrading the mechanism is the intended use of that escape hatch.
 
-   For the v0.17 outcome/doc-garden inventory, newly introduced
-   `log-lib.sh`, `audit-log.sh`, `doc-garden.sh`, and their regression tests are
+   **Retired paths.** The NEW kit-manifest's `retired` section names files the
+   kit no longer ships. `harness_update_apply` removes an installed copy only
+   when it is pristine (sha still matches its pin) and not ` # tailored`, and
+   reports `remove <path>`; a drifted or tailored copy is kept and reported
+   `retire-keep <path>` — surface those to the user for manual review
+   (check-harness #9d keeps WARNing until they are resolved). Retirement must
+   never delete local changes.
+
+   For older inventories, newly introduced files
+   (`log-lib.sh`, `audit-log.sh`, `doc-garden.sh`, their regression tests, and
+   `kit-manifest` itself for pre-v0.21.0 installs) are
    normal mechanism additions. A manifest-matching `hooks/lib.sh` is pristine
-   mechanism and may be replaced with the v2-capable version; a locally changed
+   mechanism and may be replaced with the newer version; a locally changed
    copy remains diff-only under the checksum rule. Never make the old inventory
    enumerate these files by hand.
 
@@ -62,10 +72,14 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    out); fall back to the git-tag or upstream-fetch channels, or — as a last
    resort — diff the tailored file against the NEW template only and say so.
    Never present a silent empty diff.
-3. Never auto-overwrite policy files (`verify.sh`, `format.sh`,
-   `guard-secrets.sh`, `guard-project-policy.sh`, `harness.conf`, provider
-   configs, `.cursor/sandbox.json`, `.devcontainer/*`, or an app repo's authored
-   `dev.sh`) — diff only. Never auto-add or
+3. Never auto-overwrite policy files (the kit-manifest's policy and
+   optional-policy layers: `verify.sh`, `format.sh`,
+   `guard-project-policy.sh`, `harness.conf`, an app repo's authored
+   `dev.sh` — plus provider
+   configs, `.cursor/sandbox.json`, and `.devcontainer/*`, which are never
+   pinned) — diff only. (`guard-secrets.sh` is mechanism since v0.21.0: its
+   policy lives entirely in `harness.conf`'s `SECRET_PATTERNS`, so a pristine
+   copy upgrades like any other mechanism file.) Never auto-add or
    overwrite content files, including conventions, skills, AGENTS links, and
    generated stubs; mechanism update and content adoption are separate acts.
    In particular, `verify.sh` remains tailored policy: show the old-template →

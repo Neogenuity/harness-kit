@@ -12,6 +12,7 @@ that touches the same ground.
 - [006 — Dogfood copies are enforced duplicates, not references](006-dogfood-copies-are-enforced-duplicates.md)
 - [007 — Dual-provider packaging: one plugin tree, two manifests, a neutral VERSION](007-dual-provider-packaging.md)
 - [008 — Declared execution profiles with semantic floors](008-declared-execution-profiles.md)
+- [009 — Declarative ship-manifest with a retirement contract](009-declarative-ship-manifest.md)
 
 Format: context / decision / consequences, half a page each. New ADRs take
 the next number; superseded ADRs stay in place with a pointer to their

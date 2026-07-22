@@ -1098,27 +1098,35 @@ if [ -d "$ROOT/scripts/hooks" ] && [ "$valid_pins" -eq 0 ]; then
 fi
 
 # 9c. Manifest COMPLETENESS: every mechanism file present on disk must be pinned.
-#     The expected set is derived from the FILESYSTEM, not the manifest (which is
-#     what an attacker edits) — a file must be on disk to run, so if it is on disk
-#     it must be pinned. This closes *partial* pin deletion: removing the manifest
-#     line for a still-present guard (leaving other pins, so 9b passes) would
-#     otherwise silently exempt that guard from checksum verification. The set
-#     mirrors install-lib.sh's _HARNESS_MECHANISM_TOPLEVEL + the hooks/ tree.
-#     Gated on scripts/hooks/ present (adopted): to dodge it an attacker would
-#     have to delete the hooks tree — i.e. the guards themselves — which defeats
-#     the point. (Also keeps pre-adoption / minimal fixtures out of scope.)
-if [ -f "$MANIFEST" ] && [ -d "$ROOT/scripts/hooks" ]; then
+#     The expected set is the FILESYSTEM crossed with the SHIP CONTRACT
+#     (scripts/kit-manifest) — never the integrity manifest itself (which is
+#     what an attacker edits): a file must be on disk to run, so if it is on
+#     disk and the kit-manifest declares it in an installing layer (mechanism,
+#     policy, optional-policy), it must be pinned. The hooks tree is taken from
+#     disk wholesale, so a repo-local hook must be pinned too. This closes
+#     *partial* pin deletion: removing the manifest line for a still-present
+#     guard (leaving other pins, so 9b passes) would otherwise silently exempt
+#     that guard from checksum verification. Before v0.21.0 the expected set
+#     was a hard-coded mirror of install-lib.sh's inventory lists; the shipped
+#     kit-manifest replaced both copies. Gated on scripts/hooks/ present
+#     (adopted — to dodge it an attacker would have to delete the guards
+#     themselves) AND a readable kit-manifest: a missing kit-manifest is its
+#     own ERROR (#9d), so this check never guesses at the expected set.
+if [ -f "$MANIFEST" ] && [ -d "$ROOT/scripts/hooks" ] && [ -f "$ROOT/scripts/kit-manifest" ]; then
     pinned_paths=$(awk '$1 ~ /^[0-9a-fA-F]{64}$/ {print $2}' "$MANIFEST")
-    for mech in "$ROOT"/scripts/hooks/* \
-                "$ROOT"/scripts/harness.conf "$ROOT"/scripts/check-harness.sh \
-                "$ROOT"/scripts/sync-agent-skills.sh "$ROOT"/scripts/install-lib.sh \
-                "$ROOT"/scripts/install-test-lib.sh \
-                "$ROOT"/scripts/dev-instance.sh "$ROOT"/scripts/dev.sh \
-                "$ROOT"/scripts/eval-lib.sh "$ROOT"/scripts/eval.sh \
-                "$ROOT"/scripts/eval-harness.sh \
-                "$ROOT"/scripts/verify.sh "$ROOT"/scripts/test-*.sh; do
-        [ -f "$mech" ] || continue
-        rel="scripts/${mech#"$ROOT"/scripts/}"
+    expected_paths=$(
+        { find "$ROOT/scripts/hooks" -type f ! -name '.harness-manifest' 2>/dev/null \
+              | sed "s|^$ROOT/||"
+          awk '$1=="mechanism" || $1=="policy" || $1=="optional-policy" {print $2}' \
+              "$ROOT/scripts/kit-manifest"
+        } | sort -u
+    )
+    while IFS= read -r rel; do
+        [ -n "$rel" ] || continue
+        # The ship contract only installs under scripts/; ignore anything else
+        # a malformed kit-manifest line might name.
+        case "$rel" in scripts/*) ;; *) continue ;; esac
+        [ -f "$ROOT/$rel" ] || continue
         # Pipe-free exact-line membership test. `printf ... | grep -q` is
         # banned in this script: grep -q exits on first match, and when the
         # process tree inherits an IGNORED SIGPIPE (GitHub's Actions runner
@@ -1132,7 +1140,38 @@ if [ -f "$MANIFEST" ] && [ -d "$ROOT/scripts/hooks" ]; then
                 echo "ERROR: mechanism file '$rel' is present but not pinned in scripts/.harness-manifest — every mechanism file on disk must be integrity-pinned; an unpinned file is silently exempt from checksum verification. Re-pin it (init step 8)"
                 ERRORS=$((ERRORS + 1)) ;;
         esac
-    done
+    done <<EOF
+$expected_paths
+EOF
+fi
+
+# 9d. Ship contract: an adopted repo must carry scripts/kit-manifest — present,
+#     parseable, and declaring a non-empty shipped set. It is the file #9c
+#     derives its expected set from and update mode derives replace/add/remove
+#     decisions from, and it is itself pinned mechanism (#9a) and
+#     guard-protected. Retired paths still on disk are surfaced as WARNINGs,
+#     not ERRORs: update deliberately keeps a drifted or tailored copy for
+#     manual review (retirement must never delete local changes), and the
+#     warning is the standing nudge that the review is still owed.
+if [ -d "$ROOT/scripts/hooks" ]; then
+    if [ ! -f "$ROOT/scripts/kit-manifest" ]; then
+        echo "ERROR: harness is adopted (scripts/hooks/ present) but scripts/kit-manifest is missing — it is the ship contract that completeness check #9c derives its expected file set from and the kit's update mode derives replace/add/remove decisions from; without it neither can run. Restore it via the kit's update mode, then re-pin"
+        ERRORS=$((ERRORS + 1))
+    else
+        kit_shipped=$(awk '$1=="mechanism" || $1=="policy" {c++} END{print c+0}' "$ROOT/scripts/kit-manifest")
+        if [ "$kit_shipped" -eq 0 ]; then
+            echo "ERROR: scripts/kit-manifest declares no shipped entries — an emptied or malformed ship contract disarms completeness check #9c exactly like a deleted one. Restore it via the kit's update mode, then re-pin"
+            ERRORS=$((ERRORS + 1))
+        fi
+        while IFS= read -r rel; do
+            [ -n "$rel" ] || continue
+            if [ -f "$ROOT/$rel" ]; then
+                echo "WARNING: retired path '$rel' is still present — the kit no longer ships it; update keeps drifted or tailored copies for manual review. Fold your local changes forward (or delete the file), then re-pin"
+            fi
+        done <<EOF
+$(awk '$1=="retired" {print $2}' "$ROOT/scripts/kit-manifest")
+EOF
+    fi
 fi
 
 # 10. Doctor: conditions that silently weaken the harness. Warnings only —

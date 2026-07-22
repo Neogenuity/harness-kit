@@ -3,6 +3,62 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.21.0 — 2026-07-22
+
+Phase 1 of the standard-consumer-layout restructure
+(`docs/plans/standard-consumer-layout.md`).
+
+### Added
+
+- **`scripts/kit-manifest` — the declarative ship contract** (ADR 009): one
+  plain-text line per shipped path with its ownership layer (`mechanism` |
+  `policy` | `optional-policy`) plus a `retired` section. Every
+  installer/manifest/checker function now derives its file set from it; the
+  three hard-coded inventory lists in `install-lib.sh`
+  (`_HARNESS_MECHANISM_TOPLEVEL`, `_HARNESS_POLICY_FILES`,
+  `_HARNESS_OPTIONAL_PROJECT_POLICY_TOPLEVEL`) and check #9c's duplicate
+  enumeration are gone, and hooks are enumerated per file instead of copied
+  wholesale. The kit-manifest is itself mechanism: sha-pinned,
+  guard-config-protected, and required on adopted repos.
+- **Retired-file mechanism:** `harness_update_apply` now removes a path the
+  new kit-manifest lists as `retired` — but only a pristine (sha matches its
+  pin), non-`# tailored` copy (`remove <path>`); drifted, tailored, or
+  never-pinned copies are kept and reported (`retire-keep <path>`).
+  Retirement never deletes local changes. Fixture-pinned in
+  `test-install-update.sh` (pristine-removed / drifted-kept / tailored-kept,
+  pin carried). `scripts/test-install.sh` ships as the first retired entry,
+  closing v0.20.0's manual-`rm` migration caveat.
+- **check #9d:** an adopted repo must carry a present, parseable,
+  non-empty `scripts/kit-manifest` (ERROR otherwise); retired paths still on
+  disk WARN until resolved.
+
+### Changed
+
+- **check #9c** derives its expected pin set from the kit-manifest crossed
+  with the filesystem (hooks tree still taken from disk wholesale, so
+  repo-local hooks stay pinned).
+- **`hooks/guard-secrets.sh` reclassified policy → mechanism:** its policy is
+  fully externalized to `SECRET_PATTERNS`/`SECRET_ALLOW_PATTERNS` in
+  `harness.conf`, so a pristine copy now upgrades like any other mechanism
+  file. `format.sh` and `guard-project-policy.sh` remain diff-only policy.
+- `guard-config.sh` protects `scripts/kit-manifest`;
+  `harness_generate_manifest`/`harness_repin_manifest` refuse to run without
+  a kit-manifest instead of emitting an empty pin set;
+  `harness_update_decision` takes the (new) kit-manifest as its layer source.
+- Removed a stray empty `templates/scripts/.claude/` write-tracking artifact
+  from the distribution.
+
+### Migration
+
+- Update mode installs `scripts/kit-manifest` as a newly-shipped mechanism
+  file and replaces the manifest-matching `install-lib.sh`,
+  `check-harness.sh`, `hooks/guard-config.sh`, `hooks/guard-secrets.sh`
+  (reclassified — see above), `install-test-lib.sh`, `test-install-core.sh`,
+  `test-install-update.sh`, and `test-check-harness.sh`. A pre-0.21.0
+  install's leftover `scripts/test-install.sh` is now removed automatically
+  when pristine (kept and reported when drifted or tailored). Policy files
+  other than the guard-secrets reclassification are untouched.
+
 ## 0.20.2 — 2026-07-18
 
 ### Fixes

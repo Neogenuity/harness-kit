@@ -96,17 +96,23 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      record runtime support as N/A.
 
 3. **Install mechanism** from `templates/scripts/` into `scripts/` with
-   `harness_install_mechanism` from that NEW source's `install-lib.sh`. Let the
-   new helper enumerate its own file set instead of copying an old hard-coded
-   list; the set includes `dev-instance.sh` (physical-worktree suffix and
-   candidate-port derivation), `log-lib.sh` (fail-open v2 helpers),
-   `audit-log.sh` (deterministic mixed-log/eval reduction), `doc-garden.sh`
-   (offline documentation scanning), and their regression coverage as well as
-   the config, install/sync/check/eval/verify, and hook machinery.
+   `harness_install_mechanism` from that NEW source's `install-lib.sh`. The
+   file set comes from the source's `kit-manifest` — the declarative SHIP
+   CONTRACT (one `<layer> <path>` line per shipped file: mechanism, policy,
+   optional-policy, plus a retired section) that installs alongside the
+   mechanism as `scripts/kit-manifest`. Never copy from a hard-coded list;
+   every installer/manifest/checker function derives its set from the
+   kit-manifest, so a new shipped file is one added line. The shipped set
+   includes `dev-instance.sh` (physical-worktree suffix and candidate-port
+   derivation), `log-lib.sh` (fail-open v2 helpers), `audit-log.sh`
+   (deterministic mixed-log/eval reduction), `doc-garden.sh` (offline
+   documentation scanning), and their regression coverage as well as the
+   config, install/sync/check/eval/verify, and hook machinery.
    `chmod +x scripts/hooks/*.sh scripts/*.sh`.
    `install-lib.sh` is the deterministic, model-free core of this flow —
-   `harness_install_mechanism` copies exactly this set, and step 8's
-   `harness_generate_manifest` and `update` mode both call it; the
+   `harness_install_mechanism` copies exactly the declared set, and step 8's
+   `harness_generate_manifest` and `update` mode both flow through the same
+   contract; the
    `test-install-core.sh` / `test-install-update.sh` / `test-install-recovery.sh`
    suites (sharing `install-test-lib.sh`) are its fixture coverage. Tailor
    `harness.conf` (providers, plans dir, secret patterns). Append `.harness/`

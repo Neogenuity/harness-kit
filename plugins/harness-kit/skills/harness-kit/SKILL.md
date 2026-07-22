@@ -113,10 +113,15 @@ misfire on the router alone, but the reference carries the steps.
 
 - **Checksum matches manifest → replace** with the new kit version; **differs,
   or the manifest line is ` # tailored` → diff only**, never auto-overwrite.
-- **Never auto-overwrite policy files** (`verify.sh`, `format.sh`,
-  `guard-secrets.sh`, `guard-project-policy.sh`, `harness.conf`, provider
-  configs, `.cursor/sandbox.json`, or `.devcontainer/*`).
-- **Run the NEW kit's `templates/scripts/install-lib.sh`**, not the target's
+- **Never auto-overwrite policy files** (the kit-manifest's policy layers:
+  `verify.sh`, `format.sh`, `guard-project-policy.sh`, `harness.conf`, an
+  authored `dev.sh` — plus provider
+  configs, `.cursor/sandbox.json`, and `.devcontainer/*`, which are never pinned).
+- **Retired paths are removed only when pristine and untailored** (the NEW
+  kit-manifest's `retired` section drives it); drifted or tailored copies are
+  kept and reported for manual review — retirement never deletes local changes.
+- **Run the NEW kit's `templates/scripts/install-lib.sh`** (whose
+  `kit-manifest` is the ship contract), not the target's
   old copy, so update discovers mechanism files introduced by the new version.
   Runtime convention/skill/script adoption is a separate explicit opt-in for
   existing apps; execution profiles and a devcontainer are separate explicit

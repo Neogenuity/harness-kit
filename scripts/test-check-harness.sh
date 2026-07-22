@@ -214,6 +214,16 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
     }
     ZEROS=$(printf '0%.0s' $(seq 1 64))
 
+    # write_kmf <root> [entry...] — a minimal ship contract for adopted
+    # fixtures (check #9c derives its expected set from it; #9d requires it):
+    # always declares itself and the checker, plus whatever the case exercises.
+    write_kmf() {
+        local root="$1" e; shift
+        { printf 'mechanism scripts/kit-manifest\nmechanism scripts/check-harness.sh\n'
+          for e in "$@"; do printf '%s\n' "$e"; done
+        } > "$root/scripts/kit-manifest"
+    }
+
     W=$(new_fixture)
     printf 'echo ok\n' > "$W/scripts/mech.sh"; chmod +x "$W/scripts/mech.sh"
     printf '# harness-kit 9.9.9\n%s  scripts/mech.sh\n' "$(sha "$W/scripts/mech.sh")" > "$W/scripts/.harness-manifest"
@@ -244,35 +254,62 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
     printf '# harness-kit 9.9.9\n%s  scripts/gone.sh # tailored\n' "$ZEROS" > "$W/scripts/.harness-manifest"
     assert_flags "manifest: missing tailored file is flagged too" "$W" "does not exist"
 
-    # Completeness explicitly includes the v0.15 helper and the optional,
-    # project-authored dev.sh policy. Removing either line while leaving the
-    # executable on disk must not silently exempt it from integrity checks.
+    # Completeness is kit-manifest-driven: the expected set is the ship
+    # contract's installing layers crossed with what is on disk (plus the
+    # whole hooks tree). Removing a pin line while leaving the file on disk
+    # must not silently exempt it from integrity checks.
     W=$(new_fixture)
     mkdir -p "$W/scripts/hooks"
+    write_kmf "$W" "mechanism scripts/dev-instance.sh"
     printf '#!/usr/bin/env bash\necho h000000000000\n' > "$W/scripts/dev-instance.sh"
     chmod +x "$W/scripts/dev-instance.sh"
-    printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n' \
-        "$(sha "$W/scripts/check-harness.sh")" > "$W/scripts/.harness-manifest"
+    printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n%s  scripts/kit-manifest\n' \
+        "$(sha "$W/scripts/check-harness.sh")" "$(sha "$W/scripts/kit-manifest")" > "$W/scripts/.harness-manifest"
     assert_flags "manifest completeness: dev-instance helper missing-line is flagged" "$W" "dev-instance.sh' is present but not pinned"
 
     W=$(new_fixture)
     mkdir -p "$W/scripts/hooks"
+    write_kmf "$W" "optional-policy scripts/dev.sh"
     printf '#!/usr/bin/env bash\necho project\n' > "$W/scripts/dev.sh"
     chmod +x "$W/scripts/dev.sh"
-    printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n' \
-        "$(sha "$W/scripts/check-harness.sh")" > "$W/scripts/.harness-manifest"
+    printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n%s  scripts/kit-manifest\n' \
+        "$(sha "$W/scripts/check-harness.sh")" "$(sha "$W/scripts/kit-manifest")" > "$W/scripts/.harness-manifest"
     assert_flags "manifest completeness: optional dev.sh missing-line is flagged" "$W" "dev.sh' is present but not pinned"
 
-    # The scripts/hooks/* glob arm itself: an executable hook script present on
-    # disk but never given a manifest line must be flagged too, not just the
-    # named top-level files exercised above.
+    # The hooks-tree arm itself: an executable hook script present on disk but
+    # never given a manifest line must be flagged too — the hooks tree is
+    # filesystem-derived (a repo-local hook needs a pin even though the
+    # kit-manifest never shipped it), not read from the ship contract.
     W=$(new_fixture)
     mkdir -p "$W/scripts/hooks"
+    write_kmf "$W"
     printf '#!/usr/bin/env bash\nexit 0\n' > "$W/scripts/hooks/guard-secrets.sh"
     chmod +x "$W/scripts/hooks/guard-secrets.sh"
+    printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n%s  scripts/kit-manifest\n' \
+        "$(sha "$W/scripts/check-harness.sh")" "$(sha "$W/scripts/kit-manifest")" > "$W/scripts/.harness-manifest"
+    assert_flags "manifest completeness: the hooks-tree arm flags an unpinned hook" "$W" "guard-secrets.sh' is present but not pinned"
+
+    # The kit-manifest itself is in its own expected set: on disk but unpinned
+    # must be flagged (it tells update what to overwrite and delete).
+    W=$(new_fixture)
+    mkdir -p "$W/scripts/hooks"
+    write_kmf "$W"
     printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n' \
         "$(sha "$W/scripts/check-harness.sh")" > "$W/scripts/.harness-manifest"
-    assert_flags "manifest completeness: scripts/hooks/*.sh glob arm flags an unpinned hook" "$W" "guard-secrets.sh' is present but not pinned"
+    assert_flags "manifest completeness: an unpinned kit-manifest is flagged" "$W" "kit-manifest' is present but not pinned"
+
+    # --- check #9d: retired paths still on disk WARN without failing ---
+    # The fixture is otherwise fully green (pins current, ship contract sane,
+    # empty provider declarations) so the warning is provably non-fatal.
+    W=$(new_fixture)
+    mkdir -p "$W/scripts/hooks"
+    printf 'HOOK_WIRED_PROVIDERS=""\nAGENT_PROVIDERS=""\nEXECUTION_PROFILE_PROVIDERS=""\n' > "$W/scripts/harness.conf"
+    write_kmf "$W" "policy scripts/harness.conf" "retired scripts/old-mech.sh"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$W/scripts/old-mech.sh"
+    chmod +x "$W/scripts/old-mech.sh"
+    printf '# harness-kit 9.9.9\n%s  scripts/check-harness.sh\n%s  scripts/kit-manifest\n%s  scripts/harness.conf\n' \
+        "$(sha "$W/scripts/check-harness.sh")" "$(sha "$W/scripts/kit-manifest")" "$(sha "$W/scripts/harness.conf")" > "$W/scripts/.harness-manifest"
+    assert_warns "9d: a still-present retired path warns without failing" "$W" "retired path 'scripts/old-mech.sh' is still present"
 fi
 
 # --- check #9: a missing manifest is an ERROR once the harness is adopted ---
@@ -282,6 +319,20 @@ fi
 W=$(new_fixture)
 mkdir -p "$W/scripts/hooks"          # adoption signal, but no .harness-manifest
 assert_flags "adopted repo (scripts/hooks/) missing its manifest is flagged" "$W" ".harness-manifest is missing"
+
+# --- check #9d: the ship contract itself is required once adopted ---
+# Missing kit-manifest: #9c cannot derive an expected set, so its absence is
+# its own ERROR (needs no sha tool — nothing is hashed to notice a missing file).
+W=$(new_fixture)
+mkdir -p "$W/scripts/hooks"
+assert_flags "9d: adopted repo missing scripts/kit-manifest is flagged" "$W" "scripts/kit-manifest is missing"
+
+# An emptied/retired-only ship contract declares nothing shipped — same
+# disarming effect as deleting it, same ERROR class.
+W=$(new_fixture)
+mkdir -p "$W/scripts/hooks"
+printf 'retired scripts/old.sh\n' > "$W/scripts/kit-manifest"
+assert_flags "9d: a kit-manifest with no shipped entries is flagged" "$W" "declares no shipped entries"
 
 # Truncating the manifest to a header (or 0 bytes) must be caught too: sha256_of
 # hashes an empty file to a real digest, so without the valid-pin guard the
@@ -757,12 +808,13 @@ assert_ok_without "10d: SHA-pinned actions (bare and single-quoted) and a local 
 if command -v jq >/dev/null 2>&1 && { command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; }; then
     hsha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'; else sha256sum "$1" | awk '{print $1}'; fi; }
     # repin_hookwired <work> — manifest over every mechanism file on disk
-    # (check-harness.sh, harness.conf, every scripts/hooks/*.sh), so #9's
-    # completeness/checksum checks pass after files are added or edited.
+    # (check-harness.sh, harness.conf, the kit-manifest, every
+    # scripts/hooks/*.sh), so #9's completeness/checksum checks pass after
+    # files are added or edited.
     repin_hookwired() {
         local w="$1" f
         { printf '# harness-kit 9.9.9\n'
-          for f in scripts/check-harness.sh scripts/harness.conf; do
+          for f in scripts/check-harness.sh scripts/harness.conf scripts/kit-manifest; do
               [ -f "$w/$f" ] && printf '%s  %s\n' "$(hsha "$w/$f")" "$f"
           done
           for f in "$w"/scripts/hooks/*.sh; do
@@ -775,6 +827,7 @@ if command -v jq >/dev/null 2>&1 && { command -v shasum >/dev/null 2>&1 || comma
         work=$(new_fixture)
         mkdir -p "$work/scripts/hooks" "$work/.claude" "$work/.cursor" "$work/.codex"
         printf 'SECRET_PATTERNS=".env"\nHOOK_WIRED_PROVIDERS=".claude .cursor .codex"\n' > "$work/scripts/harness.conf"
+        write_kmf "$work" "policy scripts/harness.conf"
         for s in session-context guard-secrets guard-config format guard-project-policy; do
             printf '#!/usr/bin/env bash\nexit 0\n' > "$work/scripts/hooks/$s.sh"
             chmod +x "$work/scripts/hooks/$s.sh"

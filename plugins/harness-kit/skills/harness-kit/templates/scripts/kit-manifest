@@ -1,0 +1,92 @@
+# kit-manifest — the harness-kit SHIP CONTRACT: the single declarative source
+# for which files the kit installs, which ownership layer each belongs to, and
+# which previously-shipped paths are retired. install-lib.sh derives every
+# file set from this file (there are no hard-coded inventory lists); check
+# #9c derives manifest-completeness from it; the kit's update mode reads the
+# NEW kit's copy to decide what to replace, add, and remove.
+#
+# Format: one entry per line —
+#   <layer> <repo-relative path> [dest=<repo-relative install path>]
+# Fields are whitespace-separated; '#' lines and blank lines are ignored.
+# The optional dest= field is reserved for entries installed under a
+# different name (unused by the scripts/ tree, whose paths ARE their
+# destinations).
+#
+# Layers:
+#   mechanism        Copied verbatim at init; update REPLACES it while the
+#                    installed copy still matches its integrity pin.
+#   policy           Template copied at init, owned by the repo after: update
+#                    only ever DIFFS it, even when pristine and unmarked.
+#   optional-policy  Authored per repo (never copied from the kit); when
+#                    present it is integrity-pinned and diff-only, like policy.
+#   retired          No longer shipped. Update REMOVES the installed copy only
+#                    when it is pristine (sha still matches its pin) and not
+#                    '# tailored'; drifted or tailored copies are kept and
+#                    reported for manual review — retirement never deletes
+#                    local changes.
+#
+# This file is itself mechanism: integrity-pinned in scripts/.harness-manifest
+# and protected by guard-config.sh — it tells update what to overwrite and
+# delete, which makes it the most security-sensitive shipped file after the
+# integrity manifest. Ship a new file by adding its line here; stop shipping
+# one by MOVING its line to the retired layer (never just deleting the line).
+
+# --- mechanism: install/update/check machinery --------------------------------
+mechanism scripts/kit-manifest
+mechanism scripts/install-lib.sh
+mechanism scripts/check-harness.sh
+mechanism scripts/sync-agent-skills.sh
+mechanism scripts/dev-instance.sh
+mechanism scripts/log-lib.sh
+mechanism scripts/audit-log.sh
+mechanism scripts/doc-garden.sh
+mechanism scripts/eval-lib.sh
+mechanism scripts/eval.sh
+mechanism scripts/eval-harness.sh
+
+# --- mechanism: regression suites ---------------------------------------------
+mechanism scripts/install-test-lib.sh
+mechanism scripts/test-install-core.sh
+mechanism scripts/test-install-update.sh
+mechanism scripts/test-install-recovery.sh
+mechanism scripts/test-check-harness.sh
+mechanism scripts/test-dev-instance.sh
+mechanism scripts/test-log.sh
+mechanism scripts/test-audit-log.sh
+mechanism scripts/test-doc-garden.sh
+mechanism scripts/test-eval.sh
+mechanism scripts/test-verify.sh
+mechanism scripts/test-fixture-isolation.sh
+
+# --- mechanism: hooks (policy hooks are listed under policy below) ------------
+mechanism scripts/hooks/lib.sh
+mechanism scripts/hooks/README.md
+mechanism scripts/hooks/guard-secrets.sh
+mechanism scripts/hooks/guard-config.sh
+mechanism scripts/hooks/session-context.sh
+mechanism scripts/hooks/test-advise-once.sh
+mechanism scripts/hooks/test-affected-files.sh
+mechanism scripts/hooks/test-codex-hooks-cwd.sh
+mechanism scripts/hooks/test-deny-reasons.sh
+mechanism scripts/hooks/test-format-feedback.sh
+mechanism scripts/hooks/test-guard-config.sh
+mechanism scripts/hooks/test-guard-project-policy.sh
+mechanism scripts/hooks/test-guard-secrets.sh
+mechanism scripts/hooks/test-session-context.sh
+
+# --- policy: repo-owned after init; update diffs, never replaces --------------
+# (guard-secrets.sh is mechanism, not policy, since v0.21.0: its policy is
+# fully externalized to SECRET_PATTERNS/SECRET_ALLOW_PATTERNS in harness.conf,
+# so the script body is generic and safe to upgrade like any other mechanism.)
+policy scripts/verify.sh
+policy scripts/harness.conf
+policy scripts/hooks/format.sh
+policy scripts/hooks/guard-project-policy.sh
+
+# --- optional-policy: authored per repo, pinned when present ------------------
+optional-policy scripts/dev.sh
+
+# --- retired: no longer shipped; update removes pristine, untailored copies ---
+# v0.20.0 split test-install.sh into the three focused suites above; this
+# entry closes that release's manual-`rm` migration caveat.
+retired scripts/test-install.sh

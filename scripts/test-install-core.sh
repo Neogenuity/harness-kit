@@ -73,38 +73,40 @@ rm -rf "$EMPTYPATH"
 
 # --- (a) clean init -----------------------------------------------------------
 # Inventory-driven: every presence/exec-bit/manifest-completeness assertion
-# iterates install-lib.sh's own _HARNESS_MECHANISM_TOPLEVEL rather than a
-# second hard-coded file list, so a new mechanism file is covered on arrival.
+# iterates the kit's own ship contract (kit-manifest's shipped layers) rather
+# than a second hard-coded file list, so a new shipped file is covered on
+# arrival — hooks included, since the kit-manifest enumerates them per file.
 F=$(make_fixture) || exit 1
 write_mirrored_claude_settings "$F"
 ( cd "${F:?}" && git_c add -A && git_c commit -qm claude >/dev/null )
 missing=""
 unpinned=""
 manifest_paths=$(awk '{print $2}' "$F/scripts/.harness-manifest")
-for f in $_HARNESS_MECHANISM_TOPLEVEL; do
-    [ -f "$F/scripts/$f" ] || missing="$missing $f(absent)"
-    # harness.conf is a sourced config (not executable, like every non-.sh
-    # file); every other mechanism file is a .sh and must carry the exec bit
-    # (check-harness.sh check #5).
-    case "$f" in
-        harness.conf) ;;
-        *) [ -x "$F/scripts/$f" ] || missing="$missing $f(not-exec)" ;;
+while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    [ -f "$F/$p" ] || missing="$missing $p(absent)"
+    # Only .sh files must carry the exec bit (check-harness.sh check #5);
+    # sourced configs and data files (harness.conf, kit-manifest, README.md)
+    # are not executable.
+    case "$p" in
+        *.sh) [ -x "$F/$p" ] || missing="$missing $p(not-exec)" ;;
     esac
     # Pipe-free exact-line membership (printf|grep -q + pipefail turns an
     # ignored-SIGPIPE EPIPE into a phantom miss — see check #9's note).
     case $'\n'"$manifest_paths"$'\n' in
-        *$'\n'"scripts/$f"$'\n'*) ;;
-        *) unpinned="$unpinned $f" ;;
+        *$'\n'"$p"$'\n'*) ;;
+        *) unpinned="$unpinned $p" ;;
     esac
-done
-[ -f "$F/scripts/hooks/lib.sh" ] || missing="$missing hooks/lib.sh(absent)"
+done <<EOF
+$(harness_kit_shipped_paths "$SCRIPTS_DIR/kit-manifest")
+EOF
 if [ -z "$missing" ]; then
-    pass "clean init: mechanism installed and executable"
+    pass "clean init: every shipped kit-manifest entry installed and executable"
 else
     fail "clean init: mechanism incomplete —$missing"
 fi
 if [ -z "$unpinned" ]; then
-    pass "clean init: manifest pins every _HARNESS_MECHANISM_TOPLEVEL entry"
+    pass "clean init: manifest pins every shipped kit-manifest entry"
 else
     fail "clean init: manifest omits an installed mechanism file —$unpinned"
 fi

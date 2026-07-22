@@ -79,24 +79,34 @@ else
 fi
 rm -rf "$F" "$NEWKIT"
 
-# --- (d) policy files are diff-only in update, even pristine + unmarked --------
-# guard-secrets.sh is a policy file (SKILL update step 3): a kit change to it must
-# be diffed, never auto-applied, regardless of the '# tailored' marker.
+# --- (d) policy layer is diff-only in update, even pristine + unmarked ---------
+# format.sh is policy in the kit-manifest (SKILL update step 3): a kit change
+# to it must be diffed, never auto-applied, regardless of the '# tailored'
+# marker. guard-secrets.sh is the counter-case: reclassified policy→mechanism
+# in v0.21.0 (its policy is fully externalized to SECRET_PATTERNS in
+# harness.conf), so a pristine copy IS auto-replaced — pin both directions so
+# neither classification silently flips.
 F=$(make_fixture) || exit 1
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/hooks/format.sh"
 printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/hooks/guard-secrets.sh"
 harness_update_apply "$NEWKIT/scripts" "$F" >/dev/null
-if ! grep -q "KIT CHANGE" "$F/scripts/hooks/guard-secrets.sh"; then
-    pass "policy diff-only: update does not auto-replace a pristine guard-secrets.sh"
+if ! grep -q "KIT CHANGE" "$F/scripts/hooks/format.sh"; then
+    pass "policy diff-only: update does not auto-replace a pristine format.sh"
 else
-    fail "policy diff-only: guard-secrets.sh was auto-replaced by update"
+    fail "policy diff-only: format.sh was auto-replaced by update"
+fi
+if grep -q "KIT CHANGE" "$F/scripts/hooks/guard-secrets.sh"; then
+    pass "mechanism reclassification: pristine guard-secrets.sh IS auto-replaced (v0.21.0 layer change)"
+else
+    fail "mechanism reclassification: pristine guard-secrets.sh was not replaced — did it fall back into a policy layer?"
 fi
 rm -rf "$F" "$NEWKIT"
 
 # --- (e) local-drift-preserve: sha-mismatch alone forces a diff decision -------
-# sync-agent-skills.sh is mechanism, unmarked, and NOT in _HARNESS_POLICY_FILES
-# — the only way it yields 'diff' is the sha-mismatch branch of
-# harness_update_decision (install-lib.sh:295-297), which nothing else in this
+# sync-agent-skills.sh is mechanism-layer in the kit-manifest, unmarked, and
+# not diff-only — the only way it yields 'diff' is the sha-mismatch branch of
+# harness_update_decision, which nothing else in this
 # suite drives: every other case here either still matches its pin (replace)
 # or is '# tailored'/policy (diff via an earlier branch). This was
 # CONFIRMED-MISSING before the split: local, undeclared drift — the file was
@@ -126,23 +136,24 @@ rm -rf "$F"
 
 # --- (f) synthetic-future-file migration: new-kit inventory adds new mechanism -
 # An old install's manifest can't list files the previous kit didn't ship, and
-# its OLD installed install-lib.sh doesn't know their names either — update
-# must source the NEW kit's library before applying new templates. Simulate a
-# kit release that ships a new top-level mechanism file AND a new hook (the
-# hooks add pass at install-lib.sh:337-347 — never covered before this suite,
-# since every historical NEW_FILES case was toplevel-only).
+# its OLD installed kit-manifest doesn't know their names either — update must
+# read the NEW kit's kit-manifest (and source the new library) before applying
+# new templates. Simulate a kit release that ships a new top-level mechanism
+# file AND a new hook — one unified add pass covers both since v0.21.0, but
+# both shapes stay pinned here.
 F=$(make_fixture) || exit 1
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
 printf '#!/usr/bin/env bash\necho future-mech\n' > "$NEWKIT/scripts/future-mech.sh"
 chmod +x "$NEWKIT/scripts/future-mech.sh"
 printf '#!/usr/bin/env bash\necho future-hook\n' > "$NEWKIT/scripts/hooks/future-hook.sh"
 chmod +x "$NEWKIT/scripts/hooks/future-hook.sh"
-# Reassignment, not sed -i (BSD/GNU divergence): append a line the NEW kit's
-# own install-lib.sh executes when sourced, extending its inventory in place.
-printf '\n_HARNESS_MECHANISM_TOPLEVEL="$_HARNESS_MECHANISM_TOPLEVEL future-mech.sh"\n' \
-    >> "$NEWKIT/scripts/install-lib.sh"
-# Subshell: sourcing the extended NEWKIT library here must not leak its
-# inventory into the rest of this suite.
+# The NEW kit declares both files in its ship contract — inventory is data
+# (kit-manifest lines), not code, since v0.21.0.
+printf 'mechanism scripts/future-mech.sh\nmechanism scripts/hooks/future-hook.sh\n' \
+    >> "$NEWKIT/scripts/kit-manifest"
+# Subshell sourcing of the NEW kit's library mirrors the real update flow
+# (update.md: always source the incoming kit's install-lib.sh) and keeps any
+# of its state out of the rest of this suite.
 out1=$(
     # shellcheck source=/dev/null
     . "$NEWKIT/scripts/install-lib.sh"
@@ -223,5 +234,93 @@ else
     pass "tailored carry-forward: deleting the file drops its pin on the next repin"
 fi
 rm -rf "$F"
+
+# --- (h) retirement: pristine + unmarked retired file is REMOVED ---------------
+# The NEW kit's kit-manifest moves a shipped file to the retired layer. The
+# installed copy still matches its pin and carries no '# tailored' marker, so
+# update removes it, and the subsequent repin drops its pin — the exact
+# sequence that needed a manual `rm` at v0.20.0.
+retire_in_newkit() {  # retire_in_newkit <newkit_scripts_dir> <repo-relative-path>
+    local kmf="$1/kit-manifest" path="$2"
+    awk -v p="$path" '!($2 == p && ($1 == "mechanism" || $1 == "policy"))' "$kmf" > "$kmf.tmp" \
+        && mv "$kmf.tmp" "$kmf"
+    printf 'retired %s\n' "$path" >> "$kmf"
+}
+F=$(make_fixture) || exit 1
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+retire_in_newkit "$NEWKIT/scripts" "scripts/test-log.sh"
+out=$(harness_update_apply "$NEWKIT/scripts" "$F")
+if has_line "$out" "remove scripts/test-log.sh" && [ ! -f "$F/scripts/test-log.sh" ]; then
+    pass "retirement: pristine unmarked retired file is removed and reported"
+else
+    fail "retirement: pristine retired file not removed or not reported" "$out"
+fi
+if has_line "$out" "add scripts/test-log.sh"; then
+    fail "retirement: the add pass re-installed a retired file"
+else
+    pass "retirement: the add pass does not resurrect a retired file"
+fi
+# The NEW kit's kit-manifest replaced the fixture's during apply, so the
+# repin (driven by the new ship contract) must drop the removed file's pin.
+newmanifest=$(
+    # shellcheck source=/dev/null
+    . "$NEWKIT/scripts/install-lib.sh"
+    harness_repin_manifest "$F" "$KIT_VERSION"
+)
+if printf '%s\n' "$newmanifest" | awk '$2 == "scripts/test-log.sh" {found=1} END {exit !found}'; then
+    fail "retirement: repin still pins the removed file"
+else
+    pass "retirement: repin drops the removed file's pin"
+fi
+rm -rf "$F" "$NEWKIT"
+
+# --- (i) retirement: locally DRIFTED retired file is kept and reported ---------
+# Retirement must never delete local changes: a hand-edited (sha-mismatched,
+# unmarked) copy of a retired path is kept, reported as 'retire-keep', and
+# left for manual review.
+F=$(make_fixture) || exit 1
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+retire_in_newkit "$NEWKIT/scripts" "scripts/test-log.sh"
+printf '\n# LOCAL DRIFT\n' >> "$F/scripts/test-log.sh"
+out=$(harness_update_apply "$NEWKIT/scripts" "$F")
+if has_line "$out" "retire-keep scripts/test-log.sh" \
+        && [ -f "$F/scripts/test-log.sh" ] \
+        && grep -q "LOCAL DRIFT" "$F/scripts/test-log.sh"; then
+    pass "retirement: drifted retired file is kept with its local changes and reported"
+else
+    fail "retirement: drifted retired file was deleted or not reported" "$out"
+fi
+rm -rf "$F" "$NEWKIT"
+
+# --- (j) retirement: '# tailored' retired file is kept and its pin carried -----
+# A deliberate fork of a now-retired path survives: the file stays, apply
+# reports 'retire-keep', and repin carries its pin forward with the marker.
+F=$(make_fixture) || exit 1
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+retire_in_newkit "$NEWKIT/scripts" "scripts/test-log.sh"
+printf '\n# LOCAL FORK\n' >> "$F/scripts/test-log.sh"
+forksha=$(sha_of "$F" "scripts/test-log.sh")
+grep -v "scripts/test-log.sh" "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
+printf '%s  scripts/test-log.sh # tailored\n' "$forksha" >> "$F/scripts/.hm"
+mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
+out=$(harness_update_apply "$NEWKIT/scripts" "$F")
+if has_line "$out" "retire-keep scripts/test-log.sh" && [ -f "$F/scripts/test-log.sh" ]; then
+    pass "retirement: tailored retired file is kept and reported"
+else
+    fail "retirement: tailored retired file was deleted or not reported" "$out"
+fi
+newmanifest=$(
+    # shellcheck source=/dev/null
+    . "$NEWKIT/scripts/install-lib.sh"
+    harness_repin_manifest "$F" "$KIT_VERSION"
+)
+line=$(printf '%s\n' "$newmanifest" | awk '$2 == "scripts/test-log.sh" {print; exit}')
+case "$line" in *"# tailored"*) fork_marked=1 ;; *) fork_marked=0 ;; esac
+if [ -n "$line" ] && [ "$fork_marked" = 1 ] && [ "${line%% *}" = "$forksha" ]; then
+    pass "retirement: repin carries the tailored retired pin forward with marker and sha"
+else
+    fail "retirement: repin dropped or mis-marked the tailored retired pin" "$line"
+fi
+rm -rf "$F" "$NEWKIT"
 
 finish "install-update"

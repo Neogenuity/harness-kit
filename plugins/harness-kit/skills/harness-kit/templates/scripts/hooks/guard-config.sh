@@ -60,6 +60,7 @@ scripts/dev.sh
 scripts/eval*.sh
 scripts/test-*.sh
 scripts/.harness-manifest
+scripts/kit-manifest
 .claude/settings.json
 .cursor/hooks.json
 .cursor/sandbox.json

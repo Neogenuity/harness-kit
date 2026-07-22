@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Root-only dogfood gate: never shipped in the plugin templates (no entry in
-# install-lib.sh's _HARNESS_MECHANISM_TOPLEVEL), pinned as '# tailored' in
+# Root-only dogfood gate: never shipped in the plugin templates (no shipped
+# entry in the kit-manifest ship contract), pinned as '# tailored' in
 # scripts/.harness-manifest by the release step, not by this script. Validates
 # that the REAL shipped provider hook configs in
 # plugins/harness-kit/skills/harness-kit/templates/providers/{claude,cursor,codex}

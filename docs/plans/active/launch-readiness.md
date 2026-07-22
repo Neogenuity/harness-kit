@@ -75,7 +75,14 @@ being fixed inline here.
 
 ## Dependencies
 
-None hard: this plan touches no mechanism.
+This plan touches no mechanism itself, but **item 7 (the public flip) is
+gated on the standard-consumer-layout restructure**
+([../standard-consumer-layout.md](../standard-consumer-layout.md), Phases 1–6):
+the consumer layout must be final before the first external adopter can
+install, because pre-launch is the only window in which layout changes need
+no migration machinery. Items 1–3 proceed in parallel — and item 1's demo
+recording doubles as that plan's Phase 6 fresh-repo acceptance run, so record
+it against the post-restructure layout.
 Originally sequenced loosely after reviewer-loop (Decision 2026-07-11);
 superseded by the 2026-07-12 decision below — start immediately and
 parallel-track the mechanism plans.
@@ -166,6 +173,12 @@ link-checks pass on every doc this plan touches.
 
 ## Decisions
 
+- 2026-07-22 — **The public flip waits for the standard-consumer-layout
+  restructure** (user decision, recorded in
+  [../standard-consumer-layout.md](../standard-consumer-layout.md)): 1.0's
+  layout ships final so no adopter ever migrates. This does not reopen the
+  "start now" decision below — items 1–3 keep parallel-tracking; only item 7
+  gains the gate.
 - 2026-07-12 — **Start now, don't wait for reviewer-loop** (supersedes the
   2026-07-11 sequencing decision): v0.10.0 is already a credible launch
   baseline — self-applied, CI-gated, eval-measured, governance-reviewed —

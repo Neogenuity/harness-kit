@@ -17,28 +17,52 @@
 # Compatible with macOS (BSD) and Linux (GNU); the only hard dependency is a
 # sha256 tool (shasum or sha256sum), the same one check-harness.sh needs.
 
-# The mechanism files pinned by the manifest, relative to a repo's scripts/.
-# This is the single source for "which top-level files are integrity-checked":
-# the SKILL init step-8 producer and update's re-pin both flow through
-# harness_generate_manifest, which reads this list. The scripts/hooks/ tree is
-# always included wholesale (see harness_manifest_paths). Add a new top-level
-# mechanism file here and it is covered by the manifest and the installer at once.
-_HARNESS_MECHANISM_TOPLEVEL="harness.conf sync-agent-skills.sh check-harness.sh test-check-harness.sh install-lib.sh install-test-lib.sh test-install-core.sh test-install-update.sh test-install-recovery.sh dev-instance.sh test-dev-instance.sh log-lib.sh test-log.sh audit-log.sh test-audit-log.sh doc-garden.sh test-doc-garden.sh eval-lib.sh eval.sh eval-harness.sh test-eval.sh test-verify.sh test-fixture-isolation.sh verify.sh"
+# The shipped-file inventory lives in scripts/kit-manifest — the declarative
+# SHIP CONTRACT (layer + repo-relative path per line, plus a retired section).
+# Every function below derives its file set from it; there are no hard-coded
+# inventory lists (before v0.21.0 three shell-string lists lived here, with a
+# fourth copy in check-harness.sh's check #9c). Ship a new file by adding a
+# kit-manifest line; stop shipping one by moving its line to 'retired'.
 
-# Optional project-owned policy that is authored for an application repo, never
-# copied from this template directory. When present, it is still integrity-
-# pinned and carried through re-pin. Keep this set separate from mechanism:
-# install, persisted template bases, and update's add-new-files pass must never
-# mistake a repo-specific dev launcher for a generic kit template.
-_HARNESS_OPTIONAL_PROJECT_POLICY_TOPLEVEL="dev.sh"
+# harness_kit_manifest_paths <kit_manifest_file> <layer...>
+# Prints the repo-relative path of every kit-manifest entry whose layer field
+# matches one of the given layers, in file order. Comment and blank lines are
+# skipped; any fields after the path (e.g. a future dest=) are ignored here.
+# Missing file → prints nothing, returns 1.
+harness_kit_manifest_paths() {
+    local kmf="$1" layer path _rest want; shift
+    [ -f "$kmf" ] || return 1
+    while read -r layer path _rest; do
+        case "$layer" in \#*|"") continue ;; esac
+        [ -n "$path" ] || continue
+        for want in "$@"; do
+            [ "$layer" = "$want" ] && { printf '%s\n' "$path"; break; }
+        done
+    done < "$kmf"
+    return 0
+}
 
-# Policy files: update mode must NEVER auto-overwrite these, even when the
-# installed copy still matches its pin (SKILL update step 3). The project may
-# have tailored them without the '# tailored' marker (a fresh install pins them
-# unmarked), and secret/format/guard policy must be reviewed, never silently
-# replaced. harness_update_decision returns 'diff' for any path here regardless
-# of marker — repo-relative, matching manifest paths.
-_HARNESS_POLICY_FILES="scripts/verify.sh scripts/harness.conf scripts/dev.sh scripts/hooks/format.sh scripts/hooks/guard-secrets.sh scripts/hooks/guard-project-policy.sh"
+# harness_kit_shipped_paths <kit_manifest_file>
+# The paths the kit SHIPS (copies at init, adds on update): the mechanism and
+# policy layers. optional-policy is authored per repo (never copied) and
+# retired is what update removes — neither ships.
+harness_kit_shipped_paths() {
+    harness_kit_manifest_paths "$1" mechanism policy
+}
+
+# harness_kit_is_diff_only <kit_manifest_file> <repo-relative-path>
+# Returns 0 when update mode must never auto-overwrite <path> even while it is
+# pristine and unmarked (the policy and optional-policy layers): a fresh
+# install pins policy templates unmarked, and repo-owned gate/format/invariant
+# policy must be reviewed, never silently replaced.
+harness_kit_is_diff_only() {
+    local kmf="$1" path="$2" p
+    [ -f "$kmf" ] || return 1
+    while IFS= read -r p; do
+        [ "$p" = "$path" ] && return 0
+    done < <(harness_kit_manifest_paths "$kmf" policy optional-policy)
+    return 1
+}
 
 # _harness_sha256 <file...> — prints "<sha256>  <path>" lines, the manifest's
 # own line format. Mirrors check-harness.sh's sha256_of tool selection.
@@ -69,22 +93,32 @@ harness_missing_prereqs() {
 }
 
 # harness_manifest_paths <repo_root>
-# Prints the sorted, repo-relative paths the manifest pins: the whole
-# scripts/hooks/ tree (matching the producer's `find scripts/hooks -type f`)
-# plus each present top-level mechanism file. Deterministic (sorted), so two
-# runs over the same tree produce byte-identical output.
+# Prints the sorted, repo-relative paths the integrity manifest pins: the whole
+# scripts/hooks/ tree (filesystem-derived, so a repo-local hook added beside
+# the shipped ones is pinned too) plus each PRESENT path the installed
+# scripts/kit-manifest declares in its shipped or optional-policy layers.
+# Deterministic (sorted, de-duplicated), so two runs over the same tree produce
+# byte-identical output. Requires scripts/kit-manifest — a repo without one
+# predates v0.21.0 and must run update (which installs it) before re-pinning;
+# returning 1 here keeps the producers loud instead of emitting a header-only
+# manifest.
 harness_manifest_paths() {
-    local f
+    local p
+    [ -f "$1/scripts/kit-manifest" ] || return 1
     ( cd "$1" 2>/dev/null || return 1
       {
           find scripts/hooks -type f ! -name '.harness-manifest' 2>/dev/null
-          for f in $_HARNESS_MECHANISM_TOPLEVEL; do
-              [ -f "scripts/$f" ] && printf 'scripts/%s\n' "$f"
+          { harness_kit_shipped_paths scripts/kit-manifest
+            harness_kit_manifest_paths scripts/kit-manifest optional-policy
+          } | while IFS= read -r p; do
+              # hooks are pinned via the find above (which also covers
+              # repo-local hooks the kit never shipped)
+              case "$p" in scripts/hooks/*) continue ;; esac
+              # if/fi, not `&&`: a trailing false file test must not become the
+              # while's exit status — callers run under pipefail
+              if [ -f "$p" ]; then printf '%s\n' "$p"; fi
           done
-          for f in $_HARNESS_OPTIONAL_PROJECT_POLICY_TOPLEVEL; do
-              [ -f "scripts/$f" ] && printf 'scripts/%s\n' "$f"
-          done
-      } | sort
+      } | sort -u
     )
 }
 
@@ -96,6 +130,10 @@ harness_manifest_paths() {
 # regenerate while preserving existing markers.
 harness_generate_manifest() {
     local root="$1" version="$2" p
+    if [ ! -f "$root/scripts/kit-manifest" ]; then
+        echo "harness_generate_manifest: $root/scripts/kit-manifest missing — install the mechanism first (it ships the kit-manifest)" >&2
+        return 1
+    fi
     printf '# harness-kit %s\n' "$version"
     # harness_manifest_paths and the per-file hash each cd into $root from the
     # caller's cwd in their own subshell — never nested — so a relative $root
@@ -117,6 +155,10 @@ harness_generate_manifest() {
 harness_repin_manifest() {
     local root="$1" version="$2" mf="$1/scripts/.harness-manifest"
     local old tailored=" " path allpaths
+    if [ ! -f "$root/scripts/kit-manifest" ]; then
+        echo "harness_repin_manifest: $root/scripts/kit-manifest missing — run update mode first (it installs the kit-manifest a re-pin derives its file set from)" >&2
+        return 1
+    fi
     if [ -f "$mf" ]; then
         while IFS= read -r old; do
             case "$old" in *"# tailored"*) ;; *) continue ;; esac
@@ -184,22 +226,28 @@ harness_conf_declare() {
 }
 
 # harness_install_mechanism <src_scripts_dir> <repo_root>
-# Copies the mechanism — the pinned top-level files plus the hooks/ tree — from
-# an existing scripts/ dir into <repo_root>/scripts and sets exec bits. Copies
-# only the known mechanism set, so a source dir that also carries repo-local
-# scripts (a packaging gate, a template-sync check) does not leak them into the
-# target. Touches only scripts/: hand-written content elsewhere (AGENTS.md, a
-# .claude/settings.json) is never the installer's concern — that is the caller's
-# authoring/merge step, so the "never clobber hand-written files" floor holds by
-# construction.
+# Copies the shipped set — every path in the source kit-manifest's mechanism
+# and policy layers, including the kit-manifest itself — from an existing
+# scripts/ dir into <repo_root>/scripts and sets exec bits. Copies only the
+# declared set, so a source dir that also carries repo-local scripts (a
+# packaging gate, a template-sync check) does not leak them into the target.
+# Touches only scripts/: hand-written content elsewhere (AGENTS.md, a
+# .claude/settings.json) is never the installer's concern — that is the
+# caller's authoring/merge step, so the "never clobber hand-written files"
+# floor holds by construction. Returns 1 when the source has no kit-manifest
+# (a pre-v0.21.0 template dir — not a valid install source for this library).
 harness_install_mechanism() {
-    local src="$1" root="$2" f
+    local src="$1" root="$2" p srcfile
+    [ -f "$src/kit-manifest" ] || return 1
     mkdir -p "$root/scripts/hooks"
-    for f in $_HARNESS_MECHANISM_TOPLEVEL; do
-        [ -f "$src/$f" ] && cp "$src/$f" "$root/scripts/$f"
+    harness_kit_shipped_paths "$src/kit-manifest" | while IFS= read -r p; do
+        srcfile="$src/${p#scripts/}"
+        if [ -f "$srcfile" ]; then
+            mkdir -p "$root/$(dirname "$p")"
+            cp "$srcfile" "$root/$p"
+            case "$p" in *.sh) chmod +x "$root/$p" ;; esac
+        fi
     done
-    [ -d "$src/hooks" ] && cp -R "$src/hooks/." "$root/scripts/hooks/"
-    chmod +x "$root/scripts/"*.sh "$root/scripts/hooks/"*.sh 2>/dev/null
     return 0
 }
 
@@ -247,13 +295,18 @@ harness_base_dir() {
 # and again after each successful update keyed by the version just installed.
 # Idempotent: re-copies over any existing snapshot for that version.
 harness_persist_base() {
-    local src="$1" root="$2" version="$3" dest f
+    local src="$1" root="$2" version="$3" dest p srcfile rel
+    [ -f "$src/kit-manifest" ] || return 1
     dest=$(harness_base_dir "$root" "$version")
     mkdir -p "$dest/hooks"
-    for f in $_HARNESS_MECHANISM_TOPLEVEL; do
-        [ -f "$src/$f" ] && cp "$src/$f" "$dest/$f"
+    harness_kit_shipped_paths "$src/kit-manifest" | while IFS= read -r p; do
+        rel="${p#scripts/}"
+        srcfile="$src/$rel"
+        if [ -f "$srcfile" ]; then
+            mkdir -p "$dest/$(dirname "$rel")"
+            cp "$srcfile" "$dest/$rel"
+        fi
     done
-    [ -d "$src/hooks" ] && cp -R "$src/hooks/." "$dest/hooks/"
     return 0
 }
 
@@ -276,48 +329,63 @@ harness_recover_old_templates() {
     printf '%s\n' "$version"
 }
 
-# harness_update_decision <repo_root> <manifest_line>
-# Echoes how update mode must treat one mechanism file:
+# harness_update_decision <repo_root> <manifest_line> [kit_manifest_file]
+# Echoes how update mode must treat one pinned file:
 #   replace — the file is kit-managed and still matches its pin: safe to
 #             overwrite with the new template.
-#   diff    — the file is a policy file, is '# tailored', or has drifted locally
-#             from its pin (someone edited it since install): the project owns
-#             it, so update only shows a diff and lets the user choose.
-# Comment/blank lines echo nothing. Pure classification plus one hash.
+#   diff    — the file is policy/optional-policy in the kit-manifest, is
+#             '# tailored', or has drifted locally from its pin (someone edited
+#             it since install): the project owns it, so update only shows a
+#             diff and lets the user choose.
+# Layering comes from <kit_manifest_file> — update mode passes the NEW kit's
+# copy (the incoming release defines the current layers); it defaults to the
+# target's installed scripts/kit-manifest for direct callers. Comment/blank
+# lines echo nothing. Pure classification plus one hash.
 harness_update_decision() {
-    local root="$1" line="$2" want path have pf
+    local root="$1" line="$2" kmf="${3:-$1/scripts/kit-manifest}" want path have
     case "$line" in \#*|"") return 0 ;; esac
     case "$line" in *"# tailored"*) printf 'diff\n'; return 0 ;; esac
     path=$(printf '%s\n' "$line" | awk '{print $2}')
     [ -n "$path" ] || return 0
-    # Policy files are diff-only even when pristine and unmarked (step 3).
-    for pf in $_HARNESS_POLICY_FILES; do
-        [ "$path" = "$pf" ] && { printf 'diff\n'; return 0; }
-    done
+    # Policy layers are diff-only even when pristine and unmarked (step 3).
+    if harness_kit_is_diff_only "$kmf" "$path"; then
+        printf 'diff\n'; return 0
+    fi
     want=${line%% *}
     have=$(_harness_sha256 "$root/$path" | awk '{print $1}')
     if [ "$have" = "$want" ]; then printf 'replace\n'; else printf 'diff\n'; fi
 }
 
 # harness_update_apply <src_scripts_dir> <repo_root>
-# Runs the deterministic half of update mode: for each pinned mechanism file,
-# replace it with the new template from <src_scripts_dir> IF harness_update_decision
-# says "replace"; leave policy/tailored/locally-drifted files untouched (the
-# caller diffs those for the user). Then installs any mechanism file the new kit
-# ships that the target doesn't have yet — the old manifest can't list a file the
-# previous kit version didn't ship, so an upgrade must still pick up newly shipped
-# files (e.g. the test-install-* suites). Prints one "replace|keep|add <path>" line per
-# file. Does NOT re-pin the manifest — call harness_repin_manifest afterward
-# (it will pin the newly-added files).
+# Runs the deterministic half of update mode against the NEW kit's
+# <src_scripts_dir> (whose kit-manifest defines the incoming inventory):
+#   1. For each pinned file, replace it with the new template IF
+#      harness_update_decision (judged against the NEW kit-manifest) says
+#      "replace"; leave policy/tailored/locally-drifted files untouched (the
+#      caller diffs those for the user).
+#   2. REMOVE each path the new kit-manifest lists as retired — but only when
+#      the on-disk copy is pristine (sha still matches its pin) and not
+#      '# tailored'. A drifted, tailored, or never-pinned copy is kept and
+#      reported ('retire-keep') for manual review: retirement must never
+#      delete local changes.
+#   3. Install any shipped path (toplevel or hook, one unified pass) the
+#      target doesn't have yet — the old manifest can't list a file the
+#      previous kit version didn't ship.
+# Prints one "replace|keep|remove|retire-keep|add <path>" line per file. Does
+# NOT re-pin the manifest — call harness_repin_manifest afterward (it pins the
+# newly-added files and drops the removed ones).
 harness_update_apply() {
-    local src="$1" root="$2" mf="$2/scripts/.harness-manifest"
-    local line path decision srcfile f hf base
+    local src="$1" root="$2" mf="$2/scripts/.harness-manifest" kmf="$1/kit-manifest"
+    local line path decision srcfile p retired pinline want have
+    retired=" $(harness_kit_manifest_paths "$kmf" retired 2>/dev/null | tr '\n' ' ') "
     if [ -f "$mf" ]; then
         while IFS= read -r line; do
             case "$line" in \#*|"") continue ;; esac
             path=$(printf '%s\n' "$line" | awk '{print $2}')
             [ -n "$path" ] || continue
-            decision=$(harness_update_decision "$root" "$line")
+            # Retired paths are handled (and reported) by the pass below.
+            case "$retired" in *" $path "*) continue ;; esac
+            decision=$(harness_update_decision "$root" "$line" "$kmf")
             srcfile="$src/${path#scripts/}"
             if [ "$decision" = "replace" ] && [ -f "$srcfile" ]; then
                 cp "$srcfile" "$root/$path"
@@ -327,24 +395,37 @@ harness_update_apply() {
             fi
         done < "$mf"
     fi
-    # Add newly-shipped mechanism files absent from the target.
-    mkdir -p "$root/scripts/hooks"
-    for f in $_HARNESS_MECHANISM_TOPLEVEL; do
-        if [ -f "$src/$f" ] && [ ! -f "$root/scripts/$f" ]; then
-            cp "$src/$f" "$root/scripts/$f"
-            case "$f" in *.sh) chmod +x "$root/scripts/$f" ;; esac
-            printf 'add scripts/%s\n' "$f"
+    # Remove retired files (pristine + unmarked only — see the contract above).
+    for path in $retired; do
+        [ -f "$root/$path" ] || continue
+        pinline=""
+        [ -f "$mf" ] && pinline=$(awk -v p="$path" '$2 == p {print; exit}' "$mf")
+        case "$pinline" in
+            ""|*"# tailored"*)
+                # never pinned (unknown provenance) or a deliberate fork
+                printf 'retire-keep %s\n' "$path"
+                continue ;;
+        esac
+        want=${pinline%% *}
+        have=$(_harness_sha256 "$root/$path" | awk '{print $1}')
+        if [ "$have" = "$want" ]; then
+            rm -f "$root/$path"
+            printf 'remove %s\n' "$path"
+        else
+            printf 'retire-keep %s\n' "$path"
         fi
     done
-    if [ -d "$src/hooks" ]; then
-        for hf in "$src"/hooks/*; do
-            [ -f "$hf" ] || continue
-            base=$(basename "$hf")
-            if [ ! -f "$root/scripts/hooks/$base" ]; then
-                cp "$hf" "$root/scripts/hooks/$base"
-                case "$base" in *.sh) chmod +x "$root/scripts/hooks/$base" ;; esac
-                printf 'add scripts/hooks/%s\n' "$base"
-            fi
-        done
-    fi
+    # Add newly-shipped files absent from the target (one pass covers toplevel
+    # and hooks alike — the kit-manifest enumerates both).
+    mkdir -p "$root/scripts/hooks"
+    harness_kit_shipped_paths "$kmf" 2>/dev/null | while IFS= read -r p; do
+        srcfile="$src/${p#scripts/}"
+        if [ -f "$srcfile" ] && [ ! -f "$root/$p" ]; then
+            mkdir -p "$root/$(dirname "$p")"
+            cp "$srcfile" "$root/$p"
+            case "$p" in *.sh) chmod +x "$root/$p" ;; esac
+            printf 'add %s\n' "$p"
+        fi
+    done
+    return 0
 }

@@ -33,3 +33,9 @@ Two layers, because neither alone is sufficient:
 - The manifest doubles as the upgrade contract (see
   [ADR 002](002-vendor-everything.md)): checksum-match means "the kit may
   replace this file", checksum-drift means "the project owns it now".
+
+**Amended by [ADR 009](009-declarative-ship-manifest.md) (v0.21.0):** the
+integrity manifest's role is unchanged, but its producer and update's
+replace-vs-diff decision table now derive their file sets from the shipped
+`scripts/kit-manifest` ship contract instead of hard-coded lists, and the
+protected set grows to include the kit-manifest itself.
