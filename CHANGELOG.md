@@ -3,6 +3,50 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.22.0 — 2026-07-22
+
+Phase 2 of the standard-consumer-layout restructure
+(`docs/plans/standard-consumer-layout.md`); executes the descope queued in
+`docs/plans/adopter-test-descope.md`, unblocked by v0.21.0's retirement
+mechanism.
+
+### Changed
+
+- **Adopter test descope:** the kit's own conformance suites no longer ship —
+  `test-install-core.sh`, `test-install-update.sh`,
+  `test-install-recovery.sh`, `install-test-lib.sh`, `test-check-harness.sh`,
+  `test-eval.sh`, and `test-fixture-isolation.sh` are `retired` in the
+  kit-manifest and live on only as this repo's root-only ` # tailored`
+  maintainer gates (with explicit `verify.sh` gates, since the nested harness
+  gate skips exactly these). Adopter audits (check #6) now run their own
+  installed policy: hook behavioral tests, the runtime suites
+  (`test-verify.sh`, `test-log.sh`, `test-audit-log.sh`,
+  `test-dev-instance.sh`, `test-doc-garden.sh`), and the new smoke test.
+- **check #9d refinement:** a retired path pinned ` # tailored` is the
+  *resolved* state (a deliberate repo-owned fork) and no longer WARNs;
+  drifted or unpinned retired copies keep warning until reviewed.
+- The `.tmpl` and CI-workflow rename map is now declared data — kit-manifest
+  `content` entries with `dest=` — instead of prose restated across the init
+  playbook.
+
+### Added
+
+- **`scripts/test-harness-smoke.sh`** — the one install-mechanics check that
+  ships: self-contained (sources only `install-lib.sh`), nested-run-guarded,
+  installs the repo's own mechanism into a throwaway fixture and asserts the
+  fixture's `check-harness.sh` exits green. New maintainer fixture: a
+  v0.21.0-layout install updating across the descope gets all seven pristine
+  suites removed with no stale pins.
+
+### Migration
+
+- Update mode replaces the manifest-matching `kit-manifest` and
+  `check-harness.sh`, adds `test-harness-smoke.sh`, and **removes** the seven
+  descoped suites when pristine (`remove <path>` in the update plan); drifted
+  or tailored copies are kept and reported `retire-keep`, and #9d keeps
+  warning until you fold changes forward or re-pin the file ` # tailored` to
+  keep it deliberately. No policy files change.
+
 ## 0.21.0 — 2026-07-22
 
 Phase 1 of the standard-consumer-layout restructure
