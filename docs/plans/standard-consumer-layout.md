@@ -152,9 +152,8 @@ fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Next action
 
-Author and activate the Phase 4 plan (content/IA migration, v0.24.0):
-`.harness/` committed content layer, docs IA, canonical skills →
-`.agents/skills/`, GEMINI.md + copilot-instructions templates
+Execute Phase 4 per
+[active/v0.24.0-content-ia-migration.md](active/v0.24.0-content-ia-migration.md)
 (Phases 1–3 shipped — see
 [completed/v0.21.0-ship-manifest-and-retirement.md](completed/v0.21.0-ship-manifest-and-retirement.md),
 [completed/v0.22.0-adopter-test-descope.md](completed/v0.22.0-adopter-test-descope.md),
