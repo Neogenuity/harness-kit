@@ -23,7 +23,7 @@ decisions separate:
    no-data/N/A.
 3. Re-pin the approved mechanism/policy state and run the focused log, reducer,
    scanner, update, and harness tests.
-4. Offer `docs/conventions/outcome-telemetry.md` and its AGENTS link as
+4. Offer `docs/standards/outcome-telemetry.md` and its AGENTS link as
    self-contained content; never point an installed repo back into the plugin.
 5. Separately offer `docs/skills/doc-garden/SKILL.md`, its conditional AGENTS
    link, and regenerated stubs. Declining the skill is valid. Adoption grants no

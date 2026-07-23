@@ -20,7 +20,7 @@ profile_declared_once() {
 }
 
 doc_has() {
-    grep -Eiq -- "$1" docs/conventions/execution-profiles.md
+    grep -Eiq -- "$1" docs/standards/execution-profiles.md
 }
 
 check jq -e '
@@ -124,12 +124,12 @@ check grep -q '^PLANS_DIR=' scripts/harness/harness.conf
 check grep -q '^SECRET_PATTERNS=' scripts/harness/harness.conf
 check grep -q '^SECRET_ALLOW_PATTERNS=' scripts/harness/harness.conf
 check grep -q '^MCP_ALLOWED_SERVERS=' scripts/harness/harness.conf
-check test -f docs/conventions/execution-profiles.md
-check grep -q 'docs/conventions/execution-profiles.md' AGENTS.md
+check test -f docs/standards/execution-profiles.md
+check grep -q 'docs/standards/execution-profiles.md' AGENTS.md
 check grep -q 'EVAL_PROFILE_AGENTS_SENTINEL: keep-existing-instructions' AGENTS.md
 check grep -q '^## Project' AGENTS.md
 check grep -q '^## Architecture' AGENTS.md
-check grep -q '^## Conventions' AGENTS.md
+check grep -q '^## Standards & Runbooks' AGENTS.md
 check grep -q '^## Quality Gates' AGENTS.md
 check grep -q '^## Enforcement' AGENTS.md
 
@@ -168,8 +168,8 @@ check doc_has 'container-engine socket'
 check doc_has 'postCreateCommand'
 check doc_has '\.harness/var/log\.jsonl'
 check doc_has 'does not join the streams automatically'
-check sh -c '! grep -q "plugins/harness-kit\|skill directory" docs/conventions/execution-profiles.md'
-check sh -c '! grep -Eiq "OTEL_LOG_USER_PROMPTS[[:space:]]*=[[:space:]]*1|Authorization:|Bearer[[:space:]]" docs/conventions/execution-profiles.md'
+check sh -c '! grep -q "plugins/harness-kit\|skill directory" docs/standards/execution-profiles.md'
+check sh -c '! grep -Eiq "OTEL_LOG_USER_PROMPTS[[:space:]]*=[[:space:]]*1|Authorization:|Bearer[[:space:]]" docs/standards/execution-profiles.md'
 
 check cmp -s .cursor/sandbox.json "$here/fixture/cursor-sandbox.json"
 check cmp -s opencode.json "$here/fixture/opencode.json"

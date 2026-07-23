@@ -6,7 +6,7 @@ globs:
 
 # <Convention Name>
 
-Follow the conventions documented in `docs/conventions/<topic>.md`.
+Follow the conventions documented in `docs/standards/<topic>.md`.
 
 Key points:
 - <the 3-6 rules an agent most often gets wrong, summarized>

@@ -44,6 +44,10 @@ while IFS= read -r doc; do
     check_doc_links "$doc"
 done < <({ find "$ROOT" -name AGENTS.md \
              -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*'; \
+           # root-level entry pages and the committed .harness/ knowledge
+           # zones live outside docs/ but are part of the same link web
+           ls "$ROOT/ARCHITECTURE.md" 2>/dev/null; \
+           [ -d "$ROOT/.harness/policies" ] && find "$ROOT/.harness/policies" "$ROOT/.harness/agents" -name '*.md' 2>/dev/null; \
            [ -d "$ROOT/docs" ] && find "$ROOT/docs" -name '*.md'; } 2>/dev/null | sort -u)
 
 

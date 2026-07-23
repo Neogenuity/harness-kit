@@ -40,7 +40,7 @@ The kit distinguishes **mechanism** (copied verbatim, upgraded via manifest),
 **policy** (templates with `TAILOR` blocks, filled at init, never
 auto-overwritten), and **content** (authored per-project). The canonical
 description lives in the shipped pattern doc —
-[plugins/harness-kit/skills/harness-kit/references/pattern.md](../../plugins/harness-kit/skills/harness-kit/references/pattern.md)
+[plugins/harness-kit/skills/harness-kit/references/pattern.md](plugins/harness-kit/skills/harness-kit/references/pattern.md)
 — which is the single source of truth for the pattern itself; this file only
 describes how *this repo* embodies it.
 
@@ -59,7 +59,7 @@ lifecycle a user's repo does:
    step fails CI: `scripts/harness/tests/test-template-sync.sh` (root-only, run by
    `check-harness.sh`) requires every non-tailored installed file to be
    byte-identical to its template — see
-   [ADR 006](decisions/006-dogfood-copies-are-enforced-duplicates.md).
+   [ADR 006](docs/architecture/decisions/006-dogfood-copies-are-enforced-duplicates.md).
 4. `scripts/harness/verify` gates the release: cheap shellcheck and manifest checks
    fail fast, then independent template regressions, eval validation, and the
    nested harness check run concurrently behind one reporting barrier.
@@ -80,5 +80,5 @@ remaining fully visible to anyone browsing the repo.
 ## Decision records
 
 The load-bearing choices — and the trade-offs they accepted — are documented
-as ADRs in [decisions/](decisions/README.md). Start there to understand *why*
+as ADRs in [decisions/](docs/architecture/decisions/README.md). Start there to understand *why*
 the pattern looks the way it does before changing it.

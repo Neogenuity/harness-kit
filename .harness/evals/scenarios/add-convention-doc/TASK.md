@@ -7,7 +7,7 @@
 
 ## Prompt
 
-Add a new convention document at `docs/conventions/error-handling.md` describing
+Add a new convention document at `docs/standards/error-handling.md` describing
 how this project should handle and surface errors. Give it a top-level `# `
 heading and at least a short paragraph of real guidance. Then link it from the
 `## Conventions` section of `AGENTS.md` as a bullet, matching the style of the

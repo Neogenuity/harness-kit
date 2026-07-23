@@ -4,7 +4,7 @@ The dangerous *outputs* an agent can produce in this repo — history rewrites,
 tag deletion, force-pushes, and deleting recorded eval baselines or completed
 plans — need a policy that says which layer stops each one, and admits honestly
 which layers only warn. For hostile *inputs* (prompt injection, untrusted
-fixture clones) see [untrusted-content.md](untrusted-content.md).
+fixture clones) see [untrusted-content.md](security.md).
 
 This repo has **no production environment**: it ships templates into other
 people's repos, so its own irreversible actions are all git-history and
@@ -60,7 +60,7 @@ provider-specific and loosened only deliberately:
 The exact key per harness is in the
 [provider matrix](../../plugins/harness-kit/skills/harness-kit/references/provider-matrix.md);
 this repo's adopted tuples and provider-specific limits are in
-[execution-profiles.md](execution-profiles.md). **Loosening** is per-need and
+[execution-profiles.md](../../docs/standards/execution-profiles.md). **Loosening** is per-need and
 reversible: allow one host for one task, then restore. Widen the narrowest
 thing.
 

@@ -8,7 +8,7 @@
 ## Prompt
 
 `bash scripts/harness/check-harness` is failing because `AGENTS.md` links to
-`docs/conventions/missing.md`, which does not exist. Fix it so the harness check
+`docs/standards/missing.md`, which does not exist. Fix it so the harness check
 passes — either create that document or remove the dead link, your choice.
 
 ## Acceptance

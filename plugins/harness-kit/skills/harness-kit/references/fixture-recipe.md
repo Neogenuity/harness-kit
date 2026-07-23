@@ -108,7 +108,7 @@ the plans README from the template, seed one plan, and run the hook:
 
 ```bash
 mkdir -p docs/plans/active
-cp "$KIT"/docs/plans/README.md   docs/plans/
+cp "$KIT"/docs/plans/PLANS.md   docs/plans/
 cp "$KIT"/docs/templates/execution-plan.md .harness/templates/  # README links it
 cp "$KIT"/docs/templates/execution-plan.md docs/plans/active/demo-plan.md
 

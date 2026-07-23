@@ -76,7 +76,7 @@ whatever ships next — without maintaining N parallel configurations.
    `EXECUTION_PROFILE_PROVIDERS`; an unset or empty declaration remains a valid
    unadopted harness. Semantic drift checks validate only declared providers
    and never infer adoption from surviving config files. The self-contained
-   `docs/conventions/execution-profiles.md` records exact tuples, temp roots,
+   `docs/standards/execution-profiles.md` records exact tuples, temp roots,
    local-runtime network availability and lifecycle limits, admin-only limits,
    and conditional validation prerequisites such as Python 3.11+ `tomllib` for
    complete Codex parsing.
@@ -104,7 +104,7 @@ permission/trust layers plus the CI manifest check as the layers that actually
 hold. *Enforcement* proper — OS-level sandboxing, network-egress control,
 filesystem scoping — is a platform capability the kit's job is to **configure**,
 not reimplement. The hostile-input, risky-output, and adopted execution-profile
-guidance ships as self-contained convention docs under `docs/conventions/`.
+guidance ships as self-contained convention docs under `docs/standards/`.
 A devcontainer is an init-authored optional boundary from a confirmed image,
 Dockerfile, or Compose source, never a placeholder template.
 

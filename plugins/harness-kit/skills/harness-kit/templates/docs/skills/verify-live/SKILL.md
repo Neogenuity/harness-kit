@@ -17,7 +17,7 @@ not a substitute for this live check.
 
 ## Preconditions and hard stops
 
-1. Read `docs/conventions/dev-runtime.md` for this repo's runtime map.
+1. Read `docs/runbooks/local-development.md` for this repo's runtime map.
 2. Require executable `scripts/dev.sh` and `jq`. If the script is missing or
    non-executable, stop and report that the runtime contract is unavailable.
 3. Treat each recognized action's stdout as protocol, not prose. It must be one

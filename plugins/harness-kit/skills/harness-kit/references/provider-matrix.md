@@ -75,7 +75,7 @@ enforcement claim in the two convention docs.
 
 The exact adopted tuples, local-runtime network availability, and admin-only controls live
 in the installed, self-contained
-`docs/conventions/execution-profiles.md`. Two honest limits that doc must not
+`docs/standards/execution-profiles.md`. Two honest limits that doc must not
 paper over: Claude Code's default proxy does not inspect TLS, so a broad
 `allowedDomains` entry can still be a domain-fronting exfil path; and Cursor's
 repo sandbox file is not a complete policy because its UI and admin layers sit

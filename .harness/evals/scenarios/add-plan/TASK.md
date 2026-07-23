@@ -9,7 +9,7 @@
 
 Queue a new execution plan at `docs/plans/observability.md` about adding
 structured observability (logging, metrics, tracing) to this project. Follow the
-plan format documented in `docs/plans/README.md`: include a `Status: queued`
+plan format documented in `docs/plans/PLANS.md`: include a `Status: queued`
 line and every required section — `## Objective`, `## Value`, `## Scope`,
 `## Out of scope`, `## Dependencies`, `## Verification`, `## Progress`,
 `## Decisions`, and `## Next action` — each with real content. Do not add

@@ -55,7 +55,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      Codex? OpenCode? `.agents`? — cheap to include, default to all five).
    - **Execution-profile adoption is a separate explicit choice.** For each
      wired provider, offer the stable tuple from
-     `templates/docs/conventions/execution-profiles.md`, name that provider's
+     `templates/docs/standards/execution-profiles.md`, name that provider's
      temp roots and enforcement limits, and ask which providers to declare.
      Existing config gets a proposed merge diff only. For an app, offer the
      experimental Codex broad local/private-network compatibility variant only
@@ -72,7 +72,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    - Each MCP server recon found: approve it (name + what it runs or connects
      to) or defer it. The approved set becomes the trust inventory (step 4);
      a deferred server is left out and will surface as drift until listed.
-   - The 2-4 conventions worth a `docs/conventions/` doc (what do reviewers
+   - The 2-4 conventions worth a `docs/standards/` doc (what do reviewers
      correct most often?).
    - The first 1-3 skills: recurring task shapes with a known recipe
      (e.g. "add an endpoint", "add a model").
@@ -181,7 +181,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      interview (follow the in-file example), or leave the no-op skeleton.
    - **Application repos only — author `scripts/dev.sh`; do not copy a generic
      template.** Implement the confirmed runtime map against
-     `templates/docs/conventions/dev-runtime.md`: `up|health|seed|down`, one
+     `templates/docs/runbooks/local-development.md`: `up|health|seed|down`, one
      compact JSON v1 object and no other stdout for every recognized action,
      worktree ownership under `.harness/var/dev/`, deterministic explicit seeding,
      and repo-relative log/trace paths. Use `scripts/harness/lib/dev-instance.sh suffix`
@@ -196,7 +196,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    - `CLAUDE.md` from `templates/CLAUDE.md.tmpl` — a thin `@AGENTS.md`
      import plus a `scripts/harness/verify` pointer; the gate list itself
      lives only in `.harness/gates.conf`.
-   - `docs/conventions/<topic>.md` for each interviewed convention — short,
+   - `docs/standards/<topic>.md` for each interviewed convention — short,
      example-driven, written from real code in the repo.
    - `.harness/policies/security.md` and
      `.harness/policies/changes.md` from `templates/docs/policies/` —
@@ -204,14 +204,14 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      real defaults, delete inapplicable sections (production environment, MCP)
      and, for the enforcement facts, keep only what the wired providers' rows
      in the provider matrix prove.
-   - Copy `templates/docs/conventions/outcome-telemetry.md` to
-     `docs/conventions/outcome-telemetry.md` and keep its AGENTS link. It is the
+   - Copy `templates/docs/standards/outcome-telemetry.md` to
+     `docs/standards/outcome-telemetry.md` and keep its AGENTS link. It is the
      self-contained exact v1/v2, provenance, privacy, reducer, and N/A contract
      for the local mechanism installed in step 3. Do not replace it with a link
      into this plugin or combine it with provider observability.
    - **Adopted execution profiles or devcontainer:** copy
-     `templates/docs/conventions/execution-profiles.md` into
-     `docs/conventions/execution-profiles.md` after at least one provider
+     `templates/docs/standards/execution-profiles.md` into
+     `docs/standards/execution-profiles.md` after at least one provider
      profile is adopted **or** the devcontainer is separately adopted. Tailor
      it to the confirmed provider subset, any named weakening, and/or the
      authored devcontainer, then keep its conditional AGENTS link. The
@@ -219,8 +219,8 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      Repos adopting neither boundary omit the file and link. Devcontainer-only
      adoption does not add an `EXECUTION_PROFILE_PROVIDERS` declaration.
    - **Application repos only:** copy
-     `templates/docs/conventions/dev-runtime.md` to
-     `docs/conventions/dev-runtime.md` and tailor its runtime map; copy the
+     `templates/docs/runbooks/local-development.md` to
+     `docs/runbooks/local-development.md` and tailor its runtime map; copy the
      self-contained `templates/docs/skills/verify-live/SKILL.md` to
      `docs/skills/verify-live/SKILL.md`. Add both conditional links from the
      AGENTS template. Never point either file at this skill/plugin directory.
@@ -244,7 +244,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      provider stubs (`.claude/agents/`, `.cursor/agents/`, `.opencode/agents/`
      as Markdown, `.codex/agents/<name>.toml` as TOML) are GENERATED from it by
      `scripts/harness/sync` in step 6 — never hand-authored.
-   - `docs/plans/README.md` from `templates/docs/plans/README.md` (AGENTS.md
+   - `docs/plans/PLANS.md` from `templates/docs/plans/PLANS.md` (AGENTS.md
      links it, so `check-harness` needs it to exist), and create the
      `PLANS_DIR` (`docs/plans/active/` by default) with a `.gitkeep` so
      `session-context.sh` has a directory to announce. Copy

@@ -15,7 +15,7 @@ templates being shipped, and an annotated tag pushed.
 
 ## Prerequisites
 
-- Read [docs/conventions/templates.md](../../conventions/templates.md) —
+- Read [docs/standards/templates.md](../../standards/templates.md) —
   especially version discipline.
 - Working tree clean apart from the release changes; `main` up to date.
 

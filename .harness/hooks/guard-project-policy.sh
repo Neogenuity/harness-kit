@@ -29,7 +29,7 @@ append() { warnings="${warnings}$1"$'\n'; }
 # This repo IS the kit: the invariant is shipped-mechanism discipline. Any
 # change to the mechanism templates that ship inside the plugin must carry a
 # regression test, and must not reach a release without a version bump.
-# See docs/conventions/templates.md.
+# See docs/standards/templates.md.
 TPL="plugins/harness-kit/skills/harness-kit/templates/scripts"
 # -uall expands a brand-new untracked directory to its individual files (plain
 # --porcelain collapses it to one "dir/" entry, so a test added inside it
@@ -39,7 +39,7 @@ changed=$(git status --porcelain -uall -- "$TPL" 2>/dev/null \
     | sed -e 's/^...//' -e 's/.* -> //')
 if [ -n "$changed" ]; then
     if ! printf '%s\n' "$changed" | grep -q 'test-[^/]*\.sh$'; then
-        append "POLICY WARNING: shipped mechanism templates changed ($(printf '%s' "$changed" | tr '\n' ' ')) but no regression test (test-*.sh) was touched. Every guard/mechanism change ships with a test — see docs/conventions/templates.md."
+        append "POLICY WARNING: shipped mechanism templates changed ($(printf '%s' "$changed" | tr '\n' ' ')) but no regression test (test-*.sh) was touched. Every guard/mechanism change ships with a test — see docs/standards/templates.md."
     fi
     # Compare the actual version VALUE against HEAD, not just "did the file
     # change" (a rename or a description-only edit would fool that). Fail safe:

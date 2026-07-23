@@ -13,7 +13,7 @@ description: >-
 
 ## Prerequisites
 
-- <docs/conventions/*.md files to read first, if any>
+- <docs/standards/*.md files to read first, if any>
 - <state the repo must be in — e.g. stack running, migrations applied>
 
 ## Steps

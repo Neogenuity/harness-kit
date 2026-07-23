@@ -22,7 +22,7 @@ nobody mistakes a warning for a wall:
   sandbox / network settings. *Holds* until the user loosens the native config,
   and it is the only layer that stops a shell command before it runs. When this
   repo adopts execution profiles, cite the exact provider-specific floor in
-  `docs/conventions/execution-profiles.md`.
+  `docs/standards/execution-profiles.md`.
 - **in-turn advisory feedback** — the portable hooks. `guard-config.sh` denies
   mechanism / lint-config *file edits* (exit 2, mid-turn) — the protected set
   also covers `harness.conf`, the Claude Code local-settings override, and
@@ -65,7 +65,7 @@ only deliberately:
 `EXECUTION_PROFILE_PROVIDERS` is the adoption source of truth; unset or empty
 means these floors are unadopted even if provider files exist. The exact tuples,
 temp roots, local/private compatibility weakenings, and administrator-only
-limits are in `docs/conventions/execution-profiles.md`. **Loosening** is per-need and
+limits are in `docs/standards/execution-profiles.md`. **Loosening** is per-need and
 reversible: allow one host for one task, widen one write path, then restore.
 Widen the narrowest thing.
 

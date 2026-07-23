@@ -13,7 +13,7 @@ confirmed sets, never inferred from surviving configs/stubs); hooks portable,
 executable, tested, and each hook-wired provider's config validating
 tuple-by-tuple; native permission deny list mirroring the secret guard; the configured `PLANS_DIR`
 (`harness.conf`) resolving to a real directory (a dangling one makes
-`session-context.sh` silently announce nothing) and `docs/plans/README.md`
+`session-context.sh` silently announce nothing) and `docs/plans/PLANS.md`
 present (AGENTS.md links it, so a missing README is a dead link); CI running
 the drift gate; manifest present and passing its checksum
 verification. Report the MCP trust-inventory state: servers configured across
@@ -28,7 +28,7 @@ tuple may take the accepted experimental broad local/private-network
 compatibility disjunction. Report
 **unavailable** for a requested variant the provider cannot express, and
 **unverifiable** when effective policy depends on UI/admin scope you cannot
-inspect. Require the self-contained `docs/conventions/execution-profiles.md`
+inspect. Require the self-contained `docs/standards/execution-profiles.md`
 and its AGENTS link when at least one profile is declared or the devcontainer
 was adopted into the harness. Claude's credential tuple requires Claude Code
 2.1.187 or later.
@@ -59,7 +59,7 @@ without a versioned producer. Missing or invalid baseline/result inputs stay
 visibly unavailable/invalid instead of becoming zero or success. If the reducer
 is absent, report the v0.17 mechanism as missing rather than approximating it.
 Require the self-contained
-`docs/conventions/outcome-telemetry.md` and its AGENTS link when the v2
+`docs/standards/outcome-telemetry.md` and its AGENTS link when the v2
 mechanism is installed.
 
 If a behavioral eval bank exists (`.harness/evals/`), also report its task counts by
@@ -142,7 +142,7 @@ For an application repo, audit the runtime in this exact read-only order:
 5. Require exactly one compact JSON object with no other stdout and the v1 keys,
    types, `^h[0-9a-f]{12}$` helper suffix, allowed statuses, repo-relative
    `logs`/`traces`, and action/exit consistency documented in
-   `templates/docs/conventions/dev-runtime.md`. Any mismatch is **invalid
+   `templates/docs/runbooks/local-development.md`. Any mismatch is **invalid
    JSON/contract**.
 6. A valid `health` response classifies as **ready** only for `status: "ready"`
    with exit 0; **stopped** only for `status: "stopped"` with nonzero exit; and
@@ -151,7 +151,7 @@ For an application repo, audit the runtime in this exact read-only order:
    instruction.
 
 Also report the conditional bundle coherently: an adopted app runtime has the
-tailored `docs/conventions/dev-runtime.md`, canonical
+tailored `docs/runbooks/local-development.md`, canonical
 `docs/skills/verify-live/SKILL.md`, AGENTS links to both, and generated provider
 skill stubs. Missing or drifted docs/stubs are separate findings from the
 runtime state. Existing apps adopt this bundle only after the user opts in;

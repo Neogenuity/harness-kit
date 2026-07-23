@@ -15,7 +15,7 @@ two architectural facts an agent must know before touching anything}}.
 
 ## Architecture
 
-- [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) — tech stack, directory structure, layering
+- [ARCHITECTURE.md](ARCHITECTURE.md) — tech stack, directory structure, layering
 <!-- add deeper architecture docs (dependency maps, data flows) as they exist -->
 
 ## Conventions
@@ -27,12 +27,12 @@ two architectural facts an agent must know before touching anything}}.
 <!-- EXECUTION PROFILES OR DEVCONTAINER: keep this link after the repo adopts
      at least one provider in EXECUTION_PROFILE_PROVIDERS or separately adopts
      a devcontainer. Devcontainer-only adoption adds no provider declaration. -->
-- [docs/conventions/execution-profiles.md](docs/conventions/execution-profiles.md) — exact adopted provider sandbox/permission floors, local-runtime network and lifecycle limits, admin-only controls, devcontainer authoring contract, and separate provider-observability map
-- [docs/conventions/outcome-telemetry.md](docs/conventions/outcome-telemetry.md) — mixed v1/v2 local event schema, explicit attribution/privacy rules, deterministic gate/retry trends, and provider-telemetry separation
+- [docs/standards/execution-profiles.md](docs/standards/execution-profiles.md) — exact adopted provider sandbox/permission floors, local-runtime network and lifecycle limits, admin-only controls, devcontainer authoring contract, and separate provider-observability map
+- [docs/standards/outcome-telemetry.md](docs/standards/outcome-telemetry.md) — mixed v1/v2 local event schema, explicit attribution/privacy rules, deterministic gate/retry trends, and provider-telemetry separation
 <!-- APPLICATION REPOS ONLY: keep this link only when init authored and pinned
      scripts/dev.sh; non-app repos omit the convention, skill, and both links. -->
-- [docs/conventions/dev-runtime.md](docs/conventions/dev-runtime.md) — the worktree-scoped `scripts/dev.sh up|health|seed|down` JSON contract, deterministic seed, and log/trace locations
-- [docs/conventions/{{TOPIC}}.md](docs/conventions/{{TOPIC}}.md) — {{summary}}
+- [docs/runbooks/local-development.md](docs/runbooks/local-development.md) — the worktree-scoped `scripts/dev.sh up|health|seed|down` JSON contract, deterministic seed, and log/trace locations
+- [docs/standards/{{TOPIC}}.md](docs/standards/{{TOPIC}}.md) — {{summary}}
 
 ## Skills (Task Workflows)
 
@@ -63,7 +63,7 @@ docs live in `.harness/agents/`:
 
 ## Plans
 
-- [docs/plans/README.md](docs/plans/README.md) — active and completed execution plans
+- [docs/plans/PLANS.md](docs/plans/PLANS.md) — active and completed execution plans
 
 ## Evals
 

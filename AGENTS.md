@@ -21,7 +21,7 @@ OpenCode, and `.agents`. Two facts to know before touching anything:
 
 ## Architecture
 
-- [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) — repo anatomy: marketplace root, `plugins/harness-kit/` distribution, the self-installed harness and its upgrade loop
+- [ARCHITECTURE.md](ARCHITECTURE.md) — repo anatomy: marketplace root, `plugins/harness-kit/` distribution, the self-installed harness and its upgrade loop
 - [docs/architecture/decisions/README.md](docs/architecture/decisions/README.md) — decision records: the "why" behind the pattern's load-bearing choices
 
 ## Agent Policies (`.harness/`)
@@ -34,12 +34,16 @@ doc templates it authors from, and machine contracts it emits against.
 - `.harness/templates/` — execution-plan, ADR, and PR description skeletons (copy, don't invent structure)
 - `.harness/schemas/` — JSON Schemas for the telemetry v2 event, the audit report, and eval TASK metadata
 
-## Conventions
+## Standards & Runbooks
 
-- [docs/conventions/templates.md](docs/conventions/templates.md) — rules for editing the shipped templates: TAILOR blocks, tests-with-guards, stub caps, provider-matrix citation discipline
-- [docs/conventions/execution-profiles.md](docs/conventions/execution-profiles.md) — adopted provider sandbox/permission floors, local-runtime compatibility weakenings and administrator-only limits, devcontainer authoring contract, and separate observability map
-- [docs/conventions/outcome-telemetry.md](docs/conventions/outcome-telemetry.md) — mixed v1/v2 local event schema, explicit attribution/privacy rules, deterministic gate/retry trends, and provider-telemetry separation
-- [docs/conventions/dev-runtime.md](docs/conventions/dev-runtime.md) — the worktree-scoped `scripts/dev.sh up|health|seed|down` JSON contract, plus this repo's root-only live-runtime fixture map
+- [docs/standards/templates.md](docs/standards/templates.md) — rules for editing the shipped templates: TAILOR blocks, tests-with-guards, stub caps, provider-matrix citation discipline
+- [docs/standards/execution-profiles.md](docs/standards/execution-profiles.md) — adopted provider sandbox/permission floors, local-runtime compatibility weakenings and administrator-only limits, devcontainer authoring contract, and separate observability map
+- [docs/standards/outcome-telemetry.md](docs/standards/outcome-telemetry.md) — mixed v1/v2 local event schema, explicit attribution/privacy rules, deterministic gate/retry trends, and provider-telemetry separation
+- [docs/runbooks/local-development.md](docs/runbooks/local-development.md) — the worktree-scoped `scripts/dev.sh up|health|seed|down` JSON contract, plus this repo's root-only live-runtime fixture map
+
+`docs/product/`, `docs/generated/`, and `docs/references/` hold index
+skeletons for product pages, machine-produced reference output, and external
+primary-source pointers; see each `index.md` for what belongs there.
 
 ## Skills (Task Workflows)
 
@@ -77,7 +81,8 @@ a deleted persona.
 
 ## Plans
 
-- [docs/plans/README.md](docs/plans/README.md) — execution-plan lifecycle (queued → active → completed) and the ordered roadmap to 1.0; plans in `docs/plans/active/` are announced at session start
+- [docs/plans/PLANS.md](docs/plans/PLANS.md) — execution-plan lifecycle (queued → active → completed) and the ordered roadmap to 1.0; plans in `docs/plans/active/` are announced at session start
+- [docs/plans/tech-debt.md](docs/plans/tech-debt.md) — deliberately deferred small work, each line with its promotion trigger
 
 ## Evals
 

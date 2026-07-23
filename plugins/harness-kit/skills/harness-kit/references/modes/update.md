@@ -144,14 +144,14 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    the bundle, explain that new kit mechanism now supplies
    `scripts/harness/lib/dev-instance.sh`, but take no content action unless the user opts
    in. On opt-in only: author (never template-copy) executable
-   `scripts/dev.sh`; copy and tailor `docs/conventions/dev-runtime.md` and
+   `scripts/dev.sh`; copy and tailor `docs/runbooks/local-development.md` and
    `docs/skills/verify-live/SKILL.md`; add their conditional AGENTS links; run
    `scripts/harness/sync`; and manifest-pin `dev.sh` with
    ` # tailored`. If any of these files already exists, preserve it and show a
    proposed diff — never silently replace local content. Re-run the v1 contract
    checks and manifest/stub checks after approved adoption.
 7. **Offer execution profiles and devcontainer adoption as separate content
-   changes.** Read `templates/docs/conventions/execution-profiles.md`, compare
+   changes.** Read `templates/docs/standards/execution-profiles.md`, compare
    each wired provider's existing config tuple-by-tuple, and present a merge
    diff for only the providers the user chooses. Preserve hooks, MCP servers,
    permission rules, secret-deny mirrors, and unknown local keys. Never replace
@@ -170,7 +170,7 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    Otherwise defer it explicitly; there is no placeholder template to copy.
 8. **Offer outcome-telemetry and doc-garden content separately.** Never rewrite
    `.harness/var/log.jsonl`; v1 and v2 lines intentionally coexist. Offer the
-   self-contained `templates/docs/conventions/outcome-telemetry.md` plus its
+   self-contained `templates/docs/standards/outcome-telemetry.md` plus its
    AGENTS link after the v2 mechanism update. Separately offer
    `templates/docs/skills/doc-garden/SKILL.md`, its conditional AGENTS link, and
    regenerated provider stubs. Preserve any existing convention/skill and show

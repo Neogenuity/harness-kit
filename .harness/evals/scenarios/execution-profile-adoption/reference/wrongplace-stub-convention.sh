@@ -5,7 +5,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 
 bash "$here/apply.sh"
-cat > docs/conventions/execution-profiles.md <<'MD'
+cat > docs/standards/execution-profiles.md <<'MD'
 # Execution Profiles
 
 ## Provider observability is a separate stream

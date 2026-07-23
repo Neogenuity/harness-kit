@@ -30,7 +30,7 @@ append() { warnings="${warnings}$1"$'\n'; }
 # while IFS= read -r file; do
 #     [ -f "$file" ] || continue
 #     if ! grep -qE 'TenantOwnedModel|IntentionallyUnscopedTenantModel' "$file"; then
-#         append "POLICY WARNING: new model '$file' does not extend TenantOwnedModel (or implement IntentionallyUnscopedTenantModel). See docs/conventions/multi-tenancy.md."
+#         append "POLICY WARNING: new model '$file' does not extend TenantOwnedModel (or implement IntentionallyUnscopedTenantModel). See docs/standards/multi-tenancy.md."
 #     fi
 # done < <(hook_new_files '^modules/[^/]+/src/Domain/Models/.+\.php$')
 #

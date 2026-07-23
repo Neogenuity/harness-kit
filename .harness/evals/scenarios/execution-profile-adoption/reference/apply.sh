@@ -67,11 +67,11 @@ grep -v '^EXECUTION_PROFILE_PROVIDERS=' scripts/harness/harness.conf > "$tmp" ||
 printf '%s\n' 'EXECUTION_PROFILE_PROVIDERS=".claude .codex"' >> "$tmp"
 mv "$tmp" scripts/harness/harness.conf
 
-cp "$source_root/plugins/harness-kit/skills/harness-kit/templates/docs/conventions/execution-profiles.md" \
-    docs/conventions/execution-profiles.md
+cp "$source_root/plugins/harness-kit/skills/harness-kit/templates/docs/standards/execution-profiles.md" \
+    docs/standards/execution-profiles.md
 
-if ! grep -q 'docs/conventions/execution-profiles.md' AGENTS.md; then
-    printf '\n- [docs/conventions/execution-profiles.md](docs/conventions/execution-profiles.md) — exact adopted provider execution floors and limits\n' >> AGENTS.md
+if ! grep -q 'docs/standards/execution-profiles.md' AGENTS.md; then
+    printf '\n- [docs/standards/execution-profiles.md](docs/standards/execution-profiles.md) — exact adopted provider execution floors and limits\n' >> AGENTS.md
 fi
 
 # Deliberately do not touch the task's Cursor/OpenCode/devcontainer controls.

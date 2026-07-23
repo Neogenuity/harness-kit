@@ -9,7 +9,7 @@ the human driving the session issues instructions.
 
 This doc covers hostile *inputs*. For hostile *outputs* — destructive git
 operations, deleting baselines or completed plans, the safe-default posture —
-see [risky-actions.md](risky-actions.md).
+see [risky-actions.md](changes.md).
 
 ## The rule
 
@@ -34,7 +34,7 @@ people expect. Before an agent builds or tests an unfamiliar clone:
 - **First pass is read-only**: browse and grep before you install or build.
 - **Use an adopted boundary and keep secrets out of scope**: this repo declares
   the exact provider profiles in
-  [execution-profiles.md](execution-profiles.md). Claude Code and Codex enforce
+  [execution-profiles.md](../../docs/standards/execution-profiles.md). Claude Code and Codex enforce
   the documented closed sandbox; Cursor additionally needs **sandbox.json
   Only** UI mode or administrator policy for effective closed egress. OpenCode
   has no OS/filesystem/network sandbox, so treat its shell on an untrusted
@@ -50,7 +50,7 @@ Not every safety layer survives a determined injection. Know which is which:
 - **Hold** — enforced by an actually adopted and effective OS sandbox, network
   policy, or native approval layer regardless of what the model was told. The
   exact adopted boundary and compatibility claims are in
-  [execution-profiles.md](execution-profiles.md).
+  [execution-profiles.md](../../docs/standards/execution-profiles.md).
   Cursor's repo file alone does not prove its effective UI/admin policy;
   OpenCode has no OS or shell-network boundary, so only its permission
   prompts/denials hold.

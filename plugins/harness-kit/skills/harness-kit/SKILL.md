@@ -154,6 +154,6 @@ misfire on the router alone, but the reference carries the steps.
   exact-v1 and eight-key `version: 2` records, but ships no exporter endpoint,
   auth header, credential, real hostname, raw-prompt opt-in, provider import, or
   automatic cross-stream join. See the self-contained
-  `templates/docs/conventions/outcome-telemetry.md` contract.
+  `templates/docs/standards/outcome-telemetry.md` contract.
 - Verify with the repo's own checks before declaring done, and report
   failures as failures.

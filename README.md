@@ -34,7 +34,7 @@ The root of this repository is a live installation of the kit — the same
 `AGENTS.md`, `docs/`, vendored `scripts/`, provider wiring, and CI drift
 gate it installs into your repo, produced by its own `init` flow. Browse it
 as the example: start at [AGENTS.md](AGENTS.md), then
-[docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for
+[ARCHITECTURE.md](ARCHITECTURE.md) for
 how the pieces fit and
 [docs/architecture/decisions/](docs/architecture/decisions/README.md) for
 why they look the way they do. Only [plugins/harness-kit/](plugins/harness-kit/) ships to users;
