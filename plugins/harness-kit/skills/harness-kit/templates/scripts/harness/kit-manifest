@@ -107,6 +107,18 @@ content CLAUDE.md.tmpl dest=CLAUDE.md
 content ci/github-actions-harness-check.yml dest=.github/workflows/harness-check.yml
 content ci/github-actions-review.yml dest=.github/workflows/review.yml
 content ci/github-actions-eval-cron.yml dest=.github/workflows/eval-cron.yml
+# v0.24.0 committed .harness/ content layer (ADR 010): copied-then-tailored
+# agent policy docs, doc templates, machine contracts, and the canonical
+# reviewer persona. Paths here are template-relative under templates/.
+content docs/policies/security.md dest=.harness/policies/security.md
+content docs/policies/changes.md dest=.harness/policies/changes.md
+content docs/templates/execution-plan.md dest=.harness/templates/execution-plan.md
+content docs/templates/adr.md dest=.harness/templates/adr.md
+content docs/templates/pull-request.md dest=.harness/templates/pull-request.md
+content docs/schemas/telemetry-event.v2.schema.json dest=.harness/schemas/telemetry-event.v2.schema.json
+content docs/schemas/audit-report.schema.json dest=.harness/schemas/audit-report.schema.json
+content docs/schemas/eval-task-metadata.schema.json dest=.harness/schemas/eval-task-metadata.schema.json
+content docs/agents/code-reviewer.md dest=.harness/agents/code-reviewer.md
 
 # --- retired: no longer shipped; update removes pristine, untailored copies ---
 # v0.20.0 split test-install.sh into focused suites.

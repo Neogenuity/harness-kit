@@ -198,8 +198,8 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      lives only in `.harness/gates.conf`.
    - `docs/conventions/<topic>.md` for each interviewed convention — short,
      example-driven, written from real code in the repo.
-   - `docs/conventions/untrusted-content.md` and
-     `docs/conventions/risky-actions.md` from `templates/docs/conventions/` —
+   - `.harness/policies/security.md` and
+     `.harness/policies/changes.md` from `templates/docs/policies/` —
      copy, then tailor: set the risky-actions default posture to the repo's
      real defaults, delete inapplicable sections (production environment, MCP)
      and, for the enforcement facts, keep only what the wired providers' rows
@@ -233,7 +233,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    - `docs/skills/<slug>/SKILL.md` per initial skill, following
      `templates/docs/skills/_example/SKILL.md`. Frontmatter descriptions are
      activation triggers — spend effort on them.
-   - `docs/agents/<name>.md` personas only if a clear delegation need exists.
+   - `.harness/agents/<name>.md` personas only if a clear delegation need exists.
      `code-reviewer` is the recommended first one and **ships canonical** as
      `templates/docs/agents/code-reviewer.md` — an inferential reviewer that
      runs after `scripts/harness/verify` passes, checks the four classes gates can't see,
@@ -248,7 +248,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      links it, so `check-harness` needs it to exist), and create the
      `PLANS_DIR` (`docs/plans/active/` by default) with a `.gitkeep` so
      `session-context.sh` has a directory to announce. Copy
-     `templates/docs/plans/_template.md` alongside it; seed real plans only
+     `templates/docs/templates/execution-plan.md` to `.harness/templates/`; seed real plans only
      when there's long-horizon work to track (an empty queue is fine).
    - `docs/evals/` from `templates/docs/evals/` (`README.md` + `tasks/_template/`
      + `rubrics/_example.md`) — the behavioral eval bank. Author real golden
@@ -315,7 +315,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      `{ "context": { "fileName": ["AGENTS.md", "GEMINI.md"] } }` so it loads the
      shared `AGENTS.md` (default reads `GEMINI.md` only; verified 2026-07-11).
    - Run `bash scripts/harness/sync` to generate all skill AND agent
-     stubs (agent stubs come from each `docs/agents/*.md` frontmatter into every
+     stubs (agent stubs come from each `.harness/agents/*.md` frontmatter into every
      `AGENT_PROVIDERS` dir). In app repos this generates the `verify-live`
      provider stubs only after the canonical skill and AGENTS link exist.
 

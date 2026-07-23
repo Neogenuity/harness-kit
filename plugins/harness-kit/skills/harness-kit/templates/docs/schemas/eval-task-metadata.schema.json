@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "harness-kit/eval-task-metadata.schema.json",
+  "title": "Behavioral eval TASK.md metadata",
+  "description": "The `- key: value` metadata list at the top of a golden task's TASK.md, as the object eval_task_meta parses. The runner (scripts/harness/run-evals) validates these enums at run time and dies on any other value; this schema is the same contract for editors and generators. Defaults apply when a key is absent.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "suite": {
+      "enum": ["capability", "regression"],
+      "default": "capability"
+    },
+    "polarity": {
+      "enum": ["positive", "negative"],
+      "default": "positive",
+      "description": "negative tasks assert the agent does NOT take a forbidden shortcut"
+    },
+    "grade": {
+      "enum": ["check", "check+verify"],
+      "description": "absent means check"
+    },
+    "provider": {
+      "enum": ["any", "claude", "codex"],
+      "description": "absent means any; a pinned task refuses other real providers (mock is always exempt)"
+    },
+    "network": {
+      "enum": ["none", "required"],
+      "default": "none",
+      "description": "required adds the labeled Codex local/private-network compatibility overrides"
+    },
+    "execution": {
+      "enum": ["default", "provider-config-write"],
+      "default": "default",
+      "description": "provider-config-write demands the caller's --allow-provider-config-write acknowledgment and cannot combine with network: required"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "execution": { "const": "provider-config-write" } }, "required": ["execution"] },
+      "then": { "not": { "properties": { "network": { "const": "required" } }, "required": ["network"] } }
+    }
+  ]
+}

@@ -1311,7 +1311,7 @@ if [ -f "$SCRIPTS_DIR/sync-agent-skills.sh" ]; then
         cp "$SCRIPTS_DIR/sync-agent-skills.sh" "$work/scripts/"; chmod +x "$work/scripts/harness/sync"
         printf 'AGENT_PROVIDERS="%s"\n' "$provs" > "$work/scripts/harness/harness.conf"
         mkdir -p "$work/docs/agents"
-        cat > "$work/docs/agents/code-reviewer.md" <<'MD'
+        cat > "$work/.harness/agents/code-reviewer.md" <<'MD'
 ---
 name: code-reviewer
 description: Inferential reviewer for a completed diff AFTER verify.sh passes. Delegate before opening a PR.
@@ -1333,7 +1333,7 @@ MD
     if grep -Fxq 'name = "code-reviewer"' "$W/.codex/agents/code-reviewer.toml" \
         && grep -Fxq 'description = "Inferential reviewer for a completed diff AFTER verify.sh passes. Delegate before opening a PR."' "$W/.codex/agents/code-reviewer.toml" \
         && grep -Fxq 'developer_instructions = """' "$W/.codex/agents/code-reviewer.toml" \
-        && grep -Fq 'Canonical source: docs/agents/code-reviewer.md' "$W/.codex/agents/code-reviewer.toml" \
+        && grep -Fq 'Canonical source: .harness/agents/code-reviewer.md' "$W/.codex/agents/code-reviewer.toml" \
         && ! grep -Eq '^[[:space:]]*tools[[:space:]]*=' "$W/.codex/agents/code-reviewer.toml" \
         && grep -Fxq 'tools: Read, Grep, Glob, Bash' "$W/.claude/agents/code-reviewer.md" \
         && grep -Fxq 'tools: Read, Grep, Glob, Bash' "$W/.cursor/agents/code-reviewer.md" \
@@ -1346,7 +1346,7 @@ MD
     rm -rf "$W"
 
     W=$(new_agents_fixture)
-    sed 's/^description: .*/description: A completely different routing signal./' "$W/docs/agents/code-reviewer.md" > "$W/docs/agents/c" && mv "$W/docs/agents/c" "$W/docs/agents/code-reviewer.md"
+    sed 's/^description: .*/description: A completely different routing signal./' "$W/.harness/agents/code-reviewer.md" > "$W/.harness/agents/c" && mv "$W/.harness/agents/c" "$W/.harness/agents/code-reviewer.md"
     assert_flags "agent-stubs: a canonical-description change fails the TOML stub (every provider)" "$W" ".codex/agents/code-reviewer.toml does not match the generator output"
 
     W=$(new_agents_fixture)

@@ -275,6 +275,12 @@ harness_install_mechanism() {
     mkdir -p "$root/scripts/harness"
     harness_kit_shipped_paths "$kmf" | while IFS= read -r p; do
         srcfile="$src/$(_harness_kit_src_rel "$kmf" "$p")"
+        # An INSTALLED tree is a valid source too (the smoke test installs
+        # from the repo's own scripts/, and so would a self-heal re-install),
+        # but src= policy entries live at their installed repo-relative
+        # homes there, not at the kit's template-relative path — fall back
+        # to the installed location under the source tree's parent.
+        [ -f "$srcfile" ] || srcfile="$src/../$p"
         if [ -f "$srcfile" ]; then
             mkdir -p "$root/$(dirname "$p")"
             cp "$srcfile" "$root/$p"

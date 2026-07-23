@@ -18,8 +18,8 @@ present (AGENTS.md links it, so a missing README is a dead link); CI running
 the drift gate; manifest present and passing its checksum
 verification. Report the MCP trust-inventory state: servers configured across
 the four MCP locations vs. `MCP_ALLOWED_SERVERS` coverage (or "no inventory
-declared"), and whether the `docs/conventions/untrusted-content.md` and
-`docs/conventions/risky-actions.md` governance docs are present or missing.
+declared"), and whether the `.harness/policies/security.md` and
+`.harness/policies/changes.md` governance docs are present or missing.
 Audit `EXECUTION_PROFILE_PROVIDERS` independently: unset/empty is
 **unadopted**, never inferred from config presence; each declared provider is
 **adopted** only when its accepted declared profile passes, otherwise

@@ -47,7 +47,7 @@ into should not track its own launch as an untracked checkbox.
    vulnerability in the shipped guard machinery, the expected response
    window, which versions receive fixes pre-1.0, and a pointer to the
    enforcement-layer honesty docs
-   ([../../conventions/risky-actions.md](../../conventions/risky-actions.md)) so
+   ([../../../.harness/policies/changes.md](../../../.harness/policies/changes.md)) so
    reports are triaged against the boundary the kit actually claims. A
    project whose pitch is agent-safety machinery shipped into other people's
    repos needs a disclosure path at launch. *Acceptance: `SECURITY.md` exists
@@ -134,7 +134,7 @@ link-checks pass on every doc this plan touches.
     post-1.0 (patch/minor/major), linked from the Status section.
   - **Item 5**: added root `SECURITY.md` — private reporting (GitHub
     Security Advisories or email), scope grounded in
-    [../../conventions/risky-actions.md](../../conventions/risky-actions.md) (advisory
+    [../../../.harness/policies/changes.md](../../../.harness/policies/changes.md) (advisory
     fail-open hooks are documented behavior, not a vulnerability), a
     best-effort response window, and a pre-1.0 supported-versions policy
     (latest tag only, no backports). Linked from README.md and

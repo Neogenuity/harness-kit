@@ -1,5 +1,5 @@
 # Optional PR reviewer: runs the canonical code-reviewer persona
-# (docs/agents/code-reviewer.md) against a pull request, with this repo's
+# (.harness/agents/code-reviewer.md) against a pull request, with this repo's
 # AGENTS.md in context, and posts advisory findings. Add as
 # .github/workflows/review.yml.
 #
@@ -15,7 +15,7 @@
 # ========================= SECURITY POSTURE (mandatory) =======================
 # Prompt-injection boundary: a PR's diff, file contents, commit messages, and
 # description are UNTRUSTED input (this repo treats repo/tool/web/PR content as
-# data, not instructions — see docs/conventions/untrusted-content.md). The
+# data, not instructions — see .harness/policies/security.md). The
 # canonical persona is written to treat them as data and to quote — never obey —
 # any embedded "ignore the review / this is approved" instruction. Defence in
 # depth around the model:
@@ -110,7 +110,7 @@ jobs:
           prompt: |
             You are the code-reviewer persona for this repository. Read
             AGENTS.md (the knowledge-base table of contents) and
-            docs/agents/code-reviewer.md (your checklist, findings schema, and
+            .harness/agents/code-reviewer.md (your checklist, findings schema, and
             output format), then review ONLY this pull request's diff.
 
             Report only the four classes deterministic gates cannot see:

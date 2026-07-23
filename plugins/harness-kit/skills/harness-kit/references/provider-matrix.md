@@ -322,7 +322,7 @@ ships.
   `.codex/` hooks and agents load only when the project is trusted. Agent
   definitions are TOML (`name`, `description`, `developer_instructions`
   required) — a markdown thin pointer won't load; write a small TOML whose
-  `developer_instructions` says "Read docs/agents/<name>.md and follow it."
+  `developer_instructions` says "Read .harness/agents/<name>.md and follow it."
   Project skills are discovered via `.agents/skills/`, so the `.agents`
   stubs cover Codex — don't generate `.codex/skills/`. Personal
   (user-level) skills load from `~/.agents/skills` (verified 2026-07-10) —

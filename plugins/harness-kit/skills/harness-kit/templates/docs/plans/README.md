@@ -46,7 +46,8 @@ from the file alone:
 | Decisions | Dated choices and their why |
 | Next action | The single next step a resuming session takes |
 
-Start a new plan by copying [`_template.md`](_template.md).
+Start a new plan by copying the repo's execution-plan template at
+[`.harness/templates/execution-plan.md`](../../.harness/templates/execution-plan.md).
 
 ## Honesty rule (why some paths are links and some are not)
 

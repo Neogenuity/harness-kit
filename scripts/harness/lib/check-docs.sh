@@ -47,6 +47,23 @@ done < <({ find "$ROOT" -name AGENTS.md \
            [ -d "$ROOT/docs" ] && find "$ROOT/docs" -name '*.md'; } 2>/dev/null | sort -u)
 
 
+# 4b. Machine contracts under .harness/schemas/ must at least be valid JSON —
+#     a schema that no longer parses silently stops describing anything, and
+#     nothing else executes these files. Deliberately shallow (jq empty, no
+#     instance validation): the schemas are documentation-grade contracts, and
+#     a fake deep gate would claim verification this repo doesn't run.
+#     jq-gated like the other JSON checks; no jq, no claim.
+if command -v jq >/dev/null 2>&1 && [ -d "$ROOT/.harness/schemas" ]; then
+    for _schema in "$ROOT"/.harness/schemas/*.json; do
+        [ -f "$_schema" ] || continue
+        if ! jq empty "$_schema" >/dev/null 2>&1; then
+            echo "ERROR: ${_schema#"$ROOT"/} is not valid JSON — a machine contract that cannot parse describes nothing; fix or remove it"
+            ERRORS=$((ERRORS + 1))
+        fi
+    done
+fi
+
+
 # 10c. Doctor: keep a verification-stamped reference (e.g. a provider/capability
 #      matrix) fresh. Watches PROVIDER_MATRIX_DOC (default
 #      references/provider-matrix.md; absent in most repos, so a no-op there).

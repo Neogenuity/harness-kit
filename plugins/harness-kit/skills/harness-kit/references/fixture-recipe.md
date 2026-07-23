@@ -109,8 +109,8 @@ the plans README from the template, seed one plan, and run the hook:
 ```bash
 mkdir -p docs/plans/active
 cp "$KIT"/docs/plans/README.md   docs/plans/
-cp "$KIT"/docs/plans/_template.md docs/plans/            # README links it
-cp "$KIT"/docs/plans/_template.md docs/plans/active/demo-plan.md
+cp "$KIT"/docs/templates/execution-plan.md .harness/templates/  # README links it
+cp "$KIT"/docs/templates/execution-plan.md docs/plans/active/demo-plan.md
 
 bash scripts/harness/hooks/session-context.sh
 # expect a line:  Active plans (docs/plans/active/): demo-plan

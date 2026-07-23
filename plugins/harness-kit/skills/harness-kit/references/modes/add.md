@@ -4,7 +4,7 @@
   the frontmatter description), link it from AGENTS.md, run
   `bash scripts/harness/sync`, run `check-harness`, commit
   canonical + stubs together.
-- **add-agent**: author `docs/agents/<name>.md` with `name`/`description`/
+- **add-agent**: author `.harness/agents/<name>.md` with `name`/`description`/
   `tools` frontmatter (the `description` is the routing signal), link from
   AGENTS.md, then run `bash scripts/harness/sync` — it GENERATES the
   provider stubs (`.claude/agents/`, `.cursor/agents/`, `.opencode/agents/` as

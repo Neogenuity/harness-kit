@@ -9,7 +9,7 @@ the human driving the session issues instructions.
 
 This doc covers hostile *inputs*. For hostile *outputs* — destructive
 commands, production writes, the safe-default posture — see
-`docs/conventions/risky-actions.md`.
+`.harness/policies/changes.md`.
 
 <!-- TAILOR: keep "The rule" and "Which layers hold" verbatim — they encode
      which provider layers actually enforce. When execution profiles are

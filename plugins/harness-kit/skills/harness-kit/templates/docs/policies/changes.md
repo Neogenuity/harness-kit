@@ -4,7 +4,7 @@ The dangerous *outputs* an agent can produce — history rewrites, bulk deletes,
 data-store drops, writes to production — need a policy that says which layer
 stops each one, and admits honestly which layers only warn. For hostile
 *inputs* (prompt injection, untrusted clones) see
-`docs/conventions/untrusted-content.md`.
+`.harness/policies/security.md`.
 
 <!-- TAILOR: set the "Default posture" values to your real defaults and the
      "Production environments" list to your real prod surfaces. Replace the

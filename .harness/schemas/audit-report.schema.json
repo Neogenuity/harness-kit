@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "harness-kit/audit-report.schema.json",
+  "title": "audit-log.sh --format json report (version 1)",
+  "description": "The deterministic reducer's machine-readable report over .harness/var/log.jsonl, session Git trailers, and optional eval results. Stable top-level keys per the outcome-telemetry standard; nested rows may gain fields, so nested objects stay open.",
+  "type": "object",
+  "required": ["version", "log", "parser", "gate_outcomes_daily", "retry_episodes", "repeat_denies", "review_findings", "session_commits", "plan_cycles", "eval", "recommendations"],
+  "properties": {
+    "version": { "const": 1 },
+    "log": {
+      "type": "object",
+      "required": ["status"],
+      "properties": { "status": { "enum": ["available", "no_data"] } }
+    },
+    "parser": {
+      "type": "object",
+      "required": ["valid_v1", "valid_v2", "invalid_json", "invalid_schema", "unsupported_version", "unknown_event"],
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "gate_outcomes_daily": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["day", "name", "mode", "runs", "passes", "failures", "failure_rate", "duration_s"]
+      }
+    },
+    "retry_episodes": { "type": "array", "items": { "type": "object" } },
+    "repeat_denies": {
+      "type": "array",
+      "items": { "type": "object", "required": ["hook", "file", "count"] }
+    },
+    "review_findings": {
+      "type": "object",
+      "required": ["count"],
+      "properties": { "count": { "type": "integer", "minimum": 0 } }
+    },
+    "session_commits": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["available", "not_available"] },
+        "items": {
+          "type": "array",
+          "items": { "type": "object", "required": ["session_id", "commit"] }
+        },
+        "reason": { "type": ["string", "null"] }
+      }
+    },
+    "plan_cycles": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "const": "not_available" },
+        "reason": { "const": "no_machine_readable_lifecycle" }
+      }
+    },
+    "eval": {
+      "type": "object",
+      "required": ["status"],
+      "properties": { "status": { "enum": ["available", "invalid", "not_available"] } }
+    },
+    "recommendations": {
+      "type": "array",
+      "description": "Stable code order: repair_invalid_log_rows, address_gate_failures, reduce_gate_retries, engineer_repeat_denies, investigate_eval_regression",
+      "items": { "type": "object", "required": ["code"] }
+    }
+  }
+}

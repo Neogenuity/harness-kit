@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "harness-kit/telemetry-event.v2.schema.json",
+  "title": "Harness outcome-telemetry v2 event",
+  "description": "One line of .harness/var/log.jsonl carrying an explicit version: 2. The prose contract lives in the outcome-telemetry standard doc; this schema restates it as a machine contract. v1 records (exactly ts/hook/event/file/detail, no version key) are a separate shape and are NOT instances of this schema.",
+  "type": "object",
+  "required": ["version", "ts", "hook", "event", "file", "detail", "context", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 2 },
+    "ts": {
+      "type": "string",
+      "description": "UTC timestamp, ISO 8601 with Z suffix",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "hook": { "type": "string", "minLength": 1 },
+    "event": { "type": "string", "minLength": 1 },
+    "file": { "type": "string" },
+    "detail": { "type": "string" },
+    "context": {
+      "type": "object",
+      "description": "Optional, explicitly sourced attribution; {} is valid and means unknown. Consumers ignore unknown nested fields.",
+      "properties": {
+        "run_id": { "type": "string" },
+        "session_id": { "type": "string" },
+        "provider": { "type": "string" },
+        "plan_slug": { "type": "string" },
+        "provenance": {
+          "type": "object",
+          "description": "Maps every present attribution field to its source; absent when context is empty",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "description": "Event-specific payload; e.g. gate events carry name/mode/outcome/exit_code/duration_s"
+    }
+  }
+}

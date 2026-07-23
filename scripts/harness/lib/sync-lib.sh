@@ -121,7 +121,7 @@ for provider in $PROVIDERS; do
 done
 
 # --- Agent stubs -------------------------------------------------------------
-# Canonical agent personas (docs/agents/<slug>.md) carry name/description/tools
+# Canonical agent personas (.harness/agents/<slug>.md) carry name/description/tools
 # frontmatter; each declared AGENT_PROVIDER gets a generated pointer stub in its
 # own dialect — .codex uses TOML (*.toml), the rest Markdown (*.md). Codex's
 # custom-agent schema has no frontmatter-style tool-name list: its `tools` key is
@@ -135,7 +135,7 @@ done
 # AGENT_PROVIDERS), never inferred from directory presence: PROVIDERS cannot
 # serve (it models skill-stub dirs — excludes .codex, includes .agents), and
 # inferring from existing dirs would let a deleted agents dir pass unnoticed.
-CANONICAL_AGENTS="${CANONICAL_AGENTS:-docs/agents}"
+CANONICAL_AGENTS="${CANONICAL_AGENTS:-.harness/agents}"
 agent_providers_declared=0
 [ -n "${AGENT_PROVIDERS+x}" ] && agent_providers_declared=1
 
