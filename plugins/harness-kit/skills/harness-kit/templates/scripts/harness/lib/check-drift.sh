@@ -141,6 +141,31 @@ if [ -d "$ROOT/scripts/harness/hooks" ]; then
             echo "ERROR: scripts/harness/kit-manifest declares no shipped entries — an emptied or malformed ship contract disarms completeness check #9c exactly like a deleted one. Restore it via the kit's update mode, then re-pin"
             ERRORS=$((ERRORS + 1))
         fi
+        # 9e. Every kit-manifest entry must name a KNOWN layer. A typo'd layer
+        #     (e.g. 'mechanizm') silently unships its file: #9c derives its
+        #     expected set from mechanism|policy|optional-policy, so a mis-keyed
+        #     line drops out of completeness AND out of what update copies —
+        #     invisible until a consumer install. harness_validate_ship_contract
+        #     catches this at install/update time, but a maintainer who edits the
+        #     manifest and re-pins passes the #9a checksum; this is the CI-time
+        #     guard for the one ship-contract attribute a re-pin hides. (Path
+        #     shape is enforced at install and by guard-config; the layer keyword
+        #     is the attribute #9a cannot see through a re-pin.)
+        _bad_layers=$(awk '
+            /^[[:space:]]*#/ { next }
+            NF == 0 { next }
+            $1 !~ /^(mechanism|policy|optional-policy|content|retired)$/ {
+                printf "line %d: unknown layer %s\n", NR, $1
+            }' "$ROOT/scripts/harness/kit-manifest")
+        if [ -n "$_bad_layers" ]; then
+            while IFS= read -r _bl; do
+                [ -n "$_bl" ] || continue
+                echo "ERROR: scripts/harness/kit-manifest $_bl — a typo'd layer silently unships its file (drops from completeness #9c and from what update copies); known layers: mechanism policy optional-policy content retired"
+                ERRORS=$((ERRORS + 1))
+            done <<EOF
+$_bad_layers
+EOF
+        fi
         while IFS= read -r rel; do
             [ -n "$rel" ] || continue
             [ -f "$ROOT/$rel" ] || continue

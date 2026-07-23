@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Inferential reviewer for a completed diff AFTER verify.sh passes — checks misunderstood scope, over-engineering, cause-masking fixes, and missing/weak tests, the four classes deterministic gates can't see. Delegate before opening a PR or declaring a task done.
+description: Inferential reviewer for a completed diff AFTER the verify gate passes — checks misunderstood scope, over-engineering, cause-masking fixes, and missing/weak tests, the four classes deterministic gates can't see. Delegate before opening a PR or declaring a task done.
 tools: Read, Grep, Glob, Bash
 ---
 

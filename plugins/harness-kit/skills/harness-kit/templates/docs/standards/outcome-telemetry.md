@@ -73,7 +73,7 @@ its provenance key are both omitted:
 
 | Field | Value and source |
 | --- | --- |
-| `run_id` | At most 128 `A-Za-z0-9._/-` characters. Provenance is `verify` when generated for one `verify.sh` invocation or `env` when explicitly supplied to another producer. |
+| `run_id` | At most 128 `A-Za-z0-9._/-` characters. Provenance is `verify` when generated for one `verify` invocation or `env` when explicitly supplied to another producer. |
 | `session_id` | At most 256 characters with no control characters. Provenance is `env` when supplied explicitly, or `payload` when copied from a supported hook `.session_id`/`.conversation_id` field. |
 | `provider` | At most 64 `A-Za-z0-9._/-` characters. Provenance is `env`; no inference fallback exists. |
 | `plan_slug` | At most 128 `A-Za-z0-9._/-` characters. Provenance is `env`; no active-directory fallback exists. |
@@ -85,8 +85,10 @@ was explicitly supplied, omit `plan_slug`; do not choose one. Skill identity,
 token/cost data, and PR identity have no v0.17 producer and remain N/A. Do not
 copy provider exports into this log to fill them.
 
-Treat every identifier and path as local operational data. Keep `.harness/`
-git-ignored. Producers may record selected, bounded categorical labels or counts
+Treat every identifier and path as local operational data. Keep the
+runtime-state dir `.harness/var/` git-ignored (only `var/` — the rest of
+`.harness/` is committed repo-owned policy, personas, schemas, and evals).
+Producers may record selected, bounded categorical labels or counts
 whose meaning is documented. They never serialize raw hook payloads, prompts,
 commands or arguments, diagnostic/tool-output buffers, transcripts, environment
 contents, credentials, collector endpoints, authorization headers, or other
@@ -116,7 +118,7 @@ A `gate` event uses exactly these `data` fields:
 | `duration_s` | Nonnegative integer wall duration measured with portable Bash `SECONDS`. |
 
 Each gate actually run emits one event. A serial failure logs before
-`verify.sh` exits; the parent serializes completed parallel results; a full gate
+`verify` exits; the parent serializes completed parallel results; a full gate
 skipped under `--fast` is not fabricated as a run. Event writing records no gate
 command or output and cannot change reporting order, cleanup, or exit behavior.
 

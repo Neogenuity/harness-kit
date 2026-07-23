@@ -140,7 +140,10 @@ misfire on the router alone, but the reference carries the steps.
 
 ## Rules that hold in every mode
 
-- `docs/` is the single source of truth; never edit a generated stub by hand.
+- Canonical content lives in one home per zone — `docs/` (human docs),
+  `.harness/` (agent-operational policy, personas, schemas, evals), and
+  `.agents/skills/` (task workflows) — never in provider dirs; never edit a
+  generated stub by hand.
 - Every guard hook gets a regression test wired into `check-harness`.
 - Hooks fail open; denial is exit 2; advisory stop-hooks never hard-block.
 - `scripts/dev.sh`, where applicable, is tailored repo policy: pin and diff it,

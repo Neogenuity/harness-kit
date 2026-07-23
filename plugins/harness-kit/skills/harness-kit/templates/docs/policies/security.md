@@ -76,7 +76,7 @@ reviewed container/VM; never describe the advisory layer as a substitute.
 An MCP server's responses are untrusted content too, and a server can be
 repointed at different code behind an allowed name. The kit pins allowed
 servers in `scripts/harness/harness.conf` `MCP_ALLOWED_SERVERS` (one
-`<name> <expected-identity-substring>` per line); `check-harness.sh` flags a
+`<name> <expected-identity-substring>` per line); `check-harness` flags a
 configured server that is absent from the inventory or whose identity drifted
 from its pinned substring. Add a server's inventory line when you add the
 server — an unlisted server is either unaudited or drift.

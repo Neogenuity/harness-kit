@@ -29,9 +29,9 @@ nobody mistakes a warning for a wall:
   The kit wires no Cursor pre-edit hook (Cursor's generic `preToolUse` is
   pre-edit-capable but not yet wired — see the provider-matrix Cursor-hooks
   note), so these denials fire on Claude Code and Codex only — the CI
-  detection layer (`check-harness.sh` manifest integrity) is the backstop
+  detection layer (`check-harness` manifest integrity) is the backstop
   there.
-- **CI detection** — `check-harness.sh` manifest integrity + drift checks.
+- **CI detection** — `check-harness` manifest integrity + drift checks.
   Catches an edit that slipped past the other two, *after* the fact: prevents
   merge, not the action in the turn.
 

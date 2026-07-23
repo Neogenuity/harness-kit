@@ -17,5 +17,5 @@ still passes.
 ## Acceptance
 
 `check.sh` verifies: the doc exists with a `# ` heading and non-trivial prose;
-`AGENTS.md` contains a live markdown link to it; and `check-harness.sh` passes
+`AGENTS.md` contains a live markdown link to it; and `check-harness` passes
 (which link-checks every AGENTS.md reference).

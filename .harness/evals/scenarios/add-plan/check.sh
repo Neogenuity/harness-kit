@@ -6,5 +6,5 @@ grep -qiE '^Status:[[:space:]]*queued' "$plan" || { echo "no 'Status: queued' li
 for h in Objective Value Scope "Out of scope" Dependencies Verification Progress Decisions "Next action"; do
     grep -qE "^## ${h}[[:space:]]*$" "$plan" || { echo "missing section: ## $h"; exit 1; }
 done
-env HARNESS_NESTED_FIXTURE=1 bash scripts/harness/check-harness || { echo "check-harness.sh failed (dangling link?)"; exit 1; }
+env HARNESS_NESTED_FIXTURE=1 bash scripts/harness/check-harness || { echo "check-harness failed (dangling link?)"; exit 1; }
 echo "ok"; exit 0

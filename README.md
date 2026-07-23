@@ -16,12 +16,12 @@ runs, so teams do not accumulate conflicting vendor-specific configurations.
 
 ```mermaid
 flowchart LR
-    D["docs/<br/>one canonical knowledge base<br/>(architecture, conventions, skills)"]
+    D["docs/ · .harness/ · .agents/skills/<br/>canonical content<br/>(docs, policy, personas, skills)"]
     V["scripts/harness/verify<br/>executable definition of done"]
-    G["generated stubs<br/>.claude/ .cursor/ .opencode/ .agents/"]
+    G["generated stubs<br/>.claude/ .cursor/ .codex/ .opencode/"]
     H["portable hooks<br/>guards + lint feedback, any harness"]
-    CI["check-harness.sh (CI)<br/>drift is a build failure"]
-    D -->|sync-agent-skills.sh| G
+    CI["check-harness (CI)<br/>drift is a build failure"]
+    D -->|sync| G
     D --> V
     H --> CI
     G --> CI
@@ -42,14 +42,18 @@ everything else is the dogfood.
 
 ## What it installs into a target repo
 
-- **`docs/` as the single source of truth** — architecture, conventions,
-  skills, personas, indexed by an `AGENTS.md` table of contents (with a thin
-  `CLAUDE.md` importing it).
+- **One canonical home per knowledge zone** — human docs (architecture,
+  conventions) under `docs/`, agent-operational policy and personas under the
+  committed `.harness/`, task workflows (skills) under `.agents/skills/`, all
+  indexed by an `AGENTS.md` table of contents (with a thin `CLAUDE.md`
+  importing it). Provider dirs never hold original content.
 - **An executable definition of "done"** — `scripts/harness/verify` holds the
   ordered quality gates; docs point at it instead of listing commands.
-- **Generated provider stubs** — pointer stubs rendered into
-  `.claude/.cursor/.opencode/.agents/skills/` with frontmatter copied
-  verbatim, so activation triggers stay in sync everywhere.
+- **Generated provider stubs** — skill and persona pointer stubs rendered
+  *from* the canonical `.agents/skills/` and `.harness/agents/` *into* the
+  provider dirs that need them (`.claude/`, `.cursor/`, `.opencode/`, and
+  `.codex/` for personas — Codex reads `.agents/skills/` natively), frontmatter
+  copied verbatim so activation triggers stay in sync everywhere.
 - **Portable hooks** — plain bash, reading each harness's event JSON:
   post-edit lint feedback the agent self-corrects on, pre-read secret
   denial, pre-edit protection of the harness mechanism itself, an advisory
@@ -225,7 +229,7 @@ blocks), and content — described in
 - **Patch** — bug fixes and doc-only changes. No installed mechanism file's
   *behavior* changes, though a checksum may (a fixed typo, a corrected
   comment) — replaced wholesale like any mechanism file.
-- **Minor** — additive: a new hook, a new `verify.sh` gate, a new TAILOR
+- **Minor** — additive: a new hook, a new `verify` gate, a new TAILOR
   point, a new provider. Existing non-tailored mechanism files may be
   replaced with new capability, but nothing that was passing starts failing,
   and no file left untouched by the target repo changes meaning underneath

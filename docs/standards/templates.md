@@ -38,7 +38,7 @@ block or a `harness.conf` variable, don't tell users to fork the script.
 `SECRET_PATTERNS` in `harness.conf` drives the read guard; the provider
 deny-list templates (`providers/claude/settings.json`, opencode
 `permission.read`) must mirror it, and every addition gets a
-`test-guard-secrets.sh` case. `check-harness.sh` verifies the mirrors in
+`test-guard-secrets.sh` case. `check-harness` verifies the mirrors in
 installed repos — keep the templates consistent so fresh installs start
 consistent.
 

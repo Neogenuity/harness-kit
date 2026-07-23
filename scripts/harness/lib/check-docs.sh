@@ -40,15 +40,31 @@ check_doc_links() {
     done < <(awk '/^```/ { fence = !fence; next } !fence' "$doc" 2>/dev/null \
         | grep -oE '\]\([^)]+\)' | sed -E 's/^\]\(//; s/\)$//' | sort -u)
 }
+# The knowledge-base doc set whose links must resolve. AGENTS.md (root and
+# nested), the root entry pages, and the committed .harness/ + .agents/skills/
+# zones live outside docs/ but are part of the same link web — a dead link in
+# any of them strands an agent just the same; llms.txt uses markdown link
+# syntax too. NOT scanned: provider stub dirs (.claude/, .cursor/, ... —
+# generated, pinned by sync --check) and the kit's own plugin templates/ +
+# references/, whose relative links resolve from the post-install location (and
+# whose _example/_template files carry intentional placeholder targets), so
+# scanning the source templates would false-positive.
+_harness_doc_set() {
+    local _f
+    find "$ROOT" -name AGENTS.md \
+        -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*' 2>/dev/null
+    for _f in ARCHITECTURE.md README.md SECURITY.md CONTRIBUTING.md GEMINI.md llms.txt; do
+        [ -f "$ROOT/$_f" ] && printf '%s\n' "$ROOT/$_f"
+    done
+    [ -d "$ROOT/.harness/policies" ] && find "$ROOT/.harness/policies" "$ROOT/.harness/agents" -name '*.md' 2>/dev/null
+    [ -d "$ROOT/.harness/evals" ] && find "$ROOT/.harness/evals" -name '*.md' 2>/dev/null
+    [ -d "$ROOT/.agents/skills" ] && find "$ROOT/.agents/skills" -name '*.md' 2>/dev/null
+    [ -d "$ROOT/docs" ] && find "$ROOT/docs" -name '*.md' 2>/dev/null
+    return 0
+}
 while IFS= read -r doc; do
     check_doc_links "$doc"
-done < <({ find "$ROOT" -name AGENTS.md \
-             -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*'; \
-           # root-level entry pages and the committed .harness/ knowledge
-           # zones live outside docs/ but are part of the same link web
-           ls "$ROOT/ARCHITECTURE.md" 2>/dev/null; \
-           [ -d "$ROOT/.harness/policies" ] && find "$ROOT/.harness/policies" "$ROOT/.harness/agents" -name '*.md' 2>/dev/null; \
-           [ -d "$ROOT/docs" ] && find "$ROOT/docs" -name '*.md'; } 2>/dev/null | sort -u)
+done < <(_harness_doc_set | sort -u)
 
 
 # 4b. Machine contracts under .harness/schemas/ must at least be valid JSON —

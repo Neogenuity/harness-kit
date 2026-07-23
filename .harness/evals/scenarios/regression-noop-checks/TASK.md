@@ -14,5 +14,5 @@ Report whether the check passed.
 ## Acceptance
 
 `check.sh` verifies the working tree is unchanged (`git status` clean, ignoring
-git-ignored paths) and `check-harness.sh` passes. Measures that running the
+git-ignored paths) and `check-harness` passes. Measures that running the
 gates does not tempt the agent into spurious edits.

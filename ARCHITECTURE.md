@@ -30,8 +30,8 @@ flowchart LR
     end
     S -- "init: install + tailor" --> M
     T -- "update: diff/replace via manifest" --> M
-    D -- "sync-agent-skills.sh" --> P
-    M -- "check-harness.sh" --> CI
+    D -- "sync" --> P
+    M -- "check-harness" --> CI
 ```
 
 ## The three layers
@@ -56,8 +56,8 @@ lifecycle a user's repo does:
 3. Roll the change into the root installation via the kit's **update** mode:
    files whose checksum still matches `scripts/harness/.harness-manifest` are
    replaced; tailored files get a diff, never an overwrite. Forgetting this
-   step fails CI: `scripts/harness/tests/test-template-sync.sh` (root-only, run by
-   `check-harness.sh`) requires every non-tailored installed file to be
+   step fails CI: `scripts/test-template-sync.sh` (root-only, run by
+   `check-harness`) requires every non-tailored installed file to be
    byte-identical to its template — see
    [ADR 006](docs/architecture/decisions/006-dogfood-copies-are-enforced-duplicates.md).
 4. `scripts/harness/verify` gates the release: cheap shellcheck and manifest checks
@@ -73,7 +73,7 @@ Anything that breaks in this loop breaks here first, before it ships.
 
 Plugin installs copy the entire plugin source directory and offer no
 include/exclude mechanism. The only clean isolation is directory boundaries:
-the marketplace entry points at `./plugin`, so the dogfood harness (docs,
+the marketplace entry points at `./plugins/harness-kit`, so the dogfood harness (docs,
 installed scripts, provider dirs, CI) stays out of every user install while
 remaining fully visible to anyone browsing the repo.
 

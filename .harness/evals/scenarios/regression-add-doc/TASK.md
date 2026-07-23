@@ -12,6 +12,6 @@ on any topic. Then run `bash scripts/harness/check-harness` and confirm it passe
 
 ## Acceptance
 
-`check.sh` verifies the file exists with real prose and `check-harness.sh`
+`check.sh` verifies the file exists with real prose and `check-harness`
 passes. This is a trivially correct change: if a model ever fails it, suspect the
 harness (a guard wrongly blocking a plain doc write), not the task.

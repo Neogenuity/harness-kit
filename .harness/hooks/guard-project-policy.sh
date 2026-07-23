@@ -15,7 +15,7 @@
 # The enforcing gate belongs in tests or CI, not here.
 set -uo pipefail
 
-. "$(dirname "$0")/lib.sh" 2>/dev/null || exit 0
+. "$(dirname "$0")/../../scripts/harness/hooks/lib.sh" 2>/dev/null || exit 0
 
 hook_read_input
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

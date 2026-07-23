@@ -15,7 +15,7 @@ only the `plugins/harness-kit/` directory ships to users.
 - [AGENTS.md](AGENTS.md): table of contents of this repo's own knowledge base
 - [The harness pattern](plugins/harness-kit/skills/harness-kit/references/pattern.md): design principles, anatomy, the three layers, upgrade model
 - [Provider matrix](plugins/harness-kit/skills/harness-kit/references/provider-matrix.md): per-harness file locations, hook events, payloads — key facts carry verification stamps, with a Sources section to re-check against
-- [Architecture](docs/architecture/ARCHITECTURE.md): how this repo embodies the pattern
+- [Architecture](ARCHITECTURE.md): how this repo embodies the pattern
 - [Decision records](docs/architecture/decisions/README.md): why advisory stop-hooks, vendoring, generated stubs, verification stamps, manifest self-protection
 
 ## Usage

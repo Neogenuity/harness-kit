@@ -17,5 +17,5 @@ run `bash scripts/harness/sync` to generate the provider stubs, and
 ## Acceptance
 
 `check.sh` verifies: the canonical `SKILL.md` exists with `name` and
-`description` frontmatter; `AGENTS.md` links it; and `check-harness.sh` passes —
+`description` frontmatter; `AGENTS.md` links it; and `check-harness` passes —
 which fails on stub drift, so the skill must have been synced to every provider.

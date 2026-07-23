@@ -333,6 +333,23 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
           printf '%s  scripts/harness/lib/%s\n' "$(sha "$_lf")" "$(basename "$_lf")"
       done; } > "$W/scripts/harness/.harness-manifest"
     assert_ok_without "9d: a tailored-pinned retired path is resolved — no warning" "$W" "retired path"
+
+    # --- check #9e: a typo'd kit-manifest layer is flagged at CI time --------
+    # A mis-keyed layer silently unships its file (drops from #9c completeness
+    # and from what update copies). harness_validate_ship_contract catches it at
+    # install/update, but a maintainer who edits the manifest and re-pins passes
+    # the #9a checksum, so #9e is the CI-time guard. Fixture is otherwise green
+    # (pins current, self+checker declared) so the layer typo is the sole error.
+    W=$(new_fixture)
+    mkdir -p "$W/scripts/harness/hooks"
+    printf 'HOOK_WIRED_PROVIDERS=""\nAGENT_PROVIDERS=""\nEXECUTION_PROFILE_PROVIDERS=""\n' > "$W/scripts/harness/harness.conf"
+    write_kmf "$W" "policy scripts/harness/harness.conf" "mechanizm scripts/harness/typo.sh"
+    { printf '# harness-kit 9.9.9\n%s  scripts/harness/check-harness\n%s  scripts/harness/kit-manifest\n%s  scripts/harness/harness.conf\n' \
+        "$(sha "$W/scripts/harness/check-harness")" "$(sha "$W/scripts/harness/kit-manifest")" "$(sha "$W/scripts/harness/harness.conf")"
+      for _lf in "$W"/scripts/harness/lib/*.sh; do
+          printf '%s  scripts/harness/lib/%s\n' "$(sha "$_lf")" "$(basename "$_lf")"
+      done; } > "$W/scripts/harness/.harness-manifest"
+    assert_flags "9e: a typo'd kit-manifest layer is rejected" "$W" "unknown layer mechanizm"
 fi
 
 # --- check #9: a missing manifest is an ERROR once the harness is adopted ---
@@ -1299,6 +1316,57 @@ TOML
     assert_execution_json_weakening "8e: permissive OpenCode websearch is rejected" ".opencode" "opencode.json" \
         '.permission.websearch = "allow"' "permission.websearch = deny"
 fi
+
+# --- check #8g: capability-table (provider-caps) schema validation -----------
+# #8f validates HARNESS_PROVIDERS AGAINST the table; #8g validates the table's
+# own shape — a malformed row would derive the WRONG wiring silently. The
+# fixture ships provider-lib.sh + provider-caps so check-common resolves the
+# table and #8g runs. A bare valid table is check-harness-clean, so assert_flags
+# isolates the single injected malformation.
+new_caps_fixture() {                 # $1 = optional extra row appended to the table
+    local work
+    work=$(new_fixture)
+    cp "$SCRIPTS_DIR/harness/lib/provider-lib.sh" \
+       "$SCRIPTS_DIR/harness/lib/provider-caps" "$work/scripts/harness/lib/"
+    [ -n "${1:-}" ] && printf '%s\n' "$1" >> "$work/scripts/harness/lib/provider-caps"
+    printf '%s' "$work"
+}
+assert_ok "8g: a well-formed capability table is clean" "$(new_caps_fixture)"
+assert_flags "8g: a row with the wrong field count is rejected" \
+    "$(new_caps_fixture '.badrow      yes          md             .x/y.json:nested')" \
+    "expected 5 whitespace-separated fields"
+assert_flags "8g: an unknown skill_stubs enum is rejected" \
+    "$(new_caps_fixture '.badenum     maybe        md             none                           none')" \
+    "skill_stubs [maybe] not in {yes,no}"
+assert_flags "8g: a hook_config with an unknown shape is rejected" \
+    "$(new_caps_fixture '.badhook     yes          md             .x/y.json:sideways             none')" \
+    "not none or <safe-relative-path>:(nested|flat)"
+assert_flags "8g: a duplicate provider row is rejected" \
+    "$(new_caps_fixture '.claude      no           toml           none                           none')" \
+    "provider .claude appears more than once"
+# Safety boundary: sync-lib builds writable destinations from the provider
+# value and validators join config paths under the repo root, so #8g must
+# reject a reserved/unsafe provider and a traversal or absolute config path.
+assert_flags "8g: the reserved .agents provider is rejected" \
+    "$(new_caps_fixture '.agents      yes          md             none                           none')" \
+    "collides with the reserved/canonical dir"
+# Case-fold: macOS/Windows fold case, so .Agents resolves to the canonical
+# .agents tree; .harness is the canonical policy/persona home sync writes into.
+assert_flags "8g: a case-folded .Agents provider is rejected" \
+    "$(new_caps_fixture '.Agents      yes          md             none                           none')" \
+    "collides with the reserved/canonical dir .agents"
+assert_flags "8g: the reserved .harness provider is rejected" \
+    "$(new_caps_fixture '.harness     yes          md             none                           none')" \
+    "collides with the reserved/canonical dir .harness"
+assert_flags "8g: a provider with a path-traversal name is rejected" \
+    "$(new_caps_fixture '../outside   yes          md             none                           none')" \
+    "not a safe dotted directory component"
+assert_flags "8g: a hook_config with a traversal path is rejected" \
+    "$(new_caps_fixture '.x           yes          md             ../../outside.json:nested      none')" \
+    "hook_config [../../outside.json:nested] not none"
+assert_flags "8g: an exec_config with an absolute path is rejected" \
+    "$(new_caps_fixture '.z           yes          md             none                           /tmp/cfg:checker')" \
+    "exec_config [/tmp/cfg:checker] not none"
 
 # --- agent-stub coherence (sync --check, via check #3) ------------------------
 # check #3 delegates to `sync --check` (lib/sync-lib.sh), which validates agent

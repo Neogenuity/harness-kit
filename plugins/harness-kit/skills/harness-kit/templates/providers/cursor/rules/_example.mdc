@@ -11,4 +11,4 @@ Follow the conventions documented in `docs/standards/<topic>.md`.
 Key points:
 - <the 3-6 rules an agent most often gets wrong, summarized>
 - <keep this list short — the canonical doc carries the detail>
-- <check-harness.sh verifies the docs/ path above exists, keeping this rule honest>
+- <check-harness verifies the docs/ path above exists, keeping this rule honest>

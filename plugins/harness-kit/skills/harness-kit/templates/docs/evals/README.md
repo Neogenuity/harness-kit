@@ -1,6 +1,6 @@
 # Behavioral evals
 
-The harness coherence checks (`check-harness.sh`, the hook tests) prove the
+The harness coherence checks (`check-harness`, the hook tests) prove the
 harness is *internally consistent*. They do not prove it *works* — that a skill,
 convention doc, or guard actually changes what an agent does. This directory is
 where you measure behavior.

@@ -1,4 +1,4 @@
-# Standard consumer layout (queued umbrella — phases activate individually)
+# Standard consumer layout (cross-release umbrella — COMPLETE)
 
 **Status:** **COMPLETE (2026-07-23)** — all six phases shipped (v0.21.0–v0.25.0)
 and Phase 6 acceptance passed, clearing the launch-readiness public-flip gate.

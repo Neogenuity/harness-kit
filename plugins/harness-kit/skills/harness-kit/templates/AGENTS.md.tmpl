@@ -6,7 +6,7 @@ deeper sources.
 
 <!-- Monorepo subtrees may carry their own nested AGENTS.md (the hierarchical
      AGENTS.md standard — nearest file wins for files under that subtree).
-     check-harness.sh link-checks every AGENTS.md it finds. -->
+     check-harness link-checks every AGENTS.md it finds. -->
 
 ## Project
 
@@ -47,10 +47,11 @@ two architectural facts an agent must know before touching anything}}.
 table of contents is how every agent (and teammate) discovers it — a skill that
 isn't linked here is effectively invisible, even after its stubs are synced.
 
-The per-harness copies (`.claude/skills/`, `.cursor/skills/`,
-`.opencode/skills/`, `.agents/skills/` — Codex reads `.agents/skills/`) are
-**generated** pointer stubs. Edit the canonical file here, then run
-`bash scripts/harness/sync`; `check-harness.sh` (CI-gated) fails if
+`.agents/skills/` is the **canonical** home — the cross-vendor standard
+location Codex (and compatible tools) read natively, so it needs no stub. The
+per-harness copies (`.claude/skills/`, `.cursor/skills/`, `.opencode/skills/`)
+are **generated** pointer stubs. Edit the canonical file in `.agents/skills/`,
+then run `bash scripts/harness/sync`; `check-harness` (CI-gated) fails if
 stubs drift from the generator output.
 
 ## Agents (Role-Based Personas)

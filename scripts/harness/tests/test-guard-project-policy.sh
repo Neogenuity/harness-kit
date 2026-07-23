@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Regression tests for guard-project-policy.sh (the advisory stop hook). Pins
-# (a) the shipped skeleton stays a no-op / fails open, and (b) the clean-tree
-# skip PATTERN the commented VERIFY example documents: the fast gates run only
-# when the working tree is dirty, so a no-op stop pays no multi-second tax.
-# A spy verify.sh (marker outside the repo, so it never dirties the tree)
-# proves invocation vs skip.
+# (a) the shipped hook actually SOURCES lib.sh from its own relative path (and
+# still fails open when lib.sh is absent), and (b) the clean-tree skip PATTERN
+# the commented VERIFY example documents: the fast gates run only when the
+# working tree is dirty, so a no-op stop pays no multi-second tax. A spy verify
+# (marker outside the repo, so it never dirties the tree) proves invocation vs
+# skip.
 set -uo pipefail
 
 command -v git >/dev/null 2>&1 || { echo "SKIP: git not available"; exit 0; }
@@ -23,15 +24,43 @@ for c in "$(dirname "$0")/../../../.harness/hooks/guard-project-policy.sh" \
 done
 [ -n "$GPP" ] || { echo "FAIL: guard-project-policy.sh not found in either layout"; exit 1; }
 
-# --- (a) shipped skeleton: no-op / fail-open ---
+# --- (a) shipped hook sources lib.sh from ITS OWN relative path -------------
+# exit 0 alone is ambiguous: a WRONG source path ALSO fails open to exit 0 (the
+# silent-no-op class where .harness/hooks/guard-project-policy.sh sourced a
+# nonexistent .harness/hooks/lib.sh). A spy lib.sh that touches a marker AT
+# SOURCE time proves the hook's real source line found and ran it — no exit-0
+# assertion could distinguish a successful no-op from a fail-open miss.
 mkdir -p "$WORK/skel/scripts/harness/hooks" "$WORK/skel/.harness/hooks"
-cp "$HOOKS_DIR/lib.sh" "$WORK/skel/scripts/harness/hooks/lib.sh"
+export GPP_SOURCED_MARKER="$WORK/gpp-sourced"
+cat > "$WORK/skel/scripts/harness/hooks/lib.sh" <<'LIB'
+touch "${GPP_SOURCED_MARKER:?}"
+hook_read_input()     { :; }
+hook_advise_once()    { :; }
+hook_log()            { :; }
+hook_deny()           { :; }
+hook_affected_files() { :; }
+hook_command_string() { :; }
+LIB
 cp "$GPP" "$WORK/skel/.harness/hooks/guard-project-policy.sh"
 ( cd "$WORK/skel" && git init -q . && git config user.email t@e.invalid && git config user.name t \
     && git commit -q --allow-empty -m seed >/dev/null )
+rm -f "$GPP_SOURCED_MARKER"
 printf '{}' | "$WORK/skel/.harness/hooks/guard-project-policy.sh" >/dev/null 2>&1; rc=$?
-[ "$rc" = 0 ] && echo "ok:   shipped skeleton is a no-op (exit 0, empty payload)" \
-    || { echo "FAIL: skeleton should exit 0 (rc=$rc)"; fails=$((fails+1)); }
+if [ "$rc" = 0 ] && [ -f "$GPP_SOURCED_MARKER" ]; then
+    echo "ok:   shipped hook sources lib.sh from its own relative path (exit 0, marker present)"
+else
+    m=absent; [ -f "$GPP_SOURCED_MARKER" ] && m=present
+    echo "FAIL: shipped hook did not source lib.sh (rc=$rc, marker=$m) — a wrong lib.sh path fails open to a silent no-op"
+    fails=$((fails+1))
+fi
+# a2: lib.sh ABSENT -> the hook still fails open (exit 0, no marker).
+rm -f "$WORK/skel/scripts/harness/hooks/lib.sh" "$GPP_SOURCED_MARKER"
+printf '{}' | "$WORK/skel/.harness/hooks/guard-project-policy.sh" >/dev/null 2>&1; rc=$?
+if [ "$rc" = 0 ] && [ ! -f "$GPP_SOURCED_MARKER" ]; then
+    echo "ok:   missing lib.sh -> hook fails open (exit 0, no marker)"
+else
+    echo "FAIL: hook should fail open to exit 0 when lib.sh is absent (rc=$rc)"; fails=$((fails+1))
+fi
 
 # --- (b) clean-tree skip PATTERN with a spy verify.sh ---
 export SPY_MARKER="$WORK/verify-invoked"     # outside the repo -> never dirties it

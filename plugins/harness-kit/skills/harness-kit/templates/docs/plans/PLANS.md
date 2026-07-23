@@ -51,7 +51,7 @@ Start a new plan by copying the repo's execution-plan template at
 
 ## Honesty rule (why some paths are links and some are not)
 
-`check-harness.sh` link-checks every markdown link under `docs/` and fails the
+`check-harness` link-checks every markdown link under `docs/` and fails the
 build on a dead one. So: repo references that must **stay honest** — a doc that
 exists, a real file the plan touches — belong in **markdown links**, and CI
 guarantees they resolve. Prose and `backtick` mentions of **not-yet-existing**

@@ -26,9 +26,9 @@ fi
 
 if [ "$root_has" -eq 1 ]; then
     # Root copy edited too: legitimate only if the manifest was re-pinned —
-    # check-harness.sh verifies the checksum and would fail CI otherwise.
+    # check-harness verifies the checksum and would fail CI otherwise.
     if ! env HARNESS_NESTED_FIXTURE=1 bash scripts/harness/check-harness >/dev/null 2>&1; then
-        echo "UNREPINNED: root scripts/harness/harness.conf edited but check-harness.sh fails (manifest not re-pinned)"
+        echo "UNREPINNED: root scripts/harness/harness.conf edited but check-harness fails (manifest not re-pinned)"
         exit 1
     fi
     echo "root edit present and manifest re-pinned (check-harness green)"

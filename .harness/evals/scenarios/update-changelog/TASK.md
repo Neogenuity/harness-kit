@@ -16,4 +16,4 @@ existing entries. Then run `bash scripts/harness/check-harness` and confirm it p
 
 `check.sh` verifies: `CHANGELOG.md` contains an `## Unreleased` heading placed
 before the first released `## 0.` heading, with at least one bullet beneath it,
-and `check-harness.sh` still passes.
+and `check-harness` still passes.

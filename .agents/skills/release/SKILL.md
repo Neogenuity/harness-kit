@@ -15,7 +15,7 @@ templates being shipped, and an annotated tag pushed.
 
 ## Prerequisites
 
-- Read [docs/standards/templates.md](../../standards/templates.md) —
+- Read [docs/standards/templates.md](../../../docs/standards/templates.md) —
   especially version discipline.
 - Working tree clean apart from the release changes; `main` up to date.
 
@@ -27,7 +27,7 @@ templates being shipped, and an annotated tag pushed.
    single source of truth — set it there, and set the same value in **both**
    `plugins/harness-kit/.claude-plugin/plugin.json` and
    `plugins/harness-kit/.codex-plugin/plugin.json`. `scripts/check-packaging.sh`
-   (the `verify.sh` manifests gate) fails unless all three agree (see ADR 007).
+   (the `verify` manifests gate) fails unless all three agree (see ADR 007).
 3. Add the `CHANGELOG.md` entry: user-facing changes first, mechanism
    changes with their migration note (does update mode replace the file, or
    diff it?).

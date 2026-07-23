@@ -10,5 +10,5 @@ firstver=$(grep -nE '^## 0\.' "$cl" | head -1 | cut -d: -f1)
 # at least one non-blank, non-heading line between the two headings
 body=$(sed -n "$((unrel+1)),$((firstver-1))p" "$cl" | grep -vE '^\s*$' | grep -vE '^## ' || true)
 [ -n "$body" ] || { echo "Unreleased section has no content"; exit 1; }
-env HARNESS_NESTED_FIXTURE=1 bash scripts/harness/check-harness || { echo "check-harness.sh failed"; exit 1; }
+env HARNESS_NESTED_FIXTURE=1 bash scripts/harness/check-harness || { echo "check-harness failed"; exit 1; }
 echo "ok"; exit 0

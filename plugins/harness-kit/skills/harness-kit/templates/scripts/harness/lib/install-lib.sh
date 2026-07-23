@@ -14,8 +14,10 @@
 #
 # Source it — it defines functions and runs nothing:
 #   . scripts/harness/lib/install-lib.sh
-# Compatible with macOS (BSD) and Linux (GNU); the only hard dependency is a
-# sha256 tool (shasum or sha256sum), the same one check-harness.sh needs.
+# Compatible with macOS (BSD) and Linux (GNU). Hard dependencies: a sha256 tool
+# (shasum or sha256sum, the same one check-harness needs) and mktemp (every
+# copied file is staged with mktemp for a race-safe atomic write) — both are
+# reported by harness_missing_prereqs and hard-gated by bootstrap.
 
 # The shipped-file inventory lives in scripts/harness/kit-manifest — the declarative
 # SHIP CONTRACT (layer + repo-relative path per line, plus a retired section).
@@ -203,16 +205,19 @@ _harness_sha256() {
 # that is NOT on PATH: `jq` (WITHOUT IT EVERY GUARD HOOK FAILS OPEN — the whole
 # in-turn feedback layer is silently inert, leaving only the native permission
 # deny lists live), `git` (session-context banner + Codex hook Git-root
-# resolution), and a sha256 tool (`shasum`/`sha256sum`, the manifest-integrity
-# check). Empty output = all present. init/update run this as an early PREFLIGHT
+# resolution), `mktemp` (race-safe staging of every copied file — install cannot
+# proceed without it), and a sha256 tool (`shasum`/`sha256sum`, the
+# manifest-integrity check). Empty output = all present. jq/git are degrade-OK;
+# mktemp and sha256 are hard-gated by bootstrap. init/update run this as an early PREFLIGHT
 # and ask the user to ACKNOWLEDGE any gap before scaffolding a harness whose
 # feedback layer would be inert; check-harness.sh's doctor keeps WARNing on the
 # same condition afterward (check #10). Detection only — it does NOT change the
 # guards' deliberate fail-open posture (a missing dep must degrade, never block a
 # contributor's turn). No side effects, so a test pins it with no model in loop.
 harness_missing_prereqs() {
-    command -v jq  >/dev/null 2>&1 || printf 'jq\n'
-    command -v git >/dev/null 2>&1 || printf 'git\n'
+    command -v jq     >/dev/null 2>&1 || printf 'jq\n'
+    command -v git    >/dev/null 2>&1 || printf 'git\n'
+    command -v mktemp >/dev/null 2>&1 || printf 'mktemp\n'
     if ! command -v shasum >/dev/null 2>&1 && ! command -v sha256sum >/dev/null 2>&1; then
         printf 'sha256sum\n'
     fi
@@ -381,7 +386,7 @@ harness_conf_declare() {
 # reporting a false success. A silently-failed copy that still returned 0 was
 # the defect behind the "partial upgrade re-pinned as success" hazard.
 _harness_copy_shipped() {
-    local srcfile="$1" p="$2" root="$3" destdir tmp destphys rootphys anc ancphys
+    local srcfile="$1" p="$2" root="$3" destdir tmp destphys rootphys anc ancphys stagephys
     destdir="$root/$(dirname "$p")"
     # Never write through a symlink: a link at the destination — or a parent
     # directory that physically resolves outside the repo — would redirect a
@@ -424,9 +429,52 @@ _harness_copy_shipped() {
     # Same-directory mv is a rename(2), never a cross-filesystem copy. A
     # leftover stage file after a hard kill is caught loudly by completeness
     # check #9c (present-but-unpinned), which is the desired failure mode.
-    tmp="$destdir/.hk-stage.$$.$(basename "$p")"
+    #
+    # The stage path is created with mktemp (O_EXCL), never a predictable
+    # `.hk-stage.$$.<name>`: a guessable path let an attacker pre-plant a symlink
+    # at it, and `cp` — which follows symlinks — would then write the shipped
+    # bytes THROUGH the link into an arbitrary external file while the copy
+    # reported success. Exclusive creation cannot open a pre-existing symlink.
+    #
+    # BOUNDARY: concurrent write access to destdir during an install/update is
+    # OUTSIDE the threat model — a process that can write here can also write
+    # guard-config.sh (or any mechanism file) directly, so the guard is already
+    # defeated. Everything below is best-effort narrowing of the exploit surface,
+    # NOT a complete race defense: `cp`/`mv` reopen `$tmp` by name and portable
+    # shell has no open-with-O_NOFOLLOW, so a determined racer inside destdir can
+    # still (a) swap `$tmp` to a symlink between the post-copy check and `mv`,
+    # landing a symlink in the tree, or (b) symlink→cp→restore between the two
+    # checks, letting one external write slip through. We do NOT claim to catch
+    # those. What these checks DO buy: the predictable-name pre-plant (no race
+    # needed) is fully closed by mktemp's O_EXCL, the stage file is confirmed to
+    # resolve inside the repo (catching a destdir swapped before mktemp), and the
+    # common lingering-symlink case is detected and aborted rather than silently
+    # completed.
+    tmp=$(mktemp "$destdir/.hk-stage.XXXXXX") || {
+        printf 'ERROR: harness: failed to create a stage file in %s\n' "$destdir" >&2
+        return 1
+    }
+    stagephys="$(cd "$(dirname "$tmp")" 2>/dev/null && pwd -P)" || { rm -f "$tmp"; return 1; }
+    case "$stagephys/" in
+        "$rootphys"/*) ;;
+        *)
+            printf 'ERROR: harness: stage file %s resolves outside the repo root %s — refusing to write\n' "$tmp" "$rootphys" >&2
+            rm -f "$tmp"; return 1 ;;
+    esac
+    if [ -L "$tmp" ] || [ ! -f "$tmp" ]; then
+        printf 'ERROR: harness: stage file %s is not a regular file — refusing to write\n' "$tmp" >&2
+        rm -f "$tmp"
+        return 1
+    fi
     if ! cp "$srcfile" "$tmp"; then
         printf 'ERROR: harness: failed to copy %s -> %s\n' "$srcfile" "$root/$p" >&2
+        rm -f "$tmp"
+        return 1
+    fi
+    # A stage file that turned into a symlink (or vanished) between the check
+    # above and now was raced — abort so the copy is not moved into the tree.
+    if [ -L "$tmp" ] || [ ! -f "$tmp" ]; then
+        printf 'ERROR: harness: stage file %s changed to a non-regular file mid-copy — aborting (possible symlink race)\n' "$tmp" >&2
         rm -f "$tmp"
         return 1
     fi

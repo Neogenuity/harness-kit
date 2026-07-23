@@ -23,6 +23,17 @@ required
 - `docs/plans/completed/` — **shipped**: moved here (create the directory on
   first use) once the release is tagged and Verification is filled in with
   real evidence.
+- **Umbrella & superseded plans** also live at the `docs/plans/` root but are
+  NOT "queued" in the not-started sense — their **Status header is
+  authoritative**, not their directory. An *umbrella* is a cross-release tracker
+  (e.g. [standard-consumer-layout.md](standard-consumer-layout.md), spanning
+  v0.21.0–v0.25.0) whose per-phase records land in `completed/`; it is marked
+  COMPLETE in place once every phase has shipped, because its own path is what
+  the completed per-phase records link back to. A *superseded* plan (e.g.
+  [adopter-test-descope.md](adopter-test-descope.md), absorbed into an umbrella
+  as one of its phases) stays put as a pointer to its absorber. Both are
+  distinguished from a queued plan by their Status line, so a COMPLETE or
+  superseded file at the root is expected, not a contradiction.
 
 Move plans between states with `git mv` — never copy.
 
@@ -171,7 +182,8 @@ rows + strict Agent Skills validation + matrix stamping
 ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
 **Active:** [Launch readiness](active/launch-readiness.md) remains the parallel
-maintainer track; its demo, org move, and public flip are still open.
+maintainer track; its demo recording is still open, while the org move (→
+Neogenuity) and the public flip both shipped 2026-07-23.
 
 The mechanism queue is empty after v0.18.0. New work enters as a
 theme-named queued plan and takes a version only when activated. v0.18.0 was

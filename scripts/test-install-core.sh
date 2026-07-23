@@ -71,6 +71,14 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
         fail "preflight: sha256sum reported missing though a sha256 tool is on PATH"
     else
         pass "preflight: harness_missing_prereqs stays silent about a present sha256 tool"
+
+if command -v mktemp >/dev/null 2>&1; then
+    if emits_line "$present_missing" mktemp; then
+        fail "preflight: mktemp reported missing though it is on PATH"
+    else
+        pass "preflight: harness_missing_prereqs stays silent about a present mktemp"
+    fi
+fi
     fi
 fi
 EMPTYPATH=$(mktemp -d "$WORK/emptypath.XXXXXX") || exit 1
@@ -85,6 +93,11 @@ if emits_line "$empty_missing" git; then
     pass "preflight: harness_missing_prereqs names git when it is off PATH"
 else
     fail "preflight: git not reported missing when hidden from PATH"
+fi
+if emits_line "$empty_missing" mktemp; then
+    pass "preflight: harness_missing_prereqs names mktemp when it is off PATH"
+else
+    fail "preflight: mktemp not reported missing when hidden from PATH"
 fi
 if emits_line "$empty_missing" sha256sum; then
     pass "preflight: harness_missing_prereqs names sha256sum when it is off PATH"
@@ -256,7 +269,7 @@ done
 # open regardless; this gates only the install decision. Substring checks are
 # pipe-free `case` (the grep -q + pipefail SIGPIPE phantom-failure class).
 GATEBIN=$(mktemp -d "$WORK/gatebin.XXXXXX") || exit 1
-for tool in bash sh sed dirname mkdir cp mv chmod head tail find sort uniq awk tr rm touch cat grep basename ln shasum; do
+for tool in bash sh sed dirname mkdir cp mv chmod head tail find sort uniq awk tr rm touch cat grep basename ln mktemp shasum sha256sum; do
     p=$(command -v "$tool" 2>/dev/null) || continue
     ln -s "$p" "$GATEBIN/$tool"
 done
@@ -280,7 +293,7 @@ fi
 rm -rf "$T2"
 # No sha256 tool at all: refuse even with --allow-degraded.
 NOSHABIN=$(mktemp -d "$WORK/noshabin.XXXXXX") || exit 1
-for tool in bash sh sed dirname mkdir cp mv chmod head tail find sort uniq awk tr rm touch cat grep basename ln jq git; do
+for tool in bash sh sed dirname mkdir cp mv chmod head tail find sort uniq awk tr rm touch cat grep basename ln mktemp jq git; do
     p=$(command -v "$tool" 2>/dev/null) || continue
     ln -s "$p" "$NOSHABIN/$tool"
 done
@@ -292,6 +305,26 @@ if [ "$rc" -ne 0 ] && [ ! -d "$T2/scripts" ] && [ "$gate_named_sha" -eq 1 ]; the
 else
     fail "prereq gate: install proceeded without any sha256 tool (rc=$rc)" "$out"
 fi
+# mktemp missing is a hard refusal too: the installer stages every copied file
+# with mktemp, so nothing can be installed without it (--allow-degraded does not
+# cover it). Build a PATH with every base tool INCLUDING a sha256 tool, jq, and
+# git, but no mktemp; the fixture dirs themselves are created with the ambient
+# mktemp before PATH is narrowed for the bootstrap call.
+NOMKTEMPBIN=$(mktemp -d "$WORK/nomktempbin.XXXXXX") || exit 1
+for tool in bash sh sed dirname mkdir cp mv chmod head tail find sort uniq awk tr rm touch cat grep basename ln jq git shasum sha256sum; do
+    p=$(command -v "$tool" 2>/dev/null) || continue
+    ln -s "$p" "$NOMKTEMPBIN/$tool"
+done
+T2=$(mktemp -d "$WORK/gatetarget3.XXXXXX") || exit 1
+out=$(PATH="$NOMKTEMPBIN" "$BASH" "$SCRIPTS_DIR/harness/bootstrap" install --allow-degraded "$SCRIPTS_DIR" "$T2" 2>&1); rc=$?
+case "$out" in *mktemp*) gate_named_mktemp=1 ;; *) gate_named_mktemp=0 ;; esac
+if [ "$rc" -ne 0 ] && [ ! -d "$T2/scripts" ] && [ "$gate_named_mktemp" -eq 1 ]; then
+    pass "prereq gate: a missing mktemp is a hard refusal (--allow-degraded does not cover it)"
+else
+    fail "prereq gate: install proceeded without mktemp (rc=$rc)" "$out"
+fi
+rm -rf "$NOMKTEMPBIN" "$T2"
+
 # update --dry-run waives jq/git (a preview gates nothing at runtime) but must
 # keep the sha256 hard gate: _harness_sha256 with no tool prints NOTHING, so a
 # plan computed without it compares "" against every pin and reports phantom
@@ -327,4 +360,30 @@ else
 fi
 rm -rf "$R" "$OUTDIR" "$WORK/copysrc.sh"
 
+
+# --- (j) copy containment: a pre-planted stage symlink must not be followed ---
+# The stage path used to be a predictable '.hk-stage.$$.<basename>'; an attacker
+# who pre-planted a symlink there had `cp` write the shipped bytes THROUGH it to
+# an arbitrary external file while _harness_copy_shipped still returned success.
+# mktemp (O_EXCL) now creates the stage file, so a pre-existing symlink at the
+# old predictable path can never be opened. _harness_copy_shipped runs in THIS
+# shell (install-test-lib sources install-lib.sh), so its $$ equals ours — the
+# exact legacy vector is reproducible in-process: plant the symlink at
+# scripts/harness/lib/.hk-stage.$$.x.sh, point it at an external victim, and
+# assert the victim is untouched and a real regular file was installed. Pre-fix
+# this failed (victim overwritten with the shipped bytes, dest left a symlink).
+R=$(mktemp -d "$WORK/stagelink.XXXXXX") || exit 1
+VICT=$(mktemp -d "$WORK/stagevictim.XXXXXX") || exit 1
+mkdir -p "$R/scripts/harness/lib"
+printf 'ORIGINAL\n' > "$VICT/victim.txt"
+printf '#!/bin/sh\necho shipped\n' > "$WORK/stagesrc.sh"
+ln -s "$VICT/victim.txt" "$R/scripts/harness/lib/.hk-stage.$$.x.sh"
+out=$(_harness_copy_shipped "$WORK/stagesrc.sh" scripts/harness/lib/x.sh "$R" 2>&1); rc=$?
+victim_content=$(cat "$VICT/victim.txt")
+if [ "$victim_content" = "ORIGINAL" ] && [ -f "$R/scripts/harness/lib/x.sh" ] && [ ! -L "$R/scripts/harness/lib/x.sh" ]; then
+    pass "copy containment: a pre-planted stage symlink is not followed (external file untouched, real file installed)"
+else
+    fail "copy containment: stage symlink was followed or dest is not a regular file (rc=$rc, victim=$victim_content)" "$out"
+fi
+rm -rf "$R" "$VICT" "$WORK/stagesrc.sh"
 finish "install-mechanism core"

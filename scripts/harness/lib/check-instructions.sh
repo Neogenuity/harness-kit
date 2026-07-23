@@ -466,7 +466,7 @@ guard-config.sh PreToolUse @any
 format.sh PostToolUse @any
 guard-project-policy.sh Stop @any' ;;
         *)
-            echo "ERROR: HOOK_WIRED_PROVIDERS names '$prov' but check-harness.sh has no hook-tuple contract for it — only .claude, .cursor, .codex are hook-wired; remove it or extend the contract table"
+            echo "ERROR: HOOK_WIRED_PROVIDERS names '$prov' but check-harness has no hook-tuple contract for it — only .claude, .cursor, .codex are hook-wired; remove it or extend the contract table"
             ERRORS=$((ERRORS + 1)); return ;;
     esac
 
@@ -872,6 +872,67 @@ if [ -n "${HARNESS_PROVIDERS+x}" ] && command -v harness_caps_providers >/dev/nu
         esac
         hp_seen="$hp_seen$hp "
     done
+fi
+
+# 8g. The capability table itself (scripts/harness/lib/provider-caps) is the
+#     schema #8f and every derived wiring set trust. #8f validates the
+#     declaration AGAINST the table but assumes the table is well-formed; a
+#     malformed row here would silently derive the WRONG wiring
+#     (harness_caps_field reads a column that isn't there, or an unknown enum
+#     slips through), so validate the table's own shape: exactly 5 fields per
+#     row, a dotted unique provider, and the four closed enums / cell shapes.
+#     Pure awk — the table is bash-3.2 read/awk-parseable by contract (ADR 002),
+#     so this needs no jq. Gated on the table being resolvable.
+if command -v _provider_caps_file >/dev/null 2>&1; then
+    caps_file=$(_provider_caps_file)
+    if [ -f "$caps_file" ]; then
+        caps_errs=$(awk '
+            /^[[:space:]]*#/ { next }
+            NF == 0 { next }
+            {
+                rows++
+                if (NF != 5) {
+                    printf "row %d [%s]: expected 5 whitespace-separated fields, found %d\n", NR, $1, NF
+                    next
+                }
+                # Provider must be a SINGLE safe dotted directory component:
+                # sync-lib builds writable stub destinations directly from this
+                # value, so a name containing / or .. could target outside the
+                # provider dir. .agents is reserved as the canonical skills home
+                # and must never be a wired provider (sync would overwrite it).
+                prov = tolower($1)
+                if (prov == ".agents" || prov == ".harness" || prov == ".git" || prov == ".github")
+                    printf "row %d: provider %s collides with the reserved/canonical dir %s (case-insensitive) — sync writes generated stubs into $ROOT/<provider>/, so this would overwrite or corrupt it; a wired provider needs its own dir\n", NR, $1, prov
+                else if ($1 !~ /^\.[A-Za-z0-9_-]+$/)
+                    printf "row %d: provider [%s] is not a safe dotted directory component (want .<name>, no / or ..)\n", NR, $1
+                if (seen[$1]++)
+                    printf "row %d: provider %s appears more than once\n", NR, $1
+                if ($2 != "yes" && $2 != "no")
+                    printf "row %d [%s]: skill_stubs [%s] not in {yes,no}\n", NR, $1, $2
+                if ($3 != "md" && $3 != "toml" && $3 != "md-subagent" && $3 != "none")
+                    printf "row %d [%s]: agent_dialect [%s] not in {md,toml,md-subagent,none}\n", NR, $1, $3
+                # Config cells: none, or <safe-relative-path>:<tag>. The path
+                # (before the tag) must not be absolute (leading /) or contain
+                # .. — a validator joins it under the repo root. First char
+                # [^:/] rejects an absolute or empty path; /\.\./ rejects
+                # traversal.
+                if ($4 != "none" && ($4 !~ /^[^:\/][^:]*:(nested|flat)$/ || $4 ~ /\.\./))
+                    printf "row %d [%s]: hook_config [%s] not none or <safe-relative-path>:(nested|flat)\n", NR, $1, $4
+                if ($5 != "none" && ($5 !~ /^[^:\/][^:]*:[^:]+$/ || $5 ~ /\.\./))
+                    printf "row %d [%s]: exec_config [%s] not none or <safe-relative-path>:<checker>\n", NR, $1, $5
+            }
+            END { if (rows == 0) print "table declares no provider rows" }
+        ' "$caps_file")
+        if [ -n "$caps_errs" ]; then
+            while IFS= read -r ce; do
+                [ -n "$ce" ] || continue
+                echo "ERROR: malformed capability table (${caps_file##*/}) — $ce"
+                ERRORS=$((ERRORS + 1))
+            done <<EOF
+$caps_errs
+EOF
+        fi
+    fi
 fi
 
 check_trailer "instructions"

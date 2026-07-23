@@ -1,6 +1,6 @@
 # Skill-split parity — monolith vs router (v0.13.0)
 
-Fresh paired evidence for the [skill-split plan](../../plans/completed/v0.13.0-skill-split.md):
+Fresh paired evidence for the [skill-split plan](../../../docs/plans/completed/v0.13.0-skill-split.md):
 does splitting the plugin `SKILL.md` into a compact router +
 `references/modes/{init,audit,add,update}.md` regress correctness or wall-clock
 versus the monolith? **Recorded 2026-07-13.**

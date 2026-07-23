@@ -13,5 +13,5 @@ passes — either create that document or remove the dead link, your choice.
 
 ## Acceptance
 
-`check.sh` verifies `check-harness.sh` passes (no dangling links). A competent
+`check.sh` verifies `check-harness` passes (no dangling links). A competent
 agent repairs this reliably; a low rate points at the harness, not the task.

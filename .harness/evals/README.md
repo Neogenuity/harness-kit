@@ -1,6 +1,6 @@
 # Behavioral evals
 
-The coherence checks (`check-harness.sh`, the hook tests, the
+The coherence checks (`check-harness`, the hook tests, the
 `test-install-*.sh` suites) prove the harness is *internally consistent* —
 stubs synced, links live, checksums honest. They do **not** prove it *works*:
 that a skill, convention doc, or guard actually changes what an agent does.
@@ -104,7 +104,7 @@ this prose documents it>
 
 The grader is `check.sh`, run against the workspace **after** the agent
 finishes. It must be independent of any test the agent wrote during the task —
-grade the end state (files present, links live, `check-harness.sh` green,
+grade the end state (files present, links live, `check-harness` green,
 markers gone), never "the agent's own tests passed."
 
 Every task ships a **reference solution** (`reference/apply.sh`) that a

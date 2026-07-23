@@ -36,9 +36,10 @@ $2
 }
 
 # _gate_prereqs <allow_degraded> — the explicit-acknowledgement gate for
-# install/update. A missing sha256 tool is a HARD requirement (without it no
-# integrity pin can ever be generated — the manifest layer that catches shell
-# edits would be stillborn): always refuse. jq and git are DEGRADED-OK: the
+# install/update. A missing sha256 tool (no integrity pin can ever be generated —
+# the manifest layer that catches shell edits would be stillborn) or a missing
+# mktemp (the installer stages every copied file with it, so nothing can be
+# installed) is a HARD requirement: always refuse. jq and git are DEGRADED-OK: the
 # hooks deliberately fail open without jq (the whole in-turn feedback layer is
 # inert) and the session banner/Codex root resolution degrade without git —
 # real losses, but a repo can function. Installing that state must be a
@@ -51,6 +52,10 @@ _gate_prereqs() {
     [ -n "$missing" ] || return 0
     if _missing_has "$missing" sha256sum; then
         echo "ERROR: no sha256 tool (shasum/sha256sum) on PATH — integrity pins cannot be generated, so the manifest layer that catches unauthorized mechanism edits would never exist. Install one, then re-run (hard requirement; --allow-degraded does not cover it)." >&2
+        return 1
+    fi
+    if _missing_has "$missing" mktemp; then
+        echo "ERROR: no mktemp on PATH — the installer stages every copied file with mktemp for a race-safe atomic write, so no mechanism file can be installed without it. Install coreutils/BSD mktemp, then re-run (hard requirement; --allow-degraded does not cover it)." >&2
         return 1
     fi
     [ "$allow_degraded" = "1" ] && return 0
@@ -70,7 +75,7 @@ case "${1:-}" in
             printf 'missing prerequisite: %s\n' $missing
             exit 1
         fi
-        echo "ok: jq, git, and a sha256 tool are available"
+        echo "ok: jq, git, mktemp, and a sha256 tool are available"
         ;;
     install)
         shift

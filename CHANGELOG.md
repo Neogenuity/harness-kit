@@ -3,6 +3,93 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.27.0 — 2026-07-23
+
+A second principal-level architecture review (with three adversarial Codex
+passes over the diff) hardens the pre-1.0 layout: a symlink-follow in the
+installer's staging path is closed, the capability table and ship contract gain
+schema validation, documentation assurance finally covers every canonical
+knowledge zone, and a restructure-migration miss that had silently disabled the
+advisory stop-hook is fixed. The four skill playbooks are reconciled with
+ADR 011, and a scatter of post-restructure ownership/naming drift is swept.
+
+### Security
+
+- **Installer staging no longer follows a symlink.** `_harness_copy_shipped`
+  staged shipped bytes to a predictable `.hk-stage.$$.<name>` path and `cp`'d
+  through any symlink pre-planted there — an arbitrary external write that still
+  returned success. Staging now uses `mktemp` (O_EXCL), asserts the stage file
+  resolves inside the repo and is a regular file both before and after the copy,
+  and aborts on a mid-copy swap. The comment states the honest boundary:
+  concurrent write access to the destination directory during an install is out
+  of the threat model (it already defeats the guard), so these checks are
+  best-effort narrowing, not a complete race defense. `test-install-core.sh`
+  gains a stage-symlink regression.
+
+### Added
+
+- **Capability-table schema validation (check #8g).** `check-instructions`
+  validates `provider-caps` structurally: exactly five fields per row, a safe
+  dotted provider dir, closed enums, and `none`-or-`<safe-relative-path>:<tag>`
+  config cells. Provider names are matched case-insensitively against a reserved
+  set (`.agents`, `.harness`, `.git`, `.github`) because `sync` writes generated
+  stubs into `$ROOT/<provider>/` and any of those would overwrite a canonical or
+  system tree. A malformed table would otherwise derive the wrong wiring
+  silently. `test-check-harness.sh` gains nine cases.
+- **Ship-contract layer validation (check #9e).** `check-drift` rejects a
+  kit-manifest entry whose layer keyword is not one of
+  `mechanism|policy|optional-policy|content|retired` — a typo silently unships
+  the file (drops from completeness #9c and from what update copies) and, once
+  re-pinned, passes the integrity checksum, so this is the CI-time guard.
+- **`mktemp` is a named, hard-gated prerequisite.** The installer stages every
+  copied file with `mktemp`, so `harness_missing_prereqs` reports it and
+  `bootstrap` hard-refuses without it (like the sha256 tool; `--allow-degraded`
+  does not cover it). Preflight names it up front instead of failing at the
+  first copy.
+- **Doc-link checking covers every canonical zone.** `check-docs` now scans the
+  root entry pages (README, SECURITY, CONTRIBUTING, GEMINI, llms.txt),
+  `.agents/skills/`, and `.harness/evals/` in addition to the AGENTS.md /
+  ARCHITECTURE / `.harness/policies|agents` / `docs/` set. Plugin `templates/`
+  and `references/` stay excluded (their links resolve post-install). This
+  closes the gap that let launch-facing broken links pass verify.
+
+### Fixed
+
+- **The advisory stop-hook was a silent no-op.** Since the v0.23.0 move to
+  `.harness/hooks/`, this repo's installed `guard-project-policy.sh` sourced a
+  nonexistent `.harness/hooks/lib.sh` (the template had the correct
+  `../../scripts/harness/hooks/lib.sh`), so it failed open and never ran. Fixed,
+  and `test-guard-project-policy.sh` now pins the sourcing with a spy `lib.sh`
+  so the regression cannot recur.
+- **Broken launch-facing doc links.** `SECURITY.md` →
+  `.harness/policies/changes.md` (was the removed
+  `docs/conventions/risky-actions.md`); `llms.txt` → root `ARCHITECTURE.md`;
+  the `release` skill and `evals/parity/skill-split.md` relative-path depths
+  corrected. All are now caught by the expanded `check-docs`.
+- **Telemetry privacy guidance said keep all of `.harness/` git-ignored.**
+  Post-ADR-010 only `.harness/var/` is ignored; following the old text would
+  leave committed policy, personas, schemas, and evals uncommitted. Corrected in
+  `outcome-telemetry.md` and its template.
+
+### Changed
+
+- **Skill playbooks reconciled with ADR 011.** `init` no longer offers `.agents`
+  as a fifth provider; `audit` no longer flags a correct v0.25+ install for
+  leaving the derived `HOOK_WIRED_PROVIDERS`/`AGENT_PROVIDERS` unset; `add-hook`
+  documents `.harness/hooks/` as the repo-owned custom-hook home (not the
+  kit-owned mechanism tree) with the correct `lib.sh` sourcing path.
+- **Ownership and naming sweep.** Retired command names (`verify.sh`,
+  `check-harness.sh`, `sync-agent-skills.sh`) corrected to their extensionless
+  forms across living docs (the stable `"hook": "verify.sh"` telemetry value and
+  historical ADR/plan mentions are preserved); `README`, `ARCHITECTURE`, the
+  plugin `SKILL.md`, and `AGENTS.md.tmpl` corrected to the three-canonical-home
+  ownership model (skills in `.agents/skills/`, policy/personas in `.harness/`,
+  not `docs/`); the `ARCHITECTURE.md` marketplace source path fixed.
+- **Plan lifecycle models umbrella & superseded plans.** `PLANS.md` now states
+  that a completed cross-release umbrella or a superseded plan stays at the
+  `docs/plans/` root with its Status header authoritative, so a COMPLETE file
+  there is expected rather than a contradiction.
+
 ## 0.26.0 — 2026-07-23
 
 Pre-1.0 hardening from a principal-level architecture review (with a Codex

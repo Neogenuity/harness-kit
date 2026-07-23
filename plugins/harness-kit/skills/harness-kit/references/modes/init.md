@@ -10,9 +10,12 @@ installing the mechanism. The critical one is
 **`jq`**: without it every guard hook fails OPEN (see the provider matrix), so
 the whole in-turn feedback layer — secret-read denials, the format/lint loop,
 the advisory stop-hook — is silently inert and only the native permission deny
-lists stay live. `git` and a sha256 tool (`shasum`/`sha256sum`) are the other
-hard dependencies. If any are missing, get the user to ACKNOWLEDGE scaffolding a
-harness whose feedback layer is degraded (better: install the dependency first)
+lists stay live. `git`, `mktemp`, and a sha256 tool (`shasum`/`sha256sum`) are
+the other prerequisites: `mktemp` (race-safe staging of every installed file)
+and the sha256 tool (integrity pins) are **hard-gated** — the installer refuses
+without them, `--allow-degraded` does not cover them; `git` (session banner +
+Codex Git-root) merely degrades. If any are missing, get the user to ACKNOWLEDGE
+scaffolding a harness whose feedback layer is degraded (better: install the dependency first)
 — do not silently proceed. This is a name-and-acknowledge gate ONLY: it does
 **not** change the guards' deliberate fail-open posture, and `check-harness`'s
 doctor keeps WARNing on the same condition on every later run (check #10).
@@ -52,7 +55,11 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      proposes from the toolchain; slow static analysis stays in the full
      gates of `.harness/gates.conf`.
    - Which providers to wire beyond Claude Code + `AGENTS.md` (Cursor?
-     Codex? OpenCode? `.agents`? — cheap to include, default to all five).
+     Codex? OpenCode? — cheap to include, default to all four:
+     `HARNESS_PROVIDERS=".claude .cursor .codex .opencode"`). `.agents/skills/`
+     is the canonical skills home every provider reads or is stubbed from — it
+     is never itself a wired provider (`provider-caps` gives it no row and check
+     `#8f` rejects it in `HARNESS_PROVIDERS`).
    - **Execution-profile adoption is a separate explicit choice.** For each
      wired provider, offer the stable tuple from
      `templates/docs/standards/execution-profiles.md`, name that provider's

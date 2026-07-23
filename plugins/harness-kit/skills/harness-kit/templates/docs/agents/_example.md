@@ -32,7 +32,7 @@ agent-stub set (derived from `HARNESS_PROVIDERS` via the capability table) in
 that provider's dialect (`.claude/agents/<name>.md`,
 `.cursor/agents/<name>.md`, `.opencode/agents/<name>.md`, and
 `.codex/agents/<name>.toml`). Edit the frontmatter here, never a stub —
-`check-harness.sh` fails on any stub that drifts from the generator, is missing
+`check-harness` fails on any stub that drifts from the generator, is missing
 from a declared provider, or orphans a deleted canonical persona:
 
 ---

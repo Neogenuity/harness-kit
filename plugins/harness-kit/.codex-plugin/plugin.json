@@ -1,6 +1,6 @@
 {
   "name": "harness-kit",
-  "version": "0.26.0",
+  "version": "0.27.0",
   "description": "Engineer reliable coding-agent behavior with canonical context, in-turn feedback, layered guardrails, executable verification, and continuous improvement—portable across Claude Code, Codex, Cursor, and OpenCode.",
   "skills": "./skills/",
   "author": {

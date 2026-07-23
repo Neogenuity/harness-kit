@@ -19,4 +19,4 @@ Run `bash scripts/harness/check-harness` and confirm it passes.
 ## Acceptance
 
 `check.sh` verifies: the plan file exists with `Status: queued` and all nine
-required section headings, and `check-harness.sh` passes (no dangling links).
+required section headings, and `check-harness` passes (no dangling links).

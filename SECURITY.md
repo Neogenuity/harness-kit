@@ -20,14 +20,14 @@ open; a manifest/checksum check that can be spoofed to make a tampered file
 look pristine.
 
 **Before reporting, read
-[docs/conventions/risky-actions.md](docs/conventions/risky-actions.md).**
+[.harness/policies/changes.md](.harness/policies/changes.md).**
 It states, honestly, which layer stops what: the portable hooks are
 **advisory, file-edit scope only, and fail open by design** — they do not
 scan or block shell commands (no hook stops a `git push --force` or an
 `rm -rf`), and a determined agent can often reach the same effect another
 way. That is documented behavior, not a vulnerability. A report is most
 useful when it identifies a gap between what the kit *claims* (in
-`risky-actions.md`, `pattern.md`, or a hook's own deny message) and what it
+`changes.md`, `pattern.md`, or a hook's own deny message) and what it
 *actually* does — not a gap between advisory feedback and a hard boundary
 the kit never claimed to provide.
 
