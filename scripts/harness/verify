@@ -7,6 +7,8 @@
 #   bash scripts/harness/verify          # every gate
 #   bash scripts/harness/verify --fast   # fast gates only — cheap enough for
 #                                        # an agent stop-hook
+#   bash scripts/harness/verify --jobs 4 # cap concurrent parallel gates
+#   HARNESS_JOBS=4 bash scripts/harness/verify   # same cap, via environment
 #
 # MECHANISM/POLICY SPLIT (v0.23.0): this runner is kit-owned mechanism,
 # replaced on update like any other file; the REPO owns its gate list as
@@ -33,15 +35,39 @@ LOG_LIB_PATH="${HARNESS_LOG_LIB:-$ROOT/scripts/harness/lib/log-lib.sh}"
 # shellcheck source=/dev/null
 [ -f "$LOG_LIB_PATH" ] && . "$LOG_LIB_PATH" 2>/dev/null || true
 
+usage() {
+    echo "usage: bash scripts/harness/verify [--fast] [--jobs N]   (or HARNESS_JOBS=N)" >&2
+    exit 64
+}
+
 MODE=full
-case "${1:-}" in
-    "") ;;
-    --fast) MODE=fast ;;
-    *)
-        echo "usage: bash scripts/harness/verify [--fast]" >&2
-        exit 64
-        ;;
-esac
+JOBS="${HARNESS_JOBS:-}"
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --fast) MODE=fast ;;
+        --jobs) shift; [ -n "${1:-}" ] || usage; JOBS="$1" ;;
+        --jobs=*) JOBS="${1#--jobs=}" ;;
+        *) usage ;;
+    esac
+    shift
+done
+# Bounded concurrency (a conservative default): a repo with hundreds of test
+# files under a parallel-each glob must not fork hundreds of simultaneous
+# jobs. Default = the machine's core count (getconf works on macOS and
+# Linux; Git Bash may lack it — fall back to 8). --jobs/HARNESS_JOBS must be
+# a positive integer.
+if [ -n "$JOBS" ]; then
+    # Digit-only, then a numeric floor. The second check is not redundant:
+    # "00" is all digits but numerically zero (the throttle loop would try to
+    # reap job index -1), and a digit string past intmax makes `[ -lt ]`
+    # error mid-throttle. `[ -ge 1 ]` catches the first, and its own error on
+    # an unrepresentable integer routes to usage via the 2>/dev/null || arm.
+    case "$JOBS" in *[!0-9]*) usage ;; esac
+    [ "$JOBS" -ge 1 ] 2>/dev/null || usage
+else
+    JOBS=$(getconf _NPROCESSORS_ONLN 2>/dev/null) || JOBS=""
+    case "$JOBS" in ''|0|*[!0-9]*) JOBS=8 ;; esac
+fi
 
 if [ ! -f "$GATES_CONF" ]; then
     echo "FAIL: .harness/gates.conf is missing — it is the repo's gate declaration (the policy half of verify; this runner is the mechanism half). Restore it, or re-run the kit's init/update." >&2
@@ -110,13 +136,17 @@ full_gate() {
 
 # Bash 3.2-compatible parallel gate queue (macOS still ships Bash 3.2). Output
 # is buffered per gate so concurrent commands cannot interleave unreadably.
-# Declaration order controls reporting order, not execution order.
+# Declaration order controls reporting order, not execution order. Concurrency
+# is bounded to $JOBS without `wait -n` (not in Bash 3.2): when the queue is
+# full, spawning blocks on the OLDEST still-running job and records its status
+# for the barrier.
 PARALLEL_PIDS=()
 PARALLEL_LABELS=()
 PARALLEL_OUTPUTS=()
 PARALLEL_METAS=()
 PARALLEL_COMMANDS=()
 PARALLEL_ACTIVE=()
+PARALLEL_STATUS=()
 PARALLEL_DIR=""
 
 cleanup_parallel_gates() {
@@ -130,6 +160,36 @@ cleanup_parallel_gates() {
 }
 trap cleanup_parallel_gates EXIT
 
+# reap_parallel_gate <index> — wait for one active job and record its raw
+# wait status; the barrier prefers the meta file (written by the child) and
+# falls back to this recorded value when the child died before writing it.
+reap_parallel_gate() {
+    local index="$1" status
+    if wait "${PARALLEL_PIDS[$index]}"; then status=0; else status=$?; fi
+    # wait reaped this child; never retain a stale PID that could be reused
+    # and signaled by the EXIT cleanup while a later gate is still running.
+    PARALLEL_ACTIVE[$index]=0
+    PARALLEL_STATUS[$index]=$status
+}
+
+# throttle_parallel_gates — block until fewer than $JOBS jobs are running, by
+# reaping the oldest active one. Oldest-first keeps the logic Bash 3.2-safe
+# (no `wait -n`) and costs little: gates are declared roughly cheapest-first,
+# so the oldest running job is usually the next to finish anyway.
+throttle_parallel_gates() {
+    local index running oldest
+    while :; do
+        running=0; oldest=-1
+        for ((index = 0; index < ${#PARALLEL_PIDS[@]}; index++)); do
+            [ "${PARALLEL_ACTIVE[$index]:-0}" -eq 1 ] || continue
+            running=$((running + 1))
+            [ "$oldest" -lt 0 ] && oldest=$index
+        done
+        [ "$running" -lt "$JOBS" ] && return 0
+        reap_parallel_gate "$oldest"
+    done
+}
+
 parallel_full_gate() {
     [ "$MODE" = "fast" ] && return 0
     local label="$1" index out meta; shift
@@ -139,6 +199,7 @@ parallel_full_gate() {
             exit 1
         }
     fi
+    throttle_parallel_gates
     index=${#PARALLEL_PIDS[@]}
     out="$PARALLEL_DIR/$index.out"
     meta="$PARALLEL_DIR/$index.meta"
@@ -161,14 +222,12 @@ parallel_full_gate() {
 wait_parallel_gates() {
     local index status recorded_status duration outcome failed=0
     for ((index = 0; index < ${#PARALLEL_PIDS[@]}; index++)); do
-        if wait "${PARALLEL_PIDS[$index]}"; then
-            status=0
-        else
-            status=$?
+        # The throttle may have reaped this job already (its status is
+        # recorded); wait on the still-active rest here, in declaration order.
+        if [ "${PARALLEL_ACTIVE[$index]:-0}" -eq 1 ]; then
+            reap_parallel_gate "$index"
         fi
-        # wait reaped this child; never retain a stale PID that could be reused
-        # and signaled by the EXIT cleanup while a later gate is still running.
-        PARALLEL_ACTIVE[$index]=0
+        status=${PARALLEL_STATUS[$index]:-0}
         recorded_status=$status
         duration=0
         if [ -s "${PARALLEL_METAS[$index]}" ]; then
@@ -178,7 +237,7 @@ wait_parallel_gates() {
         case "$duration" in ''|*[!0-9]*) duration=0 ;; esac
         if [ "$recorded_status" -eq 0 ]; then outcome=pass; else outcome=fail; fi
         emit_gate_event "${PARALLEL_LABELS[$index]}" "$outcome" "$recorded_status" "$duration"
-        if [ "$status" -eq 0 ]; then
+        if [ "$recorded_status" -eq 0 ]; then
             echo "ok:   ${PARALLEL_LABELS[$index]}"
         else
             [ -s "${PARALLEL_OUTPUTS[$index]}" ] \
@@ -193,6 +252,7 @@ wait_parallel_gates() {
     PARALLEL_METAS=()
     PARALLEL_COMMANDS=()
     PARALLEL_ACTIVE=()
+    PARALLEL_STATUS=()
     [ -n "$PARALLEL_DIR" ] && rm -rf "$PARALLEL_DIR"
     PARALLEL_DIR=""
     return "$failed"
@@ -222,11 +282,19 @@ LINE
         full)     full_gate "$label" bash -c "$cmdstr" ;;
         parallel) parallel_full_gate "$label" bash -c "$cmdstr" ;;
         parallel-each)
-            # cmdstr is one or more globs, expanded from the repo root.
+            # cmdstr is one or more globs, expanded from the repo root. A
+            # glob matching NOTHING is a config error, never a silent skip:
+            # zero gates from a typo'd glob would fake a green verify.
+            _matched=0
             for _f in $cmdstr; do
                 [ -f "$_f" ] || continue
+                _matched=1
                 parallel_full_gate "$label: $(basename "$_f")" bash "$_f"
             done
+            if [ "$_matched" -eq 0 ]; then
+                echo "FAIL: parallel-each '$label' matched no files (globs: $cmdstr) — an empty gate would pass vacuously; fix the glob in .harness/gates.conf or remove the declaration" >&2
+                exit 1
+            fi
             ;;
         *)
             echo "FAIL: unknown gate kind '$kind' in .harness/gates.conf" >&2

@@ -47,11 +47,14 @@
 # test-install-recovery.sh (no preflight allocation of their own — their first
 # carve-out IS the fixture factory), and test-check-harness.sh have no earlier
 # site, so their fixture factory IS entered, on every case. The shadowed half
-# is not unguarded, it is guarded ELSEWHERE: check #5b is a static gate over
-# this same file set and rejects a carve-out that loses its `|| return 1`
-# (ERROR, and it runs before #6 launches these). Behavioral here, static
-# there — neither alone covers both, which is why #5b is ordered ahead of #6
-# rather than folded in.
+# is not unguarded, it is guarded ELSEWHERE for the shipped floor: check #5b
+# is a static gate over scripts/harness/tests/test-*.sh and rejects a
+# carve-out that loses its `|| return 1` (ERROR, and it runs before #6
+# launches these). The maintainer suites at scripts/test-*.sh sit OUTSIDE
+# #5b's scope (the v0.22.0 adopter descope), so for them this suite is the
+# only isolation gate of either kind. Behavioral here, static there — neither
+# alone covers both, which is why #5b is ordered ahead of #6 rather than
+# folded in.
 #
 # This test cannot fall for the bug it tests: its own base is allocated with the
 # guarded form BEFORE any shim exists, the shim is applied per-invocation via
@@ -100,7 +103,7 @@ fail() { echo "FAIL: $1"; fails=$((fails + 1)); }
 # grep -q` is banned here: grep -q's early exit + an inherited ignored
 # SIGPIPE + pipefail turns a MATCH into a phantom failure once $out (a full
 # sibling-suite transcript) outgrows the pipe buffer. See the check #9
-# completeness note in check-harness.sh.
+# completeness note in scripts/harness/lib/check-drift.sh.
 has() {
     case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac
 }
@@ -148,22 +151,35 @@ new_canary() {
     git -C "$CANARY" config user.name "fixture"
     printf 'baseline\n' > "$CANARY/README.md"
     # The canary must look enough like the host repo that a REPO-RELATIVE leak
-    # actually lands. A leak of the shape `( cd "$w" && bash scripts/X.sh )` with
-    # an empty $w runs `bash scripts/X.sh` in the CWD — here, the canary. Against
-    # a canary holding only README.md that dies "No such file or directory",
-    # perturbs nothing, and the case would PASS while the leak is live. Copy the
-    # mechanism in so the invocation resolves and its writes show up in porcelain
-    # (sync-agent-skills.sh regenerates stubs and rm -rf's a directory — that is
-    # the shape this covers). test-*.sh is deliberately NOT copied: a leaked
-    # check-harness.sh run must not re-enter this suite.
+    # actually lands. A leak of the shape `( cd "$w" && bash scripts/harness/X )`
+    # with an empty $w runs `bash scripts/harness/X` in the CWD — here, the
+    # canary. Against a canary holding only README.md that dies "No such file or
+    # directory", perturbs nothing, and the case would PASS while the leak is
+    # live. Copy the mechanism in so the invocation resolves and its writes show
+    # up in porcelain (`scripts/harness/sync` run from a bare mechanism copy
+    # writes .harness/adapters/*.md at rc 0 — measured, that is the shape this
+    # covers). Test entry points are deliberately NOT copied: a leaked
+    # check-harness run must not re-enter this suite or the shipped tests.
+    #
+    # The mechanism copy is ASSERTED below, not trusted, because this block went
+    # hollow once: v0.23.0 moved the mechanism from scripts/*.sh + scripts/hooks/
+    # to scripts/harness/, the old copy lines kept "succeeding" behind their
+    # [ -d ]/[ -f ] guards onto nothing, and every repo-relative leak became
+    # unobservable — the suite stayed green while testing an empty canary
+    # (caught by review 2026-07-23). A copy loop that can match zero files must
+    # end in a postcondition on the file it exists to provide.
     mkdir -p "$CANARY/scripts" || return 1
     for _m in "$SCRIPTS_DIR"/*.sh; do
         case "$(basename "$_m")" in test-*) continue ;; esac
         cp "$_m" "$CANARY/scripts/" 2>/dev/null || true
     done
-    [ -d "$SCRIPTS_DIR/hooks" ] && cp -R "$SCRIPTS_DIR/hooks" "$CANARY/scripts/" 2>/dev/null
-    rm -f "$CANARY"/scripts/harness/hooks/test-*.sh 2>/dev/null
-    [ -f "$SCRIPTS_DIR/harness.conf" ] && cp "$SCRIPTS_DIR/harness.conf" "$CANARY/scripts/" 2>/dev/null
+    cp -R "$SCRIPTS_DIR/harness" "$CANARY/scripts/" || return 1
+    rm -f "$CANARY"/scripts/harness/tests/test-*.sh 2>/dev/null
+    if [ ! -x "$CANARY/scripts/harness/sync" ] \
+            || [ ! -x "$CANARY/scripts/harness/check-harness" ]; then
+        echo "FAIL: canary is missing the installed mechanism — the copy above went hollow again"
+        return 1
+    fi
     git -C "$CANARY" add -A >/dev/null 2>&1 || return 1
     git -C "$CANARY" commit -qm baseline >/dev/null 2>&1 || return 1
     CANARY_HEAD=$(git -C "$CANARY" rev-parse HEAD 2>/dev/null) || return 1
@@ -216,12 +232,19 @@ run_case() {
     return 0
 }
 
-# run_mode <mode> — every sibling regression script, discovered by the same glob
-# check-harness.sh check #6 uses, so a newly added suite is covered on arrival.
+# run_mode <mode> — every scratch-allocating regression suite in this repo,
+# from both current homes so a newly added suite in either is covered on
+# arrival: the maintainer conformance suites at scripts/test-*.sh (check #5b's
+# static gate descoped them in v0.22.0, so this behavioral pass is their ONLY
+# isolation cover) and the shipped floor at scripts/harness/tests/test-*.sh
+# (the exact set check #6 executes; those get #5b static AND this behavioral).
+# scripts/hooks/test-*.sh is not globbed anymore — the hook tests moved into
+# scripts/harness/tests/ in v0.23.0, and a glob on the old home matches
+# nothing forever while [ -f ] skips make the loss silent.
 run_mode() {
     local mode="$1" script base ran=0 leaks=0
     MODE_CALLS=0
-    for script in "$SCRIPTS_DIR"/test-*.sh "$SCRIPTS_DIR"/hooks/test-*.sh; do
+    for script in "$SCRIPTS_DIR"/test-*.sh "$SCRIPTS_DIR"/harness/tests/test-*.sh; do
         [ -f "$script" ] || continue
         base=$(basename "$script")
         [ "$base" = "$SELF" ] && continue

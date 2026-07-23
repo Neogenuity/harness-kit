@@ -1300,17 +1300,25 @@ TOML
         '.permission.websearch = "allow"' "permission.websearch = deny"
 fi
 
-# --- agent-stub coherence (sync-agent-skills.sh --check, via check #3) --------
-# check #3 delegates to sync-agent-skills.sh --check, which now validates agent
-# stubs too (bidirectional set equality). Needs the generator present — new_fixture
-# copies only check-harness.sh — plus a canonical persona and its generated stubs.
-if [ -f "$SCRIPTS_DIR/sync-agent-skills.sh" ]; then
+# --- agent-stub coherence (sync --check, via check #3) ------------------------
+# check #3 delegates to `sync --check` (lib/sync-lib.sh), which validates agent
+# stubs too (bidirectional set equality). Needs the generator present —
+# new_fixture copies only the checker — plus a canonical persona and its
+# generated stubs. GATE ON THE CURRENT PATHS: this block was gated on the
+# retired pre-v0.23.0 scripts/sync-agent-skills.sh for two releases and
+# silently skipped every case (found by the 2026-07-23 pre-1.0 review) — an
+# existence gate must name a file that exists, or the block is dead coverage.
+if [ -f "$SCRIPTS_DIR/harness/sync" ] && [ -f "$SCRIPTS_DIR/harness/lib/sync-lib.sh" ]; then
     new_agents_fixture() {           # $1 optional AGENT_PROVIDERS value
         local work provs="${1:-.claude .cursor .codex .opencode}"
         work=$(new_fixture)
-        cp "$SCRIPTS_DIR/sync-agent-skills.sh" "$work/scripts/"; chmod +x "$work/scripts/harness/sync"
+        cp "$SCRIPTS_DIR/harness/sync" "$work/scripts/harness/"
+        chmod +x "$work/scripts/harness/sync"
+        cp "$SCRIPTS_DIR/harness/lib/sync-lib.sh" \
+           "$SCRIPTS_DIR/harness/lib/provider-lib.sh" \
+           "$SCRIPTS_DIR/harness/lib/provider-caps" "$work/scripts/harness/lib/"
         printf 'AGENT_PROVIDERS="%s"\n' "$provs" > "$work/scripts/harness/harness.conf"
-        mkdir -p "$work/docs/agents"
+        mkdir -p "$work/.harness/agents"
         cat > "$work/.harness/agents/code-reviewer.md" <<'MD'
 ---
 name: code-reviewer

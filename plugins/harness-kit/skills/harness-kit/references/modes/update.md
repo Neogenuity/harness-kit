@@ -26,7 +26,16 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    `harness_update_apply` from the NEW `install-lib.sh` runs this decision
    deterministically (`harness_update_decision` classifies each line
    replace-vs-diff against the NEW kit-manifest's layers); it is the same code
-   `test-install-update.sh` pins. Set
+   `test-install-update.sh` pins. Preview the full plan with zero mutation
+   first — `bash <new_src>/harness/bootstrap update --dry-run <new_src> <root>`
+   prints the same decision table (replace/add/keep/diff/remove/retire-keep/
+   migrate) from the same code path — and show it to the user before
+   applying. The real apply refuses on missing prerequisites unless
+   `--allow-degraded` acknowledges the degradation; the dry run waives the
+   jq/git acknowledgement (a preview gates nothing at runtime) but still
+   hard-requires a sha256 tool — the plan's replace-vs-diff decisions are
+   hash comparisons, so a preview computed without one would misreport every
+   pristine file as drifted. Set
    `HARNESS_ALLOW_MECHANISM_EDITS=1` for the session if `guard-config.sh` is
    wired — upgrading the mechanism is the intended use of that escape hatch.
 

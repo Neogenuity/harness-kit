@@ -10,27 +10,27 @@ continue to require only Bash, `jq`, Git, and a SHA-256 tool.
 
 ## Ground rules
 
-1. **`bash scripts/verify.sh` must pass** before any PR: shellcheck
+1. **`bash scripts/harness/verify` must pass** before any PR: shellcheck
    (warning severity) on every script, JSON-valid manifests, the template
    regression tests, and the harness drift gate.
 2. **Template changes ship with a test.** Anything under
    `plugins/harness-kit/skills/harness-kit/templates/scripts/` is code that gets
    installed into other people's repos — a new or changed guard hook gets a
    `test-<name>.sh` beside it. The advisory stop-hook will remind you; CI
-   will insist. See [docs/conventions/templates.md](docs/conventions/templates.md).
+   will insist. See [docs/standards/templates.md](docs/standards/templates.md).
 3. **Never hand-edit generated stubs** (`.claude/skills/`, `.cursor/skills/`,
-   `.opencode/skills/`, `.agents/skills/`). Edit the canonical file under
-   `docs/skills/`, run `bash scripts/sync-agent-skills.sh`, commit both.
+   `.opencode/skills/`). Edit the canonical file under `.agents/skills/`,
+   run `bash scripts/harness/sync`, commit both.
 4. **Provider-matrix facts need receipts.** A load-bearing claim you add or
    change in `provider-matrix.md` (a harness's file locations, hook events,
    payloads) carries a `verified YYYY-MM` stamp, cross-referenced to the
    file's Sources section — for the fact you touched, no stamp means no merge.
    Unverified facts are marked, not dressed up as confirmed.
-5. **Root `scripts/` is an installed copy**, pinned by
-   `scripts/.harness-manifest`. Improve the template first; roll it into the
-   installation via the kit's update mode and re-pin. Editing the installed
-   copy directly trips `guard-config.sh` and the CI manifest check — by
-   design.
+5. **Root `scripts/harness/` is an installed copy**, pinned by
+   `scripts/harness/.harness-manifest`. Improve the template first; roll it
+   into the installation via the kit's update mode and re-pin. Editing the
+   installed copy directly trips `guard-config.sh` and the CI manifest
+   check — by design.
 
 ## Working on this repo with a coding agent
 
@@ -41,7 +41,7 @@ back to the agent after each edit.
 
 ## Releases
 
-Maintainer-driven, via [docs/skills/release/SKILL.md](docs/skills/release/SKILL.md).
+Maintainer-driven, via [.agents/skills/release/SKILL.md](.agents/skills/release/SKILL.md).
 
 ## Security
 

@@ -5,8 +5,14 @@
 # command exposes the deterministic primitives it drives.
 #
 #   bootstrap preflight                 # name missing runtime prerequisites
-#   bootstrap install <src> <root>      # copy the ship contract's file set
-#   bootstrap update  <src> <root>      # replace/add/remove per the contract
+#   bootstrap install [--allow-degraded] <src> <root>
+#                                       # copy the ship contract's file set;
+#                                       # refuses on missing prerequisites
+#                                       # unless degradation is acknowledged
+#   bootstrap update  [--allow-degraded] [--dry-run] <src> <root>
+#                                       # replace/add/remove per the contract;
+#                                       # --dry-run prints the plan, mutates
+#                                       # nothing, needs no acknowledgement
 #   bootstrap repin   <root> <version>  # regenerate the integrity manifest
 #                                       # (preserves ' # tailored' markers)
 set -uo pipefail
@@ -14,7 +20,48 @@ set -uo pipefail
 # shellcheck source=/dev/null
 . "$(dirname "$0")/lib/install-lib.sh"
 
-usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
+
+# _missing_has <missing-output> <token> — exact-line membership, pipe-free
+# (grep -q + pipefail turns an ignored-SIGPIPE EPIPE into a phantom failure).
+_missing_has() {
+    case "
+$1
+" in
+        *"
+$2
+"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# _gate_prereqs <allow_degraded> — the explicit-acknowledgement gate for
+# install/update. A missing sha256 tool is a HARD requirement (without it no
+# integrity pin can ever be generated — the manifest layer that catches shell
+# edits would be stillborn): always refuse. jq and git are DEGRADED-OK: the
+# hooks deliberately fail open without jq (the whole in-turn feedback layer is
+# inert) and the session banner/Codex root resolution degrade without git —
+# real losses, but a repo can function. Installing that state must be a
+# choice, not a surprise: refuse unless --allow-degraded acknowledges it.
+# Runtime behavior is unchanged either way — installed guards keep failing
+# open; this gates only the INSTALL/UPDATE decision.
+_gate_prereqs() {
+    local allow_degraded="$1" missing
+    missing=$(harness_missing_prereqs)
+    [ -n "$missing" ] || return 0
+    if _missing_has "$missing" sha256sum; then
+        echo "ERROR: no sha256 tool (shasum/sha256sum) on PATH — integrity pins cannot be generated, so the manifest layer that catches unauthorized mechanism edits would never exist. Install one, then re-run (hard requirement; --allow-degraded does not cover it)." >&2
+        return 1
+    fi
+    [ "$allow_degraded" = "1" ] && return 0
+    echo "ERROR: missing prerequisites: $(printf '%s' "$missing" | tr '\n' ' ')" >&2
+    _missing_has "$missing" jq \
+        && echo "  - jq: EVERY guard hook fails open without it — the in-turn feedback layer (secret-read denials, config-edit denials, lint feedback) is silently inert; only the native permission deny lists stay live." >&2
+    _missing_has "$missing" git \
+        && echo "  - git: the session-context banner and Codex hook Git-root resolution degrade." >&2
+    echo "Install the missing tools, or re-run with --allow-degraded to explicitly accept installing a harness in this degraded state (check-harness's doctor will keep warning about it)." >&2
+    return 1
+}
 
 case "${1:-}" in
     preflight)
@@ -26,15 +73,54 @@ case "${1:-}" in
         echo "ok: jq, git, and a sha256 tool are available"
         ;;
     install)
-        [ -n "${2:-}" ] && [ -n "${3:-}" ] || { usage; exit 64; }
-        harness_install_mechanism "$2" "$3" && harness_append_gitignore "$3"
+        shift
+        allow_degraded=0
+        while :; do
+            case "${1:-}" in
+                --allow-degraded) allow_degraded=1; shift ;;
+                *) break ;;
+            esac
+        done
+        [ -n "${1:-}" ] && [ -n "${2:-}" ] || { usage; exit 64; }
+        _gate_prereqs "$allow_degraded" || exit 1
+        harness_install_mechanism "$1" "$2" && harness_append_gitignore "$2"
         ;;
     update)
-        [ -n "${2:-}" ] && [ -n "${3:-}" ] || { usage; exit 64; }
-        harness_update_apply "$2" "$3"
+        shift
+        allow_degraded=0
+        dry=""
+        while :; do
+            case "${1:-}" in
+                --allow-degraded) allow_degraded=1; shift ;;
+                --dry-run) dry="--dry-run"; shift ;;
+                *) break ;;
+            esac
+        done
+        [ -n "${1:-}" ] && [ -n "${2:-}" ] || { usage; exit 64; }
+        # A dry run mutates nothing, so it needs no --allow-degraded
+        # acknowledgement — jq/git gate the runtime guard layer, not the plan.
+        # sha256 is different: it is an INPUT to the plan. Without a sha tool
+        # _harness_sha256 prints nothing, every pristine file compares "" vs
+        # its pin, and the preview reports phantom diff/retire-keep at exit 0
+        # — the exact plan/apply divergence dry-run exists to prevent (apply
+        # hard-refuses in _gate_prereqs on the same missing tool).
+        if [ -z "$dry" ]; then
+            _gate_prereqs "$allow_degraded" || exit 1
+            harness_update_apply "$1" "$2"
+        else
+            if _missing_has "$(harness_missing_prereqs)" sha256sum; then
+                echo "ERROR: no sha256 tool (shasum/sha256sum) on PATH — a dry-run plan would misreport every pristine file as drifted. Install one, then re-run." >&2
+                exit 1
+            fi
+            harness_update_apply "$1" "$2" --dry-run
+        fi
         ;;
     repin)
         [ -n "${2:-}" ] && [ -n "${3:-}" ] || { usage; exit 64; }
+        if _missing_has "$(harness_missing_prereqs)" sha256sum; then
+            echo "ERROR: no sha256 tool (shasum/sha256sum) on PATH — a re-pin would write a manifest with no valid pins, disarming the integrity layer. Install one, then re-run." >&2
+            exit 1
+        fi
         harness_repin_manifest "$2" "$3" > "$2/scripts/harness/.hm.new" \
             && mv "$2/scripts/harness/.hm.new" "$2/scripts/harness/.harness-manifest"
         ;;

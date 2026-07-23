@@ -138,8 +138,11 @@ One soft dependency: the installed hooks use `jq` to parse event payloads
 and **fail open without it** — keep `jq` on PATH wherever agents run, or
 the guards guard nothing.
 
-**Supported platforms:** the installed hooks are bash + `jq`, and run on
-macOS, Linux, WSL, and Git Bash on Windows. There is no native-Windows hook
+**Supported platforms:** the installed hooks are bash + `jq`.
+**CI-tested:** macOS and Linux (Ubuntu) — every gate runs on both.
+**Best-effort:** WSL (treated as Linux-equivalent; no dedicated runner) and
+Git Bash on Windows (no CI coverage yet — bash-3.2-compatible by
+construction, but not machine-verified). There is no native-Windows hook
 execution — the kit's bash hooks assume a POSIX shell. Codex's
 `commandWindows` override and other provider-specific Windows notes are
 tracked per-provider in

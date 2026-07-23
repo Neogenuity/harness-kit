@@ -86,6 +86,110 @@ harness_kit_is_diff_only() {
     return 1
 }
 
+# _harness_path_sane <path>
+# Returns 0 when <path> is safe to join under a root with "$root/$path":
+# relative (no leading /) and free of '..' segments. Every kit-manifest path
+# and src=/dest= value must pass — these strings reach cp, mv, and rm.
+_harness_path_sane() {
+    case "$1" in
+        ""|/*) return 1 ;;
+        ..|../*|*/..|*/../*) return 1 ;;
+    esac
+    return 0
+}
+
+# harness_validate_ship_contract <kit_manifest_file> <src_scripts_dir>
+# Validates the SHIP CONTRACT before any filesystem operation trusts it.
+# install/update/persist run this FIRST, so a malformed, truncated, or hostile
+# kit-manifest is rejected before a single file is copied, replaced, or
+# removed — never discovered midway through a partial mutation. Checks:
+#   - every layer is known (mechanism|policy|optional-policy|content|retired):
+#     a typo'd layer name would otherwise silently unship its file;
+#   - every path and src=/dest= value is relative and '..'-free — these
+#     strings are joined under the repo root and reach cp/mv/rm verbatim;
+#   - no installed destination appears twice across the installing layers,
+#     content dest= values, and the retired layer (a duplicate silently
+#     last-write-wins; a shipped+retired pair would install then delete);
+#   - every mechanism/policy entry's template source EXISTS under
+#     <src_scripts_dir> (or at its installed home under the source tree's
+#     parent — the same fallback harness_install_mechanism uses): a missing
+#     declared source must abort loudly, never produce a partial install
+#     that still reports success. optional-policy (authored per repo, never
+#     copied) and content (the SKILL's authoring flow owns those sources)
+#     are exempt from the source-existence check.
+# Prints one "ERROR: kit-manifest line N: ..." per finding (all findings, not
+# just the first) and returns 1 if any; 0 on a clean contract.
+harness_validate_ship_contract() {
+    local kmf="$1" src="$2" layer path rest field val lineno=0 bad=0
+    local dests="" srcrel srcfile dup
+    if [ ! -f "$kmf" ]; then
+        echo "ERROR: kit-manifest: $kmf is missing — not a valid install source" >&2
+        return 1
+    fi
+    while read -r layer path rest; do
+        lineno=$((lineno + 1))
+        case "$layer" in ""|\#*) continue ;; esac
+        case "$layer" in
+            mechanism|policy|optional-policy|content|retired) ;;
+            *)
+                echo "ERROR: kit-manifest line $lineno: unknown layer '$layer' — a typo'd layer silently unships its file; known layers: mechanism policy optional-policy content retired" >&2
+                bad=1; continue ;;
+        esac
+        if [ -z "$path" ]; then
+            echo "ERROR: kit-manifest line $lineno: layer '$layer' entry has no path" >&2
+            bad=1; continue
+        fi
+        if ! _harness_path_sane "$path"; then
+            echo "ERROR: kit-manifest line $lineno: unsafe path '$path' — must be relative with no '..' segments (it is joined under the repo root and passed to cp/rm)" >&2
+            bad=1; continue
+        fi
+        srcrel=""
+        for field in $rest; do
+            case "$field" in
+                src=*|dest=*)
+                    val=${field#*=}
+                    if ! _harness_path_sane "$val"; then
+                        echo "ERROR: kit-manifest line $lineno: unsafe ${field%%=*}= value '$val' — must be relative with no '..' segments" >&2
+                        bad=1
+                    fi
+                    case "$field" in
+                        src=*) srcrel="$val" ;;
+                        dest=*) [ -n "$val" ] && dests="$dests$val
+" ;;
+                    esac ;;
+            esac
+        done
+        case "$layer" in
+            mechanism|policy|optional-policy) dests="$dests$path
+" ;;
+            retired) dests="$dests$path
+" ;;
+        esac
+        # Source existence: only the layers install actually copies.
+        case "$layer" in
+            mechanism|policy)
+                [ -n "$srcrel" ] || srcrel="${path#scripts/}"
+                srcfile="$src/$srcrel"
+                [ -f "$srcfile" ] || srcfile="$src/../$path"
+                if [ ! -f "$srcfile" ]; then
+                    echo "ERROR: kit-manifest line $lineno: declared $layer file '$path' has no source under $src — a missing declared source would otherwise produce a silent partial install" >&2
+                    bad=1
+                fi ;;
+        esac
+    done < "$kmf"
+    dup=$(printf '%s' "$dests" | sort | uniq -d)
+    if [ -n "$dup" ]; then
+        while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            echo "ERROR: kit-manifest: destination '$path' is declared more than once (duplicate entry, colliding content dest=, or a shipped+retired conflict) — one declaration per installed path" >&2
+        done <<KDUP
+$dup
+KDUP
+        bad=1
+    fi
+    return "$bad"
+}
+
 # _harness_sha256 <file...> — prints "<sha256>  <path>" lines, the manifest's
 # own line format. Mirrors check-harness.sh's sha256_of tool selection.
 _harness_sha256() {
@@ -277,19 +381,67 @@ harness_conf_declare() {
 # reporting a false success. A silently-failed copy that still returned 0 was
 # the defect behind the "partial upgrade re-pinned as success" hazard.
 _harness_copy_shipped() {
-    local srcfile="$1" p="$2" root="$3"
-    mkdir -p "$root/$(dirname "$p")" || return 1
-    if ! cp "$srcfile" "$root/$p"; then
+    local srcfile="$1" p="$2" root="$3" destdir tmp destphys rootphys anc ancphys
+    destdir="$root/$(dirname "$p")"
+    # Never write through a symlink: a link at the destination — or a parent
+    # directory that physically resolves outside the repo — would redirect a
+    # trusted manifest path somewhere the ship contract never named.
+    # Containment is checked against the ROOT's physical path, so a root that
+    # itself lives under a symlink (macOS TMPDIR: /var/folders -> /private/var)
+    # stays valid.
+    #
+    # The ancestor check runs BEFORE the mkdir, not only after: `mkdir -p`
+    # follows a symlinked ancestor, so checking only the finished destdir
+    # would have already created directories OUTSIDE the repo on the way to
+    # refusing the copy. Walk to the deepest EXISTING ancestor and pin its
+    # physical path first; the destphys check below then re-verifies the full
+    # path mkdir actually produced.
+    rootphys="$(cd "$root" 2>/dev/null && pwd -P)" || return 1
+    anc="$destdir"
+    while [ ! -d "$anc" ]; do anc="$(dirname "$anc")"; done
+    ancphys="$(cd "$anc" 2>/dev/null && pwd -P)" || return 1
+    case "$ancphys/" in
+        "$rootphys"/*) ;;
+        *)
+            printf 'ERROR: harness: destination ancestor %s resolves outside the repo root %s — refusing to create directories through it\n' "$anc" "$rootphys" >&2
+            return 1 ;;
+    esac
+    mkdir -p "$destdir" || return 1
+    if [ -L "$root/$p" ]; then
+        printf 'ERROR: harness: destination %s is a symlink — refusing to write through it\n' "$root/$p" >&2
+        return 1
+    fi
+    destphys="$(cd "$destdir" 2>/dev/null && pwd -P)" || return 1
+    case "$destphys/" in
+        "$rootphys"/*) ;;
+        *)
+            printf 'ERROR: harness: destination dir %s resolves outside the repo root %s — refusing to write\n' "$destdir" "$rootphys" >&2
+            return 1 ;;
+    esac
+    # Stage beside the destination, then rename: the tree never holds a
+    # half-written mechanism file (a torn cp would read as local drift on the
+    # next update — permanently kept — with no hint it was ever the kit's).
+    # Same-directory mv is a rename(2), never a cross-filesystem copy. A
+    # leftover stage file after a hard kill is caught loudly by completeness
+    # check #9c (present-but-unpinned), which is the desired failure mode.
+    tmp="$destdir/.hk-stage.$$.$(basename "$p")"
+    if ! cp "$srcfile" "$tmp"; then
         printf 'ERROR: harness: failed to copy %s -> %s\n' "$srcfile" "$root/$p" >&2
+        rm -f "$tmp"
         return 1
     fi
     case "$p" in
-        *.sh) chmod +x "$root/$p" || return 1 ;;
+        *.sh) chmod +x "$tmp" || { rm -f "$tmp"; return 1; } ;;
         scripts/harness/*/*) ;;
         scripts/harness/*)
             # extensionless command entries are executable too
-            case "$(head -c2 "$root/$p" 2>/dev/null)" in '#!') chmod +x "$root/$p" || return 1 ;; esac ;;
+            case "$(head -c2 "$tmp" 2>/dev/null)" in '#!') chmod +x "$tmp" || { rm -f "$tmp"; return 1; } ;; esac ;;
     esac
+    if ! mv "$tmp" "$root/$p"; then
+        printf 'ERROR: harness: failed to move staged copy into place at %s\n' "$root/$p" >&2
+        rm -f "$tmp"
+        return 1
+    fi
     return 0
 }
 
@@ -297,6 +449,10 @@ harness_install_mechanism() {
     local src="$1" root="$2" kmf="$1/harness/kit-manifest" p srcfile
     local failed=0
     [ -f "$kmf" ] || return 1
+    # Reject a bad ship contract BEFORE the first copy: unknown layers,
+    # unsafe paths, duplicate destinations, and missing declared sources all
+    # abort here instead of surfacing as a partial install.
+    harness_validate_ship_contract "$kmf" "$src" || return 1
     mkdir -p "$root/scripts/harness"
     # Process substitution (not `... | while`) so a copy failure inside the
     # loop reaches `failed` in THIS shell instead of dying in a pipe subshell.
@@ -310,6 +466,11 @@ harness_install_mechanism() {
         [ -f "$srcfile" ] || srcfile="$src/../$p"
         if [ -f "$srcfile" ]; then
             _harness_copy_shipped "$srcfile" "$p" "$root" || failed=1
+        else
+            # Validation guarantees the source existed moments ago; a miss
+            # here is a race or filesystem fault — loud, never a silent skip.
+            printf 'ERROR: harness: declared source for %s vanished during install\n' "$p" >&2
+            failed=1
         fi
     done < <(harness_kit_shipped_paths "$kmf")
     return "$failed"
@@ -361,6 +522,7 @@ harness_base_dir() {
 harness_persist_base() {
     local src="$1" root="$2" version="$3" kmf="$1/harness/kit-manifest" dest p srcfile rel
     [ -f "$kmf" ] || return 1
+    harness_validate_ship_contract "$kmf" "$src" || return 1
     dest=$(harness_base_dir "$root" "$version")
     mkdir -p "$dest"
     harness_kit_shipped_paths "$kmf" | while IFS= read -r p; do
@@ -422,7 +584,7 @@ harness_update_decision() {
     if [ "$have" = "$want" ]; then printf 'replace\n'; else printf 'diff\n'; fi
 }
 
-# harness_update_apply <src_scripts_dir> <repo_root>
+# harness_update_apply <src_scripts_dir> <repo_root> [--dry-run]
 # Runs the deterministic half of update mode against the NEW kit's
 # <src_scripts_dir> (whose kit-manifest defines the incoming inventory):
 #   1. For each pinned file, replace it with the new template IF
@@ -440,18 +602,37 @@ harness_update_decision() {
 # Prints one "replace|keep|remove|retire-keep|add <path>" line per file. Does
 # NOT re-pin the manifest — call harness_repin_manifest afterward (it pins the
 # newly-added files and drops the removed ones).
+#
+# --dry-run prints the SAME decision table without mutating anything: one code
+# path computes both (the plan can never diverge from what apply would do).
+# Dry-run output additionally distinguishes 'diff' (policy/tailored/drifted,
+# with a new template available to diff against) from plain 'keep', and
+# 'migrate' lines report a pending manifest-location migration.
 harness_update_apply() {
     local src="$1" root="$2" mf="$2/scripts/harness/.harness-manifest" kmf="$1/harness/kit-manifest"
     local line path decision srcfile p retired pinline want have
-    local failed=0
+    local failed=0 dry="" mf_read
+    case "${3:-}" in
+        --dry-run) dry=1 ;;
+        "") ;;
+        *) printf 'harness_update_apply: unknown mode %s\n' "$3" >&2; return 64 ;;
+    esac
+    # Reject a bad ship contract BEFORE any mutation — including the manifest
+    # migration below (validation errors surface identically in dry-run).
+    harness_validate_ship_contract "$kmf" "$src" || return 1
     # Pre-v0.23.0 installs keep the integrity manifest at the old flat
     # location; migrate it (content unchanged — the caller's repin rewrites
     # it at the new path afterward) so the replace loop sees the old pins.
+    mf_read="$mf"
     if [ ! -f "$mf" ] && [ -f "$root/scripts/.harness-manifest" ]; then
-        mkdir -p "$root/scripts/harness"
-        if ! mv "$root/scripts/.harness-manifest" "$mf"; then
-            printf 'ERROR: harness_update_apply: failed to migrate the integrity manifest\n' >&2
-            return 1
+        if [ -n "$dry" ]; then
+            mf_read="$root/scripts/.harness-manifest"
+        else
+            mkdir -p "$root/scripts/harness"
+            if ! mv "$root/scripts/.harness-manifest" "$mf"; then
+                printf 'ERROR: harness_update_apply: failed to migrate the integrity manifest\n' >&2
+                return 1
+            fi
         fi
         printf 'migrate scripts/harness/.harness-manifest\n'
     fi
@@ -460,8 +641,12 @@ harness_update_apply() {
     # the one destructive pass (retirement) deferred to LAST, the function then
     # returns non-zero BEFORE deleting anything — so a partial upgrade is never
     # re-pinned as a success. The old defect: a failed cp still printed
-    # 'replace' and the function returned 0 unconditionally.
-    if [ -f "$mf" ]; then
+    # 'replace' and the function returned 0 unconditionally. Replacement goes
+    # through _harness_copy_shipped (staged beside the destination, renamed
+    # into place), so an interrupted update can leave old files and new files
+    # but never a TORN file — a half-written mechanism file would read as
+    # local drift on every later update and be kept forever.
+    if [ -f "$mf_read" ]; then
         while IFS= read -r line; do
             case "$line" in \#*|"") continue ;; esac
             path=$(printf '%s\n' "$line" | awk '{print $2}')
@@ -471,26 +656,32 @@ harness_update_apply() {
             decision=$(harness_update_decision "$root" "$line" "$kmf")
             srcfile="$src/$(_harness_kit_src_rel "$kmf" "$path")"
             if [ "$decision" = "replace" ] && [ -f "$srcfile" ]; then
-                if cp "$srcfile" "$root/$path"; then
+                if [ -n "$dry" ]; then
+                    printf 'replace %s\n' "$path"
+                elif _harness_copy_shipped "$srcfile" "$path" "$root"; then
                     printf 'replace %s\n' "$path"
                 else
                     printf 'ERROR: harness_update_apply: failed to replace %s\n' "$path" >&2
                     failed=1
                 fi
+            elif [ -n "$dry" ] && [ "$decision" = "diff" ] && [ -f "$srcfile" ]; then
+                printf 'diff %s\n' "$path"
             else
                 printf 'keep %s\n' "$path"
             fi
-        done < "$mf"
+        done < "$mf_read"
     fi
     # --- Add newly-shipped files absent from the target (one pass covers
     # commands, libraries, hooks, and tests alike — the kit-manifest enumerates
     # them all). Process substitution (not `... | while`) keeps `failed` in
     # THIS shell; every copy is checked via _harness_copy_shipped.
-    mkdir -p "$root/scripts/harness"
+    [ -n "$dry" ] || mkdir -p "$root/scripts/harness"
     while IFS= read -r p; do
         srcfile="$src/$(_harness_kit_src_rel "$kmf" "$p")"
         if [ -f "$srcfile" ] && [ ! -f "$root/$p" ]; then
-            if _harness_copy_shipped "$srcfile" "$p" "$root"; then
+            if [ -n "$dry" ]; then
+                printf 'add %s\n' "$p"
+            elif _harness_copy_shipped "$srcfile" "$p" "$root"; then
                 printf 'add %s\n' "$p"
             else
                 failed=1
@@ -507,7 +698,7 @@ harness_update_apply() {
     for path in $retired; do
         [ -f "$root/$path" ] || continue
         pinline=""
-        [ -f "$mf" ] && pinline=$(awk -v p="$path" '$2 == p {print; exit}' "$mf")
+        [ -f "$mf_read" ] && pinline=$(awk -v p="$path" '$2 == p {print; exit}' "$mf_read")
         case "$pinline" in
             ""|*"# tailored"*)
                 # never pinned (unknown provenance) or a deliberate fork
@@ -517,11 +708,20 @@ harness_update_apply() {
         want=${pinline%% *}
         have=$(_harness_sha256 "$root/$path" | awk '{print $1}')
         if [ "$have" = "$want" ]; then
-            rm -f "$root/$path"
-            printf 'remove %s\n' "$path"
+            if [ -n "$dry" ]; then
+                printf 'remove %s\n' "$path"
+            elif rm -f "$root/$path"; then
+                printf 'remove %s\n' "$path"
+            else
+                # An unremovable retired file must not be reported as removed:
+                # the caller would re-pin a state the tree does not have.
+                printf 'ERROR: harness_update_apply: failed to remove retired %s\n' "$path" >&2
+                failed=1
+            fi
         else
             printf 'retire-keep %s\n' "$path"
         fi
     done
+    [ "$failed" -eq 0 ] || return 1
     return 0
 }

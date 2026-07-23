@@ -475,4 +475,84 @@ else
 fi
 rm -rf "$F" "$NEWKIT"
 
+# --- (o) --dry-run: the plan IS apply's decision table, with zero mutation ----
+# One code path computes both (the dry-run flag only suppresses the
+# mutations), so the plan can never diverge from what apply would do — the
+# check-vs-mutate divergence class. The dry run must report the pending
+# replace/add/remove and leave the tree byte-identical.
+F=$(make_fixture) || exit 1
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+printf '\n# UPGRADED\n' >> "$NEWKIT/scripts/harness/sync"
+printf '#!/usr/bin/env bash\necho new\n' > "$NEWKIT/scripts/harness/tests/test-brandnew.sh"
+printf 'mechanism scripts/harness/tests/test-brandnew.sh\n' >> "$NEWKIT/scripts/harness/kit-manifest"
+retire_in_newkit "$NEWKIT/scripts" "scripts/harness/tests/test-log.sh"
+sync_sha_before=$(sha_of "$F" "scripts/harness/sync")
+out=$(harness_update_apply "$NEWKIT/scripts" "$F" --dry-run); rc=$?
+dirty=$( cd "${F:?}" && git status --porcelain )
+if [ "$rc" -eq 0 ] \
+        && has_line "$out" "replace scripts/harness/sync" \
+        && has_line "$out" "add scripts/harness/tests/test-brandnew.sh" \
+        && has_line "$out" "remove scripts/harness/tests/test-log.sh"; then
+    pass "dry-run: reports the pending replace/add/remove plan"
+else
+    fail "dry-run: plan incomplete (rc=$rc)" "$out"
+fi
+if [ -z "$dirty" ] && [ "$(sha_of "$F" "scripts/harness/sync")" = "$sync_sha_before" ] \
+        && [ -f "$F/scripts/harness/tests/test-log.sh" ] \
+        && [ ! -f "$F/scripts/harness/tests/test-brandnew.sh" ]; then
+    pass "dry-run: mutates nothing (clean tree, pending retirement kept, no add)"
+else
+    fail "dry-run: the tree changed" "$dirty"
+fi
+rm -rf "$F" "$NEWKIT"
+
+# --- (p) staged replace: a read-only dest dir refuses cleanly, never tears ----
+# The pre-staging failure mode: `cp src dest` O_TRUNCs a writable FILE even
+# inside a read-only DIR, so a failing update could tear the destination in
+# place (a torn mechanism file reads as local drift forever after). Staging
+# beside the destination makes the same situation refuse up front: the stage
+# file cannot be created, the original stays byte-identical, no stage litter
+# is left, and the destructive retire pass never runs.
+F=$(make_fixture) || exit 1
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+printf '\n# UPGRADED\n' >> "$NEWKIT/scripts/harness/sync"
+retire_in_newkit "$NEWKIT/scripts" "scripts/harness/tests/test-log.sh"
+sync_sha_before=$(sha_of "$F" "scripts/harness/sync")
+chmod a-w "$F/scripts/harness"
+out=$(harness_update_apply "$NEWKIT/scripts" "$F" 2>&1); rc=$?
+chmod u+w "$F/scripts/harness"
+stage_litter=$(find "$F" -name '.hk-stage.*' 2>/dev/null)
+if [ "$rc" -ne 0 ] && [ "$(sha_of "$F" "scripts/harness/sync")" = "$sync_sha_before" ] \
+        && [ -z "$stage_litter" ] && [ -f "$F/scripts/harness/tests/test-log.sh" ]; then
+    pass "staged replace: read-only dest dir refuses non-zero; original intact, no litter, retire-last held"
+else
+    fail "staged replace: in-place write, stage litter, or the destructive pass ran (rc=$rc)" "$out"
+fi
+rm -rf "$F" "$NEWKIT"
+
+# --- (q) symlinked destination: replace refuses to write through a link -------
+# A link planted at a pinned mechanism path reads through to content that
+# still matches the pin, so the decision says 'replace'; the copy layer must
+# refuse (writing would land OUTSIDE the tree the ship contract names), the
+# link target must stay untouched, and the destructive retire pass must not
+# run on the failed upgrade.
+F=$(make_fixture) || exit 1
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+printf '\n# UPGRADED\n' >> "$NEWKIT/scripts/harness/sync"
+retire_in_newkit "$NEWKIT/scripts" "scripts/harness/tests/test-log.sh"
+LINKTARGET=$(mktemp -d "$WORK/linktarget.XXXXXX") || exit 1
+cp "$F/scripts/harness/sync" "$LINKTARGET/real-sync"
+victim_sha=$( cd "$LINKTARGET" && _harness_sha256 real-sync | awk '{print $1}' )
+rm "$F/scripts/harness/sync"
+ln -s "$LINKTARGET/real-sync" "$F/scripts/harness/sync"
+out=$(harness_update_apply "$NEWKIT/scripts" "$F" 2>&1); rc=$?
+after_sha=$( cd "$LINKTARGET" && _harness_sha256 real-sync | awk '{print $1}' )
+if [ "$rc" -ne 0 ] && [ "$after_sha" = "$victim_sha" ] && [ -L "$F/scripts/harness/sync" ] \
+        && [ -f "$F/scripts/harness/tests/test-log.sh" ]; then
+    pass "symlinked dest: replace refuses, the link target is untouched, retire-last held"
+else
+    fail "symlinked dest: wrote through a symlink or ran the destructive pass (rc=$rc)" "$out"
+fi
+rm -rf "$F" "$NEWKIT" "$LINKTARGET"
+
 finish "install-update"

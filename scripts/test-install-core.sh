@@ -221,4 +221,110 @@ else
 fi
 rm -rf "$F"
 
+# --- (g) ship-contract validation: a bad manifest aborts BEFORE any copy ------
+# harness_install_mechanism must reject unknown layers, traversal/absolute
+# paths, duplicate destinations, and missing declared sources up front. The
+# pre-validation failure mode was a silent PARTIAL install that still returned
+# success (a missing declared source was simply skipped); the target must now
+# stay completely untouched — validation runs before the first mkdir.
+for bad in \
+    'mechanism ../escape.sh' \
+    'mechanism /etc/absolute-path.sh' \
+    'mechanizm scripts/harness/typo-layer.sh' \
+    'mechanism scripts/harness/no-such-source.sh' \
+    'policy scripts/harness/x.conf src=../../outside' \
+    'mechanism scripts/harness/sync'; do
+    K=$(mktemp -d "$WORK/badkit.XXXXXX") || exit 1
+    cp -R "$SCRIPTS_DIR" "$K/scripts"
+    printf '%s\n' "$bad" >> "$K/scripts/harness/kit-manifest"
+    T2=$(mktemp -d "$WORK/badtarget.XXXXXX") || exit 1
+    out=$(harness_install_mechanism "$K/scripts" "$T2" 2>&1); rc=$?
+    if [ "$rc" -ne 0 ] && [ ! -d "$T2/scripts" ] && [ ! -e "$WORK/escape.sh" ]; then
+        pass "ship contract: '$bad' rejected before any copy"
+    else
+        fail "ship contract: '$bad' accepted, or files were written before the abort (rc=$rc)" "$out"
+    fi
+    rm -rf "$K" "$T2"
+done
+
+# --- (h) bootstrap prereq gate: a degraded install needs explicit opt-in -------
+# The SKILL's init flow asks the user to acknowledge missing prerequisites in
+# prose; the bootstrap CLI must enforce the same contract mechanically. jq/git
+# missing => refuse with the degradation spelled out, proceed only under
+# --allow-degraded; no sha256 tool => refuse ALWAYS (integrity pins would be
+# stillborn — --allow-degraded does not cover it). Runtime hooks keep failing
+# open regardless; this gates only the install decision. Substring checks are
+# pipe-free `case` (the grep -q + pipefail SIGPIPE phantom-failure class).
+GATEBIN=$(mktemp -d "$WORK/gatebin.XXXXXX") || exit 1
+for tool in bash sh sed dirname mkdir cp mv chmod head tail find sort uniq awk tr rm touch cat grep basename ln shasum; do
+    p=$(command -v "$tool" 2>/dev/null) || continue
+    ln -s "$p" "$GATEBIN/$tool"
+done
+T2=$(mktemp -d "$WORK/gatetarget.XXXXXX") || exit 1
+out=$(PATH="$GATEBIN" "$BASH" "$SCRIPTS_DIR/harness/bootstrap" install "$SCRIPTS_DIR" "$T2" 2>&1); rc=$?
+case "$out" in
+    *jq*"--allow-degraded"*|*"--allow-degraded"*jq*) gate_named_jq=1 ;;
+    *) gate_named_jq=0 ;;
+esac
+if [ "$rc" -ne 0 ] && [ ! -d "$T2/scripts" ] && [ "$gate_named_jq" -eq 1 ]; then
+    pass "prereq gate: install without jq/git refuses, names jq, and offers --allow-degraded"
+else
+    fail "prereq gate: a degraded install was not refused (rc=$rc)" "$out"
+fi
+out=$(PATH="$GATEBIN" "$BASH" "$SCRIPTS_DIR/harness/bootstrap" install --allow-degraded "$SCRIPTS_DIR" "$T2" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && [ -f "$T2/scripts/harness/bootstrap" ]; then
+    pass "prereq gate: --allow-degraded acknowledges and the install proceeds"
+else
+    fail "prereq gate: --allow-degraded install failed (rc=$rc)" "$out"
+fi
+rm -rf "$T2"
+# No sha256 tool at all: refuse even with --allow-degraded.
+NOSHABIN=$(mktemp -d "$WORK/noshabin.XXXXXX") || exit 1
+for tool in bash sh sed dirname mkdir cp mv chmod head tail find sort uniq awk tr rm touch cat grep basename ln jq git; do
+    p=$(command -v "$tool" 2>/dev/null) || continue
+    ln -s "$p" "$NOSHABIN/$tool"
+done
+T2=$(mktemp -d "$WORK/gatetarget2.XXXXXX") || exit 1
+out=$(PATH="$NOSHABIN" "$BASH" "$SCRIPTS_DIR/harness/bootstrap" install --allow-degraded "$SCRIPTS_DIR" "$T2" 2>&1); rc=$?
+case "$out" in *sha256*) gate_named_sha=1 ;; *) gate_named_sha=0 ;; esac
+if [ "$rc" -ne 0 ] && [ ! -d "$T2/scripts" ] && [ "$gate_named_sha" -eq 1 ]; then
+    pass "prereq gate: a missing sha256 tool is a hard refusal (--allow-degraded does not cover it)"
+else
+    fail "prereq gate: install proceeded without any sha256 tool (rc=$rc)" "$out"
+fi
+# update --dry-run waives jq/git (a preview gates nothing at runtime) but must
+# keep the sha256 hard gate: _harness_sha256 with no tool prints NOTHING, so a
+# plan computed without it compares "" against every pin and reports phantom
+# diff/retire-keep at exit 0 — a preview that lies is worse than none.
+F=$(make_fixture) || exit 1
+out=$(PATH="$NOSHABIN" "$BASH" "$SCRIPTS_DIR/harness/bootstrap" update --dry-run "$SCRIPTS_DIR" "$F" 2>&1); rc=$?
+case "$out" in *sha256*) dry_named_sha=1 ;; *) dry_named_sha=0 ;; esac
+case "$out" in *diff*|*retire-keep*) dry_planned=1 ;; *) dry_planned=0 ;; esac
+if [ "$rc" -ne 0 ] && [ "$dry_named_sha" -eq 1 ] && [ "$dry_planned" -eq 0 ]; then
+    pass "prereq gate: dry-run without a sha256 tool refuses instead of printing a phantom-drift plan"
+else
+    fail "prereq gate: dry-run planned without a sha256 tool (rc=$rc)" "$out"
+fi
+rm -rf "$F" "$T2" "$GATEBIN" "$NOSHABIN"
+
+# --- (i) copy containment: a symlinked parent must not GAIN directories -------
+# `mkdir -p` follows a symlinked ancestor: with scripts/harness -> $OUT and a
+# shipped path scripts/harness/lib/x.sh, the pre-fix code created $OUT/lib
+# OUTSIDE the repo before the physical-containment check refused the copy. The
+# deepest EXISTING ancestor's physical path must be checked before any
+# directory is created — [ ! -d "$OUT/lib" ] below is the regression pin (the
+# old code also returned non-zero; it just left the external directory behind).
+R=$(mktemp -d "$WORK/linkroot.XXXXXX") || exit 1
+OUTDIR=$(mktemp -d "$WORK/linkout.XXXXXX") || exit 1
+mkdir -p "$R/scripts"
+ln -s "$OUTDIR" "$R/scripts/harness"
+printf '#!/bin/sh\n' > "$WORK/copysrc.sh"
+out=$(_harness_copy_shipped "$WORK/copysrc.sh" scripts/harness/lib/x.sh "$R" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && [ ! -d "$OUTDIR/lib" ] && [ ! -e "$OUTDIR/lib/x.sh" ]; then
+    pass "copy containment: a symlinked parent is refused before any mkdir escapes the root"
+else
+    fail "copy containment: directories were created through a symlinked parent (rc=$rc)" "$out"
+fi
+rm -rf "$R" "$OUTDIR" "$WORK/copysrc.sh"
+
 finish "install-mechanism core"

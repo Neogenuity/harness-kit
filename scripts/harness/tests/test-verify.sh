@@ -46,6 +46,8 @@ make_fixture() {
 
 # A rendezvous proves the two jobs overlap: either job would fail if the other
 # had not started before it. Successful command output remains buffered/quiet.
+# Run with an explicit --jobs 4 so the overlap proof cannot deadlock under the
+# bounded default on a low-core host (the default job cap is the core count).
 cat > "$WORK/success.gates" <<'EOF'
 # fixture gate policy: one fast serial gate + a two-job rendezvous
 gate fast-probe touch "$TEST_WORK/fast"
@@ -55,7 +57,7 @@ EOF
 V_SUCCESS=$(make_fixture success "$WORK/success.gates")
 
 : > "$HARNESS_LOG_FILE"
-out=$(bash "$V_SUCCESS" 2>&1); rc=$?
+out=$(bash "$V_SUCCESS" --jobs 4 2>&1); rc=$?
 if [ "$rc" -eq 0 ] \
         && has "$out" 'ok:   first' \
         && has "$out" 'ok:   second' \
@@ -77,8 +79,8 @@ else
     fail "successful gate telemetry is missing, reordered, or malformed"
 fi
 
-stable_disabled=$(HARNESS_LOG=0 bash "$V_SUCCESS" 2>&1); disabled_rc=$?
-stable_unwritable=$(HARNESS_LOG_FILE=/dev/null/nope bash "$V_SUCCESS" 2>&1); unwritable_rc=$?
+stable_disabled=$(HARNESS_LOG=0 bash "$V_SUCCESS" --jobs 4 2>&1); disabled_rc=$?
+stable_unwritable=$(HARNESS_LOG_FILE=/dev/null/nope bash "$V_SUCCESS" --jobs 4 2>&1); unwritable_rc=$?
 if [ "$disabled_rc" -eq 0 ] && [ "$unwritable_rc" -eq 0 ] \
         && [ "$stable_disabled" = "$stable_unwritable" ]; then
     pass "telemetry failure leaves successful gate output and exit behavior unchanged"
@@ -92,7 +94,7 @@ for tool in bash date dirname mktemp rm sleep touch; do
 done
 rm -f "$WORK/no-jq.jsonl"
 missing_jq=$(PATH="$WORK/no-jq-bin" HARNESS_LOG_FILE="$WORK/no-jq.jsonl" \
-    "$BASH" "$V_SUCCESS" 2>&1); missing_jq_rc=$?
+    "$BASH" "$V_SUCCESS" --jobs 4 2>&1); missing_jq_rc=$?
 if [ "$missing_jq_rc" -eq 0 ] && [ "$missing_jq" = "$stable_disabled" ] \
         && [ ! -e "$WORK/no-jq.jsonl" ]; then
     pass "missing jq leaves verify output, exit behavior, and gate execution unchanged"
@@ -256,6 +258,86 @@ if [ "$rc" -eq 0 ] && [ "$(cat "$WORK/killed" 2>/dev/null)" = "222" ]; then
     pass "cleanup ignores PIDs that were already reaped"
 else
     fail "cleanup retained a stale PID or missed an active child"
+    printf '%s\n' "$out" | sed 's/^/        /'
+fi
+
+# --- bounded concurrency (--jobs / HARNESS_JOBS) ------------------------------
+# Under --jobs 1 the queue is strictly serial: the second gate must observe the
+# first's completion marker (spawning it blocks on reaping the first). The same
+# fixture also proves a throttle-reaped job still reports at the barrier in
+# declaration order with its real status.
+cat > "$WORK/serial.gates" <<'EOF'
+parallel one touch "$TEST_WORK/one.done"
+parallel two test -f "$TEST_WORK/one.done"
+EOF
+V_JOBS=$(make_fixture jobs "$WORK/serial.gates")
+rm -f "$WORK/one.done"
+out=$(bash "$V_JOBS" --jobs 1 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && has "$out" 'ok:   one' && has "$out" 'ok:   two'; then
+    pass "--jobs 1 serializes parallel gates (later gates see earlier completions)"
+else
+    fail "--jobs 1 did not serialize, or a throttle-reaped gate lost its status"
+    printf '%s\n' "$out" | sed 's/^/        /'
+fi
+rm -f "$WORK/one.done"
+out=$(HARNESS_JOBS=1 bash "$V_JOBS" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && has "$out" 'ok:   two'; then
+    pass "HARNESS_JOBS=1 applies the same cap via the environment"
+else
+    fail "HARNESS_JOBS=1 was not honored"
+    printf '%s\n' "$out" | sed 's/^/        /'
+fi
+
+# A throttle-reaped FAILURE must still be reported as a failure at the barrier
+# (the reap path records the status the barrier's wait can no longer observe).
+cat > "$WORK/serial-fail.gates" <<'EOF'
+parallel sf-broken exit 3
+parallel sf-later exit 0
+EOF
+V_JOBSFAIL=$(make_fixture jobsfail "$WORK/serial-fail.gates")
+out=$(bash "$V_JOBSFAIL" --jobs 1 2>&1); rc=$?
+if [ "$rc" -eq 1 ] && has "$out" 'FAIL: sf-broken' && has "$out" 'ok:   sf-later'; then
+    pass "--jobs 1 preserves a throttle-reaped failure and its peers' results"
+else
+    fail "a throttle-reaped failure was lost or misreported under --jobs 1 (rc=$rc)"
+    printf '%s\n' "$out" | sed 's/^/        /'
+fi
+
+# The barrier semantics survive throttling: a serial full gate after a queued
+# producer still waits for it under --jobs 1.
+rm -f "$WORK/ready"
+out=$(bash "$V_BARRIER" --jobs 1 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && has "$out" 'ok:   consumer'; then
+    pass "serial full gates still wait for queued dependencies under --jobs 1"
+else
+    fail "the dependency barrier broke under --jobs 1"
+    printf '%s\n' "$out" | sed 's/^/        /'
+fi
+
+# Invalid job counts are usage errors, not silently-adopted values. "00" is
+# all digits but numerically zero (a digit-only pattern alone admits it, and
+# the throttle loop then reaps job index -1); the 20-digit value is past
+# intmax, where `[ -lt ]` errors mid-throttle instead of comparing.
+for badjobs in 0 00 nope -2 99999999999999999999; do
+    out=$(bash "$V_JOBS" --jobs "$badjobs" 2>&1); rc=$?
+    if [ "$rc" -eq 64 ] && has "$out" 'usage:'; then
+        pass "--jobs $badjobs is rejected as a usage error"
+    else
+        fail "--jobs $badjobs was not rejected (rc=$rc)"
+    fi
+done
+
+# --- parallel-each with a glob matching nothing -------------------------------
+# A typo'd glob must FAIL loudly, never declare zero gates and pass vacuously.
+cat > "$WORK/ghost.gates" <<'EOF'
+parallel-each ghost checks-that-do-not-exist/*.sh
+EOF
+V_GHOST=$(make_fixture ghost "$WORK/ghost.gates")
+out=$(bash "$V_GHOST" 2>&1); rc=$?
+if [ "$rc" -eq 1 ] && has "$out" 'matched no files'; then
+    pass "a parallel-each glob matching nothing fails loudly instead of passing vacuously"
+else
+    fail "an empty parallel-each glob did not fail (rc=$rc)"
     printf '%s\n' "$out" | sed 's/^/        /'
 fi
 
