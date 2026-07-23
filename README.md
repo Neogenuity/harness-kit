@@ -4,8 +4,8 @@
 in-turn feedback, guardrails, executable verification, and continuous
 improvement across Claude Code, Cursor, Codex, and OpenCode.**
 
-[![ci](https://github.com/riotCode/harness-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/riotCode/harness-kit/actions/workflows/ci.yml)
-[![harness-check](https://github.com/riotCode/harness-kit/actions/workflows/harness-check.yml/badge.svg)](https://github.com/riotCode/harness-kit/actions/workflows/harness-check.yml)
+[![ci](https://github.com/Neogenuity/harness-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/Neogenuity/harness-kit/actions/workflows/ci.yml)
+[![harness-check](https://github.com/Neogenuity/harness-kit/actions/workflows/harness-check.yml/badge.svg)](https://github.com/Neogenuity/harness-kit/actions/workflows/harness-check.yml)
 
 A **harness** is the engineered environment around a coding agent: the context
 it receives, the skills it can activate, the feedback and guardrails it gets,
@@ -87,7 +87,7 @@ OpenCode sessions in that repo, and vice versa.
 `/plugin marketplace update`):
 
 ```
-/plugin marketplace add riotCode/harness-kit
+/plugin marketplace add Neogenuity/harness-kit
 /plugin install harness-kit@harness-kit
 ```
 
@@ -100,7 +100,7 @@ credential helper); background auto-update additionally needs a
 **Claude Code, as a personal skill** (no plugin infrastructure):
 
 ```bash
-git clone git@github.com:riotCode/harness-kit.git
+git clone git@github.com:Neogenuity/harness-kit.git
 cp -R harness-kit/plugins/harness-kit/skills/harness-kit ~/.claude/skills/harness-kit
 ```
 
@@ -109,7 +109,7 @@ cp -R harness-kit/plugins/harness-kit/skills/harness-kit ~/.claude/skills/harnes
 [build-plugins docs](https://learn.chatgpt.com/docs/build-plugins)):
 
 ```bash
-git clone git@github.com:riotCode/harness-kit.git
+git clone git@github.com:Neogenuity/harness-kit.git
 codex plugin marketplace add ./harness-kit      # registers the catalog
 codex plugin add harness-kit@harness-kit        # installs the plugin
 ```
@@ -125,7 +125,7 @@ personal skills in `~/.agents/skills` (verified 2026-07,
 [build-skills docs](https://learn.chatgpt.com/docs/build-skills)):
 
 ```bash
-git clone git@github.com:riotCode/harness-kit.git
+git clone git@github.com:Neogenuity/harness-kit.git
 cp -R harness-kit/plugins/harness-kit/skills/harness-kit ~/.agents/skills/harness-kit
 ```
 
@@ -188,7 +188,7 @@ checklist:
       [docs/plans/completed/v0.14.0-provider-wiring-assurance.md](docs/plans/completed/v0.14.0-provider-wiring-assurance.md)
 - [ ] Demo recording of `init` on a fresh repo — tracked in
       [docs/plans/active/launch-readiness.md](docs/plans/active/launch-readiness.md)
-- [ ] Move to the `neogenuity` org and update install commands — tracked in
+- [x] Moved to the `Neogenuity` org and updated install commands — tracked in
       [docs/plans/active/launch-readiness.md](docs/plans/active/launch-readiness.md)
 
 ## What 1.0 promises

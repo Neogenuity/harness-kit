@@ -1,7 +1,8 @@
 # Launch readiness
 
 Status: **active (partial)** — doc items 3–6 shipped in v0.13.0 (2026-07-13);
-items 1 (demo), 2 (org move), 7 (public flip) remain maintainer actions
+item 2 (org move) and item 7 (public flip) done 2026-07-23; only item 1
+(demo recording) remains
 
 ## Objective
 
@@ -97,6 +98,15 @@ link-checks pass on every doc this plan touches.
 
 ## Progress
 
+- 2026-07-23 — **Item 2 (org move) and item 7 (public flip) are done; only the
+  demo recording remains.** Item 2: the old `riotCode` owner string — its only
+  tracked occurrences were in README.md (the two CI badges, the `/plugin
+  marketplace add` snippet, and the three `git clone` snippets), none in
+  CHANGELOG — moved to `Neogenuity`, matching the live remote and the LICENSE
+  copyright; the marketplace and plugin manifests already carried
+  `chase@neogenuity.com`, and a `git grep riotCode` now returns nothing. Item 7:
+  the maintainer flipped the repository to public. Item 1 (demo recording) can
+  now be captured against the final post-restructure layout.
 - 2026-07-23 — **Item 7's gate is cleared: the standard-consumer-layout
   restructure is complete.** Its final phase (Phase 6) acceptance passed — a
   fresh-repo `bootstrap` end-to-end on a throwaway repo returned 13/13 (clean
