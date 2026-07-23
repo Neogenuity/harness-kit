@@ -25,7 +25,7 @@ decisions separate:
    scanner, update, and harness tests.
 4. Offer `docs/standards/outcome-telemetry.md` and its AGENTS link as
    self-contained content; never point an installed repo back into the plugin.
-5. Separately offer `docs/skills/doc-garden/SKILL.md`, its conditional AGENTS
+5. Separately offer `.agents/skills/doc-garden/SKILL.md`, its conditional AGENTS
    link, and regenerated stubs. Declining the skill is valid. Adoption grants no
    schedule, network probe, edit, commit, push, or PR authority.
 
@@ -109,7 +109,7 @@ beside the existing one — zero content duplication.
 When every supported harness reads `.agents/skills/` natively, flip the
 canonical location and retire the mirror step entirely:
 
-1. `git mv docs/skills .agents/skills` (history preserved).
+1. `git mv .agents/skills .agents/skills` (history preserved).
 2. Set `CANONICAL_SKILLS=".agents/skills"` and shrink `PROVIDERS` to the
    dirs still needing stubs (possibly none).
 3. Update AGENTS.md links; run the sync + check.

@@ -261,4 +261,4 @@ on each model or provider shift — remove pieces that are no longer
 load-bearing (<https://www.anthropic.com/engineering/harness-design-long-running-apps>,
 validated 2026-07-10).
 
-Each release cuts via [docs/skills/release/SKILL.md](../skills/release/SKILL.md).
+Each release cuts via [.agents/skills/release/SKILL.md](../../.agents/skills/release/SKILL.md).

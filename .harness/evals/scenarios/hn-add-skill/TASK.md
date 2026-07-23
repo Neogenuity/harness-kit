@@ -21,6 +21,6 @@ adding a skill. Do not commit.
 
 ## Acceptance
 
-Same as add-skill-sync: canonical `docs/skills/changelog/SKILL.md` with
+Same as add-skill-sync: canonical `.agents/skills/changelog/SKILL.md` with
 `name`/`description` frontmatter; AGENTS.md links it; `check-harness.sh`
 green (stubs synced to every provider, no drift).

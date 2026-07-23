@@ -1,6 +1,6 @@
 # Add mode — add a skill, agent, or hook
 
-- **add-skill**: author `docs/skills/<slug>/SKILL.md` (template above; sweat
+- **add-skill**: author `.agents/skills/<slug>/SKILL.md` (template above; sweat
   the frontmatter description), link it from AGENTS.md, run
   `bash scripts/harness/sync`, run `check-harness`, commit
   canonical + stubs together.

@@ -38,10 +38,10 @@ two architectural facts an agent must know before touching anything}}.
 
 <!-- one line per canonical skill -->
 <!-- APPLICATION REPOS ONLY: paired with the dev-runtime convention above. -->
-- [docs/skills/verify-live/SKILL.md](docs/skills/verify-live/SKILL.md) — reproduce and verify behavior against the seeded running app, targeted logs/traces, and an existing browser surface when available
+- [.agents/skills/verify-live/SKILL.md](.agents/skills/verify-live/SKILL.md) — reproduce and verify behavior against the seeded running app, targeted logs/traces, and an existing browser surface when available
 <!-- OPTIONAL DOC GARDEN: keep only after explicit adoption; then sync stubs. -->
-- [docs/skills/doc-garden/SKILL.md](docs/skills/doc-garden/SKILL.md) — audit local links, anchors, path references, and verification-date freshness offline; fixes and publication require separate authorization
-- [docs/skills/{{SLUG}}/SKILL.md](docs/skills/{{SLUG}}/SKILL.md) — {{summary}}
+- [.agents/skills/doc-garden/SKILL.md](.agents/skills/doc-garden/SKILL.md) — audit local links, anchors, path references, and verification-date freshness offline; fixes and publication require separate authorization
+- [.agents/skills/{{SLUG}}/SKILL.md](.agents/skills/{{SLUG}}/SKILL.md) — {{summary}}
 
 **When you add a skill or a convention doc, link it from this file.** This
 table of contents is how every agent (and teammate) discovers it — a skill that
@@ -97,6 +97,6 @@ defines.
 
 ```bash
 bash scripts/harness/check-harness          # Harness coherence: stub sync, doc links, hook tests
-bash scripts/harness/sync      # Regenerate provider skill stubs from docs/skills/
+bash scripts/harness/sync      # Regenerate provider skill stubs from .agents/skills/
 {{PROJECT_STRUCTURAL_CHECKS}}          # e.g. architecture tests, boundary checks
 ```

@@ -145,7 +145,7 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    `scripts/harness/lib/dev-instance.sh`, but take no content action unless the user opts
    in. On opt-in only: author (never template-copy) executable
    `scripts/dev.sh`; copy and tailor `docs/runbooks/local-development.md` and
-   `docs/skills/verify-live/SKILL.md`; add their conditional AGENTS links; run
+   `.agents/skills/verify-live/SKILL.md`; add their conditional AGENTS links; run
    `scripts/harness/sync`; and manifest-pin `dev.sh` with
    ` # tailored`. If any of these files already exists, preserve it and show a
    proposed diff — never silently replace local content. Re-run the v1 contract

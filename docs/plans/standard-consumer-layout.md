@@ -35,7 +35,7 @@ breaking change multiplied by every adopter's tailored files.
 ## Scope
 
 Phased; each phase is one minor release cut via
-[the release skill](../skills/release/SKILL.md) and leaves `verify.sh` green.
+[the release skill](../../.agents/skills/release/SKILL.md) and leaves `verify.sh` green.
 
 - [x] **Phase 1 — declarative ship-manifest + retirement** — **shipped
   2026-07-22 as v0.21.0** (tag v0.21.0, 91aad35; see

@@ -17,7 +17,7 @@ description: >-
 # Harness Kit
 
 Installs and maintains the harness pattern in
-[references/pattern.md](references/pattern.md): canonical content in `docs/`,
+[references/pattern.md](references/pattern.md): canonical content in `docs/`, `.harness/`, and `.agents/skills/`,
 generated/thin provider shims, portable hooks, CI-gated drift checks. Provider
 file locations and event mappings live in
 [references/provider-matrix.md](references/provider-matrix.md).
@@ -104,7 +104,8 @@ misfire on the router alone, but the reference carries the steps.
 
 ## add-skill / add-agent / add-hook — extend → [references/modes/add.md](references/modes/add.md)
 
-- **Author the canonical file in `docs/`**, link it from AGENTS.md, run
+- **Author the canonical skill in `.agents/skills/` (personas in
+  `.harness/agents/`)**, link it from AGENTS.md, run
   `scripts/harness/sync`, and commit canonical + generated stubs together.
 - **Every guard hook ships a `test-<name>.sh`** wired into `check-harness` —
   a guard without a test is a future silent failure.

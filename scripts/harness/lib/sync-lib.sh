@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Generates the provider skill stubs (.claude/.cursor/.opencode/.agents —
-# Codex reads .agents/skills/, so it needs no directory of its own)
-# from the canonical skills in docs/skills/. docs/ is the single source of
+# Generates the provider skill stubs (.claude/.cursor/.opencode — .agents/
+# skills/ IS the canonical home since v0.24.0, and Codex reads it natively)
+# from the canonical skills in .agents/skills/, the single source of
 # truth; the stubs exist only so each harness registers and auto-activates the
 # skill. Frontmatter (name + description — the activation trigger) is copied
 # verbatim from the canonical file, so tuning a trigger in the canonical
@@ -26,8 +26,8 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 # shellcheck source=/dev/null
 [ -f "$ROOT/scripts/harness/harness.conf" ] && . "$ROOT/scripts/harness/harness.conf"
-PROVIDERS="${PROVIDERS:-.claude .cursor .opencode .agents}"
-CANONICAL_SKILLS="${CANONICAL_SKILLS:-docs/skills}"
+PROVIDERS="${PROVIDERS:-.claude .cursor .opencode}"
+CANONICAL_SKILLS="${CANONICAL_SKILLS:-.agents/skills}"
 
 MODE="${1:-write}"
 case "$MODE" in

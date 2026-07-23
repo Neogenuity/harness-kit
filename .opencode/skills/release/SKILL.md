@@ -9,6 +9,6 @@ description: >-
 
 # Release
 
-Canonical source: `docs/skills/release/SKILL.md`
+Canonical source: `.agents/skills/release/SKILL.md`
 
 Read that file for the full skill before starting. This stub only registers the skill with the harness — edit the canonical file, then run `bash scripts/harness/sync`.

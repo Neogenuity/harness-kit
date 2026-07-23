@@ -12,8 +12,8 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 # shellcheck source=/dev/null
 [ -f "$ROOT/scripts/harness/harness.conf" ] && . "$ROOT/scripts/harness/harness.conf"
-PROVIDERS="${PROVIDERS:-.claude .cursor .opencode .agents}"
-CANONICAL_SKILLS="${CANONICAL_SKILLS:-docs/skills}"
+PROVIDERS="${PROVIDERS:-.claude .cursor .opencode}"
+CANONICAL_SKILLS="${CANONICAL_SKILLS:-.agents/skills}"
 
 sha256_of() {
     if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'

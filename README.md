@@ -195,7 +195,7 @@ checklist:
 
 Pre-1.0, mechanism behavior changes are already versioned — every change to
 a shipped hook, gate, or script bumps at least a minor version (see
-[docs/skills/release/SKILL.md](docs/skills/release/SKILL.md)) — but no
+[.agents/skills/release/SKILL.md](.agents/skills/release/SKILL.md)) — but no
 compatibility contract exists beyond that. 1.0 is where the contract starts.
 It's stated in the kit's own vocabulary — mechanism, policy (`TAILOR`
 blocks), and content — described in

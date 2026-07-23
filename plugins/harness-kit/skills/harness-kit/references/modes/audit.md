@@ -76,7 +76,7 @@ Markdown, anchors, deleted-path references, and repo-wide verification stamps.
 Its repo-wide scan may overlap `check-harness`; de-duplicate the presented
 findings by rule, file, line, and target rather than suppressing either check.
 External probes, edits, commits, pushes, and PRs are separate authorization
-steps. If the canonical `docs/skills/doc-garden/SKILL.md`, its
+steps. If the canonical `.agents/skills/doc-garden/SKILL.md`, its
 AGENTS link, or generated stubs are partly present, report drift; if all are
 absent, report the optional skill as unadopted, not missing.
 
@@ -152,7 +152,7 @@ For an application repo, audit the runtime in this exact read-only order:
 
 Also report the conditional bundle coherently: an adopted app runtime has the
 tailored `docs/runbooks/local-development.md`, canonical
-`docs/skills/verify-live/SKILL.md`, AGENTS links to both, and generated provider
+`.agents/skills/verify-live/SKILL.md`, AGENTS links to both, and generated provider
 skill stubs. Missing or drifted docs/stubs are separate findings from the
 runtime state. Existing apps adopt this bundle only after the user opts in;
 audit never adds or overwrites content.

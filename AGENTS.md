@@ -47,17 +47,18 @@ primary-source pointers; see each `index.md` for what belongs there.
 
 ## Skills (Task Workflows)
 
-- [docs/skills/release/SKILL.md](docs/skills/release/SKILL.md) — cut a release: version bump, changelog, manifest re-pin, tag
-- [docs/skills/verify-live/SKILL.md](docs/skills/verify-live/SKILL.md) — reproduce, inspect, and rerun behavior against a seeded local app without guessing its runtime commands
-- [docs/skills/doc-garden/SKILL.md](docs/skills/doc-garden/SKILL.md) — audit local links, anchors, path references, and verification-date freshness offline; fixes and publication require separate authorization
+- [.agents/skills/release/SKILL.md](.agents/skills/release/SKILL.md) — cut a release: version bump, changelog, manifest re-pin, tag
+- [.agents/skills/verify-live/SKILL.md](.agents/skills/verify-live/SKILL.md) — reproduce, inspect, and rerun behavior against a seeded local app without guessing its runtime commands
+- [.agents/skills/doc-garden/SKILL.md](.agents/skills/doc-garden/SKILL.md) — audit local links, anchors, path references, and verification-date freshness offline; fixes and publication require separate authorization
 
 **When you add a skill or a convention doc, link it from this file.** This
 table of contents is how every agent (and teammate) discovers it — a skill that
 isn't linked here is effectively invisible, even after its stubs are synced.
 
-The per-harness copies (`.claude/skills/`, `.cursor/skills/`,
-`.opencode/skills/`, `.agents/skills/` — Codex reads `.agents/skills/`) are
-**generated** pointer stubs. Edit the canonical file here, then run
+`.agents/skills/` is the **canonical** home (the cross-vendor standard —
+Codex and compatible tools read it natively). The per-harness copies
+(`.claude/skills/`, `.cursor/skills/`, `.opencode/skills/`) are **generated**
+pointer stubs. Edit the canonical file, then run
 `bash scripts/harness/sync`; `check-harness` (CI-gated) fails if
 stubs drift from the generator output.
 
@@ -113,5 +114,5 @@ config declares, the runner executes.
 
 ```bash
 bash scripts/harness/check-harness          # Harness coherence: stub sync, doc links, hook tests, manifest integrity
-bash scripts/harness/sync      # Regenerate provider skill stubs from docs/skills/
+bash scripts/harness/sync      # Regenerate provider skill stubs from .agents/skills/
 ```

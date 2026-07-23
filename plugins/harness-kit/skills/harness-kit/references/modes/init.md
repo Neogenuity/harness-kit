@@ -222,15 +222,15 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      `templates/docs/runbooks/local-development.md` to
      `docs/runbooks/local-development.md` and tailor its runtime map; copy the
      self-contained `templates/docs/skills/verify-live/SKILL.md` to
-     `docs/skills/verify-live/SKILL.md`. Add both conditional links from the
+     `.agents/skills/verify-live/SKILL.md`. Add both conditional links from the
      AGENTS template. Never point either file at this skill/plugin directory.
      Non-app repos omit the files and links.
    - If the user adopted doc gardening, copy
      `templates/docs/skills/doc-garden/SKILL.md` to
-     `docs/skills/doc-garden/SKILL.md`, keep its conditional AGENTS link, and
+     `.agents/skills/doc-garden/SKILL.md`, keep its conditional AGENTS link, and
      generate its provider stubs in step 6. Otherwise remove the link and create
      no canonical/stub files.
-   - `docs/skills/<slug>/SKILL.md` per initial skill, following
+   - `.agents/skills/<slug>/SKILL.md` per initial skill, following
      `templates/docs/skills/_example/SKILL.md`. Frontmatter descriptions are
      activation triggers — spend effort on them.
    - `.harness/agents/<name>.md` personas only if a clear delegation need exists.

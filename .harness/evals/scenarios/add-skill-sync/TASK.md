@@ -7,7 +7,7 @@
 
 ## Prompt
 
-Add a new skill. Create `docs/skills/changelog/SKILL.md` with YAML frontmatter
+Add a new skill. Create `.agents/skills/changelog/SKILL.md` with YAML frontmatter
 containing a `name` and a `description` (the description is the activation
 trigger — make it specific), followed by a short body explaining how to update
 the changelog. Link the skill from the `## Skills` section of `AGENTS.md`. Then
