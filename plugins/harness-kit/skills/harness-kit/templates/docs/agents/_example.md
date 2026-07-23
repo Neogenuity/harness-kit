@@ -27,8 +27,9 @@ A fixed format makes the persona's results consumable by the calling agent.>
 Provider wiring (not part of the canonical doc): give this doc `name`,
 `description`, and `tools` frontmatter (the same shape SKILL.md uses — the
 `description` is the routing signal the MAIN agent delegates on), then run
-`bash scripts/harness/sync`. It GENERATES a pointer stub per declared
-`AGENT_PROVIDERS` entry in that provider's dialect (`.claude/agents/<name>.md`,
+`bash scripts/harness/sync`. It GENERATES a pointer stub per provider in the
+agent-stub set (derived from `HARNESS_PROVIDERS` via the capability table) in
+that provider's dialect (`.claude/agents/<name>.md`,
 `.cursor/agents/<name>.md`, `.opencode/agents/<name>.md`, and
 `.codex/agents/<name>.toml`). Edit the frontmatter here, never a stub —
 `check-harness.sh` fails on any stub that drifts from the generator, is missing

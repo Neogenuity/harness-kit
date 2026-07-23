@@ -113,22 +113,26 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    `harness_persist_base <new_src_scripts> <repo_root> <new_version>` (prune the
    superseded `.harness/var/base/<old_version>/`), and re-run `check-harness` and
    all hook tests.
-5. **Migrate the declared provider sets if an older install lacks them.**
-   `check-harness` now fails when an adopted harness leaves
-   `HOOK_WIRED_PROVIDERS` (semantic hook-wiring validation) or `AGENT_PROVIDERS`
-   (agent-stub coherence) undeclared, and `harness.conf` is diff-only here so the
-   lines never appear on their own. If either is absent (`harness_conf_declared`
-   in `install-lib.sh` reports it), PROPOSE the default sets —
-   `HOOK_WIRED_PROVIDERS=".claude .cursor .codex"`,
-   `AGENT_PROVIDERS=".claude .cursor .codex .opencode"` — narrowed to the
-   providers this repo actually wired, and ask the user to CONFIRM. Never infer
-   the set from whichever configs/stubs survive on disk: a config deleted before
-   the upgrade is indistinguishable from a provider never wired, so adopting
-   survivors would silently bless a deletion — surface any resulting
+5. **Migrate to the single provider declaration if an older install lacks it.**
+   Since v0.25.0 the wiring sets derive from one `HARNESS_PROVIDERS` declaration
+   through the kit capability table (ADR 011); `harness.conf` is diff-only here,
+   so the line never appears on its own. If `HARNESS_PROVIDERS` is absent
+   (`harness_conf_declared` in `install-lib.sh` reports it) but the install
+   carries the legacy explicit lists, those lists still validate as overrides —
+   nothing breaks — but PROPOSE consolidating to
+   `HARNESS_PROVIDERS="<the providers this repo wires>"` (the union of the legacy
+   sets) and ask the user to CONFIRM, then optionally remove the now-redundant
+   `PROVIDERS`/`HOOK_WIRED_PROVIDERS`/`AGENT_PROVIDERS` lines that equal the
+   derivation. A genuinely pre-declaration install (none of the sets present) is
+   the same loud diagnostic as before until `HARNESS_PROVIDERS` is confirmed.
+   Never infer the set from whichever configs/stubs survive on disk: a config
+   deleted before the upgrade is indistinguishable from a provider never wired,
+   so adopting survivors would silently bless a deletion — surface any resulting
    declared-but-missing config as the ERROR it is. Record the confirmed value
    with `harness_conf_declare` (idempotent — a second update neither duplicates
    the line nor resets an edited value), then re-pin the manifest so the new
-   `harness.conf` checksum is captured.
+   `harness.conf` checksum is captured. `EXECUTION_PROFILE_PROVIDERS` stays a
+   separate opt-in (never derived) — see the paragraph below.
 
    `EXECUTION_PROFILE_PROVIDERS` is different because profiles are optional.
    If it is absent, leave it unset and report **unadopted**; never infer

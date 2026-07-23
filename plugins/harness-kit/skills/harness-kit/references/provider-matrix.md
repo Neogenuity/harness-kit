@@ -146,10 +146,18 @@ an Error when the script exits 2 (throwing is OpenCode's block mechanism) —
 policy would stay in the portable scripts, the shim being one-time wiring.
 **The kit does not currently ship this shim template (descoped 2026-07-13):**
 an untested TS shim on an under-resourced tier is deferred, so OpenCode is
-**not** in the hook-wired set (`HOOK_WIRED_PROVIDERS` is `.claude .cursor
-.codex`). Its native `opencode.json` `permission.read` denies plus
-`check-harness` manifest verification are the backstop until a tested shim
-ships.
+**not** in the hook-wired set (`.opencode` carries `hook_config = none` in the
+capability table, so it derives out of the hook-wired providers). Its native
+`opencode.json` `permission.read` denies plus `check-harness` manifest
+verification are the backstop until a tested shim ships.
+
+The per-provider facts in this matrix that decide wiring-set membership —
+native-`.agents/` reader (→ skill stub or not), agent-stub dialect, hook-config
+path/shape, execution-profile file — are encoded machine-readably in the
+kit-owned capability table `scripts/harness/lib/provider-caps` (ADR 011). An
+adopter declares one `HARNESS_PROVIDERS`; the kit derives the four sets from
+that table, so these facts live in exactly one place. Keep the table and this
+matrix in step: a change here that alters membership is a one-row change there.
 
 ## Payload differences the scripts already absorb
 

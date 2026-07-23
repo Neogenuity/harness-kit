@@ -148,9 +148,11 @@ part a target repo customizes.
 
 <!--
 Provider wiring (not part of the canonical doc): the per-provider stubs are
-GENERATED, not hand-authored. `sync-agent-skills.sh` now generates agent stubs
-too (alongside skill stubs) from THIS doc's `name`/`description`/`tools`
-frontmatter — one stub per declared `AGENT_PROVIDERS` entry, in that provider's
+GENERATED, not hand-authored. The sync command (`scripts/harness/sync`)
+generates agent stubs (alongside skill stubs) from THIS doc's
+`name`/`description`/`tools` frontmatter — one stub per provider in the
+agent-stub set (derived from the single `HARNESS_PROVIDERS` declaration via the
+capability table, ADR 011), in that provider's
 dialect: `.claude/agents/<name>.md`, `.cursor/agents/<name>.md`,
 `.opencode/agents/<name>.md` (Markdown) and `.codex/agents/<name>.toml` (TOML,
 routing carried as `developer_instructions`). Tune the routing `description`

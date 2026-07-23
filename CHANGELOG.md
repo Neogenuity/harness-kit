@@ -3,6 +3,51 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.25.0 — 2026-07-23
+
+Phase 5 of the standard-consumer-layout restructure
+(`docs/plans/standard-consumer-layout.md`): the four hand-curated provider
+lists collapse to one declaration, and `sync` grows two generated artifacts
+(ADR 011).
+
+### Changed
+
+- **Single provider declaration.** An adopter declares one `HARNESS_PROVIDERS`
+  in `harness.conf`; the kit-owned capability table
+  (`scripts/harness/lib/provider-caps`, plain text, no jq) + a derivation lib
+  (`provider-lib.sh`) derive the three wiring facets — skill stubs, agent
+  stubs, hook wiring — with override-or-derive resolution (an explicit
+  per-facet value still wins). The legacy `PROVIDERS`/`HOOK_WIRED_PROVIDERS`/
+  `AGENT_PROVIDERS` lists demote to optional overrides and keep validating,
+  so a v0.24.0 `harness.conf` is carried forward unchanged.
+- **Execution profiles stay explicit opt-in.** `EXECUTION_PROFILE_PROVIDERS`
+  is deliberately *not* derived (a strict runtime floor must never be imposed
+  as a side effect of naming a provider); it is now validated to be a subset
+  of the wired providers, and its config path/validator move to the table.
+- **`check-instructions` #8f** validates the declaration itself (every entry a
+  known provider, no duplicates); a bad entry that would silently drop from
+  every derived set is a loud error.
+
+### Added
+
+- **Generated adapters.** `sync` (write) emits one committed
+  `.harness/adapters/<slug>.md` wiring summary per wired provider; `sync
+  --check` keeps them current. Adapters are an opt-in generated artifact —
+  `--check` enforces completeness only once any exist.
+- **`sync secrets [--check]`** (jq hard-required) regenerates the native
+  secret-deny mirrors from `SECRET_PATTERNS`: `.claude/settings.json` gets a
+  deny-only list (`Read(./P)` + `Read(**/P)`; platform deny-beats-allow),
+  `opencode.json` gets `**/P: "deny"` and keeps its hand-owned allows.
+  Reconciliation is ensure-present + preserve; checks #8/#8b remain the
+  independent verification and point at it. Shipped `test-sync-secrets.sh`
+  covers it.
+
+### Migration
+
+A v0.24.0 install updates cleanly: the two new mechanism files install, the
+legacy four-list `harness.conf` is preserved and validates as overrides.
+Consolidating to `HARNESS_PROVIDERS` is proposed by update mode but optional.
+
 ## 0.24.0 — 2026-07-22
 
 Phase 4 of the standard-consumer-layout restructure

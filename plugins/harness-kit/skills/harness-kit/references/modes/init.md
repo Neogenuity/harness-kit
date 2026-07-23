@@ -153,16 +153,22 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      configured command+args or URL. `check-harness` ERRORs on a
      configured server missing from the inventory or whose identity drifted;
      leave it set-but-empty to assert "no MCP servers" strictly.
-   - `harness.conf` `HOOK_WIRED_PROVIDERS` / `AGENT_PROVIDERS`: set each to the
-     providers you actually wire in steps 5–6. `HOOK_WIRED_PROVIDERS` is the
-     hook-wired subset (`.claude .cursor .codex`; OpenCode is descoped — no bash
-     hook shim) whose hook config `check-harness` validates tuple-by-tuple;
-     `AGENT_PROVIDERS` is the set that receives generated agent stubs
-     (`.claude .cursor .codex .opencode`). A declared provider missing its
-     config/stubs is an ERROR; leaving either UNSET on an adopted harness is a
-     loud diagnostic. Drop a provider from the set if you don't wire it (set to
-     `""` for none).
-   - `harness.conf` `EXECUTION_PROFILE_PROVIDERS`: set it to exactly the
+   - `harness.conf` `HARNESS_PROVIDERS`: the single declaration of the provider
+     dirs you wire in steps 5–6 (ADR 011). The kit capability table
+     (`scripts/harness/lib/provider-caps`) derives the per-facet sets from it —
+     skill stubs (providers that don't read `.agents/skills/` natively; `.codex`
+     does, so it gets none), agent stubs (all four dialects), and the hook-wired
+     subset (`.claude .cursor .codex`; OpenCode is descoped — no bash hook shim)
+     whose config `check-harness` validates tuple-by-tuple. `check-harness`
+     validates the derived sets and the declaration itself; a declared provider
+     missing its config/stubs is an ERROR, and an unknown entry is a loud `#8f`
+     diagnostic. Set to `""` to wire no providers. The per-facet override knobs
+     (`PROVIDERS`/`HOOK_WIRED_PROVIDERS`/`AGENT_PROVIDERS`, commented in the
+     template) are only for the rare case where one facet must differ from the
+     derivation.
+   - `harness.conf` `EXECUTION_PROFILE_PROVIDERS`: NOT derived from
+     `HARNESS_PROVIDERS` (ADR 011 — a strict runtime floor must never be imposed
+     as a side effect of naming a provider). Set it to exactly the
      provider subset explicitly confirmed in step 2. Unset/empty means
      unadopted; never infer this declaration from configs that happen to exist.
      A declared provider makes its accepted profile a semantic drift gate:

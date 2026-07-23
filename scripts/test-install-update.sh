@@ -409,4 +409,37 @@ else
 fi
 rm -rf "$F"
 
+# --- (m) v0.24.0 -> v0.25.0: capability table + derivation lib land; a legacy
+#         four-list harness.conf is preserved as overrides ---------------------
+# v0.25.0 adds scripts/harness/lib/provider-caps + provider-lib.sh (mechanism)
+# and collapses the four provider lists to one HARNESS_PROVIDERS. harness.conf
+# is policy (diff-only), so a v0.24.0 install keeps its explicit four lists,
+# which still validate as overrides. Update must install the two new mechanism
+# files and leave the legacy conf untouched.
+F=$(mktemp -d "$WORK/v0240.XXXXXX") || exit 1
+( cd "${F:?}" && git init -q . )
+printf '.harness/var/\n' > "$F/.gitignore"
+mkdir -p "$F/scripts/harness/lib"
+printf '# harness-kit 0.24.0\n' > "$F/scripts/harness/.harness-manifest"
+cat > "$F/scripts/harness/harness.conf" <<'CONF'
+PROVIDERS=".claude .cursor .opencode"
+HOOK_WIRED_PROVIDERS=".claude .cursor .codex"
+AGENT_PROVIDERS=".claude .cursor .codex .opencode"
+CANONICAL_SKILLS=".agents/skills"
+CANONICAL_AGENTS=".harness/agents"
+CONF
+out=$(harness_update_apply "$SCRIPTS_DIR" "$F")
+v25_bad=""
+[ -f "$F/scripts/harness/lib/provider-caps" ]   || v25_bad="$v25_bad no-provider-caps"
+[ -f "$F/scripts/harness/lib/provider-lib.sh" ] || v25_bad="$v25_bad no-provider-lib"
+conf=$(cat "$F/scripts/harness/harness.conf")
+has_line "$conf" 'HOOK_WIRED_PROVIDERS=".claude .cursor .codex"' || v25_bad="$v25_bad hook-list-clobbered"
+has_line "$conf" 'AGENT_PROVIDERS=".claude .cursor .codex .opencode"' || v25_bad="$v25_bad agent-list-clobbered"
+if [ -z "$v25_bad" ]; then
+    pass "v0.25.0 provider decl: caps table + derivation lib installed, legacy four-list harness.conf preserved as overrides"
+else
+    fail "v0.25.0 provider decl: update incomplete —$v25_bad" "$out"
+fi
+rm -rf "$F"
+
 finish "install-update"

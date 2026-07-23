@@ -38,7 +38,10 @@ checksums, while `.harness/gates.conf` stays diff-only.
 **A provider starts reading `.agents/skills/` natively** (already true for
 Codex and OpenCode):
 
-1. Remove the provider's dir from `PROVIDERS` in `scripts/harness/harness.conf`.
+1. Set the provider's `skill_stubs` column to `no` in the capability table
+   (`scripts/harness/lib/provider-caps`) — it then derives out of the skill-stub
+   set for everyone. (An adopter who only stops *wiring* a provider drops it
+   from `HARNESS_PROVIDERS` instead.)
 2. Delete `<provider>/skills/` (the sync's orphan check will demand this
    anyway).
 3. `bash scripts/harness/sync && bash scripts/harness/check-harness`,
@@ -74,9 +77,12 @@ and the Stop hook's JSON-on-exit-0 contract. Re-verify event names and
 exit-code semantics against the docs before updating the "verified" stamps.
 
 **A new harness appears**: add its dirs to the matrix first (instructions /
-skills / subagents / hooks / permissions / MCP), then: `PROVIDERS` gets its
-skills dir only if it doesn't read `.agents/skills/`; hooks wire to the
-existing portable scripts; teach `lib.sh:hook_affected_files` its payload
+skills / subagents / hooks / permissions / MCP), then add a capability-table
+row (`skill_stubs`, `agent_dialect`, `hook_config`, `exec_config`) and declare
+the provider in `HARNESS_PROVIDERS` — the kit derives its stub/hook/agent
+membership from the row (`skill_stubs = no` if it reads `.agents/skills/`
+natively); hooks wire to the existing portable scripts; teach
+`lib.sh:hook_affected_files` its payload
 layout if novel; add its native secret-deny config mirroring
 `harness.conf:SECRET_PATTERNS`.
 
@@ -110,8 +116,8 @@ When every supported harness reads `.agents/skills/` natively, flip the
 canonical location and retire the mirror step entirely:
 
 1. `git mv .agents/skills .agents/skills` (history preserved).
-2. Set `CANONICAL_SKILLS=".agents/skills"` and shrink `PROVIDERS` to the
-   dirs still needing stubs (possibly none).
+2. Set `CANONICAL_SKILLS=".agents/skills"`; the capability table's `skill_stubs`
+   column already decides which provider dirs still need stubs (possibly none).
 3. Update AGENTS.md links; run the sync + check.
 
 At that point the kit degrades gracefully into what was always the durable

@@ -73,8 +73,9 @@ stubs drift from the generator output.
 
 Provider agent stubs (`.claude/agents/`, `.cursor/agents/`, `.codex/agents/`
 as TOML, `.opencode/agents/`) are **generated** pointer stubs, like the skill
-stubs: `scripts/harness/sync` produces one per declared `AGENT_PROVIDERS`
-entry (`harness.conf`) from the canonical doc's `name`/`description`/`tools`
+stubs: `scripts/harness/sync` produces one per provider in the agent-stub set
+(derived from the single `HARNESS_PROVIDERS` declaration via the capability
+table, ADR 011) from the canonical doc's `name`/`description`/`tools`
 frontmatter. Edit the canonical `.harness/agents/` file, then run
 `bash scripts/harness/sync`; `check-harness` (CI-gated) fails if a
 stub drifts from the generator, is missing from a declared provider, or orphans

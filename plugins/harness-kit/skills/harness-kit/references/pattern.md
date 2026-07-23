@@ -144,12 +144,14 @@ scripts/
     check-instructions         #   stub+wiring generator, combined coherence audit,
     check-docs  detect-drift   #   and the per-family checker entries
     validate-plan  run-evals
-    harness.conf               # shared tailoring surface (providers, paths, secret
-                               #   patterns, format/lint rules, log toggle) [tailored]
+    harness.conf               # shared tailoring surface (HARNESS_PROVIDERS, paths,
+                               #   secret patterns, format/lint rules, log toggle) [tailored]
     kit-manifest               # ship contract: layer per shipped path + retired set
     .harness-manifest          # kit version + checksums (upgrade + CI integrity)
     lib/                       # shared code: install-lib, check families,
-                               #   eval/log/audit/doc-garden/dev-instance helpers
+                               #   eval/log/audit/doc-garden/dev-instance helpers;
+      provider-caps            #   per-provider capability facts (derives the
+      provider-lib.sh          #   wiring sets from HARNESS_PROVIDERS; ADR 011)
     hooks/
       lib.sh                   # stdin parsing, deny, feedback, advise-once, hook_log
       format.sh                # post-edit format + lint feedback (rules from harness.conf)
@@ -164,6 +166,8 @@ scripts/
   policies/                    # agent policy docs: security.md (untrusted
                                #   content), changes.md (risky actions) [tailored]
   agents/<name>.md             # canonical persona docs (stubs generated per provider)
+  adapters/<provider>.md       # generated per-provider wiring summaries (sync
+                               #   output, --check pinned; opt-in artifact)
   templates/                   # execution-plan, ADR, PR description skeletons
   schemas/                     # JSON Schemas: telemetry v2 event, audit report,
                                #   eval TASK metadata
