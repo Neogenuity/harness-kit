@@ -22,6 +22,23 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=/dev/null
 . "$SCRIPTS_DIR/install-test-lib.sh"
 
+# emits_line <captured-output> <exact-line> — pipe-free exact-line membership.
+# `harness_missing_prereqs | grep -qx TOKEN` flakes under `set -o pipefail`:
+# grep -q closes the pipe on its first match, so the function's NEXT printf
+# takes EPIPE (non-zero), and pipefail then fails the whole pipeline though the
+# match itself succeeded — a load-dependent phantom failure (the SIGPIPE class
+# swept out of check-harness). Capture the output once, then match line-by-line.
+emits_line() {
+    case "
+$1
+" in
+        *"
+$2
+"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # --- runtime-prerequisite preflight detection ---------------------------------
 # harness_missing_prereqs is the deterministic core of init/update's early
 # preflight: it NAMES any missing hard dependency so the user can acknowledge
@@ -32,39 +49,44 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 # tokens harness_missing_prereqs emits (install-lib.sh:61-67) — 'jq', 'git',
 # 'sha256sum' — which it can do because the function uses only shell builtins
 # (`command -v`), so it still runs with nothing else on PATH.
+# One capture with the ambient PATH; the present-halves assert each tool is
+# absent from the missing list (emits_line is pipe-free — see its comment).
+present_missing=$(harness_missing_prereqs)
 if command -v jq >/dev/null 2>&1; then
-    if harness_missing_prereqs | grep -qx 'jq'; then
+    if emits_line "$present_missing" jq; then
         fail "preflight: jq reported missing though it is on PATH"
     else
         pass "preflight: harness_missing_prereqs stays silent about a present jq"
     fi
 fi
 if command -v git >/dev/null 2>&1; then
-    if harness_missing_prereqs | grep -qx 'git'; then
+    if emits_line "$present_missing" git; then
         fail "preflight: git reported missing though it is on PATH"
     else
         pass "preflight: harness_missing_prereqs stays silent about a present git"
     fi
 fi
 if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; then
-    if harness_missing_prereqs | grep -qx 'sha256sum'; then
+    if emits_line "$present_missing" sha256sum; then
         fail "preflight: sha256sum reported missing though a sha256 tool is on PATH"
     else
         pass "preflight: harness_missing_prereqs stays silent about a present sha256 tool"
     fi
 fi
 EMPTYPATH=$(mktemp -d "$WORK/emptypath.XXXXXX") || exit 1
-if PATH="$EMPTYPATH" harness_missing_prereqs | grep -qx 'jq'; then
+# One capture under the empty PATH; the absent-halves assert each token IS named.
+empty_missing=$(PATH="$EMPTYPATH" harness_missing_prereqs)
+if emits_line "$empty_missing" jq; then
     pass "preflight: harness_missing_prereqs names jq when it is off PATH"
 else
     fail "preflight: jq not reported missing when hidden from PATH"
 fi
-if PATH="$EMPTYPATH" harness_missing_prereqs | grep -qx 'git'; then
+if emits_line "$empty_missing" git; then
     pass "preflight: harness_missing_prereqs names git when it is off PATH"
 else
     fail "preflight: git not reported missing when hidden from PATH"
 fi
-if PATH="$EMPTYPATH" harness_missing_prereqs | grep -qx 'sha256sum'; then
+if emits_line "$empty_missing" sha256sum; then
     pass "preflight: harness_missing_prereqs names sha256sum when it is off PATH"
 else
     fail "preflight: sha256sum not reported missing when hidden from PATH"

@@ -63,10 +63,11 @@ not-yet-existing paths are legal — queued plans name future files by design.
 Shipped: **v0.21.0** (2026-07-22) — declarative kit-manifest ship contract +
 retired-file mechanism, Phase 1 of the
 [standard-consumer-layout](standard-consumer-layout.md) umbrella plan, which
-now owns the mechanism queue (Phases 2–6: adopter test descope,
+owned the mechanism queue (Phases 2–6: adopter test descope,
 `scripts/harness/` command surface, content/IA migration, single provider
-declaration + generated adapters, launch acceptance) and gates the
-launch-readiness public flip
+declaration + generated adapters, launch acceptance) — **all shipped
+v0.22.0–v0.25.0; the restructure completed 2026-07-23**, clearing the
+launch-readiness public-flip gate
 ([completed/v0.21.0-ship-manifest-and-retirement.md](completed/v0.21.0-ship-manifest-and-retirement.md));
 **v0.19.0/v0.20.x** (2026-07-17/18) — Claude execution-profile
 retry retention; the install-suite split (231s→46s) with root-only

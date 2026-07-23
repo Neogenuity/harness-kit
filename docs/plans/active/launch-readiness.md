@@ -97,6 +97,15 @@ link-checks pass on every doc this plan touches.
 
 ## Progress
 
+- 2026-07-23 — **Item 7's gate is cleared: the standard-consumer-layout
+  restructure is complete.** Its final phase (Phase 6) acceptance passed — a
+  fresh-repo `bootstrap` end-to-end on a throwaway repo returned 13/13 (clean
+  install → manifest → checker green; guards deny secrets/mechanism edits and
+  allow ordinary files; `session-context` announces a seeded plan), and full
+  `bash scripts/harness/verify` is green including offline eval grader validity.
+  See [../standard-consumer-layout.md](../standard-consumer-layout.md). Items 1
+  (demo), 2 (org move), and 7 (public flip) remain maintainer actions; the demo
+  recording can now be captured against the final post-restructure layout.
 - 2026-07-13 — Post-v0.13.0 cross-review (Codex gpt-5.6-sol, claims
   independently re-verified in-repo, its headline hook-wiring hole reproduced
   empirically) landed two things here: the README Status-section links to

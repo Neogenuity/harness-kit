@@ -57,7 +57,7 @@ f61b5c28f20938947e806539e591c0087129a35491c13e99bedc1ec6b3faca1b  scripts/harnes
 efab21c2b4713881c60c493ffc73994c2da4e43a5e9203500e5b2e911de61784  scripts/test-check-harness.sh # tailored
 cd27ebee6571d05980a1e8f7220b8b90039179cca20c430c81e717d9c943d94c  scripts/test-eval.sh # tailored
 ca82fe50abf9986b51c23b416779ddc0a34039486157978eefa621f316a8f71a  scripts/test-fixture-isolation.sh # tailored
-806506d271610e37822a44b0d73933caa881f8b9555beeb00a6df5ef753f4298  scripts/test-install-core.sh # tailored
+6ff4025a6e03b9b411891f31b3639b7a1a587a457c910c86cdb577d90d2bf9f7  scripts/test-install-core.sh # tailored
 c2d3e3d7435a5f455f520e87217793206eee8e1137d5c89d15585d2a3c5f07b7  scripts/test-install-recovery.sh # tailored
 c7d6e517b1eacf1491d64172e4c2666344aff7723a100686039bb2a1aa72c49f  scripts/test-install-update.sh # tailored
 c173f6c6174e5e214a1fd992834be4176ab4c6e3aa795ace879a119564dd2cd5  scripts/test-provider-templates.sh # tailored

@@ -1,9 +1,10 @@
 # Standard consumer layout (queued umbrella — phases activate individually)
 
-**Status:** umbrella plan. Each phase below activates as its own versioned plan
-in `active/` when work starts (per the lifecycle in [README.md](README.md));
-this file holds the cross-phase rationale, ordering, and the target layout so
-per-phase plans stay small. Supersedes
+**Status:** **COMPLETE (2026-07-23)** — all six phases shipped (v0.21.0–v0.25.0)
+and Phase 6 acceptance passed, clearing the launch-readiness public-flip gate.
+Each phase executed as its own versioned plan in `completed/` (per the lifecycle
+in [PLANS.md](PLANS.md)); this file holds the cross-phase rationale, ordering,
+and the target layout so per-phase plans stay small. Supersedes
 [adopter-test-descope.md](adopter-test-descope.md) (absorbed as Phase 2; its
 retired-file prerequisite is Phase 1).
 
@@ -82,10 +83,17 @@ Phased; each phase is one minor release cut via
   subset-validated against the table; `#8f` validates the declaration; the
   generated mirrors are drift-checked and the update-from-v0.24.0 fixture is
   green.
-- [ ] **Phase 6 — acceptance + launch unblock**: fresh-repo `bootstrap`
-  end-to-end on a throwaway repo (doubles as the launch demo recording), eval
-  grader validity, then the public flip in
-  [launch-readiness](active/launch-readiness.md) proceeds.
+- [x] **Phase 6 — acceptance + launch unblock** — **done 2026-07-23**:
+  fresh-repo `bootstrap` end-to-end on a throwaway repo passed 13/13 (preflight →
+  install → generated manifest → its own `check-harness` green; guards deny
+  `.env` and mechanism edits while allowing ordinary files; `session-context`
+  announced a seeded plan), and full `bash scripts/harness/verify` is green
+  including the `evals` gate (offline grader validity — every reference solution
+  scores a pass, every negative violation is caught). The run surfaced and fixed
+  one load-dependent SIGPIPE phantom-failure in the maintainer preflight test
+  (pipe-free membership; manifest re-pinned). The demo recording, org move, and
+  the public flip in [launch-readiness](active/launch-readiness.md) are the
+  remaining maintainer actions — their standard-consumer-layout gate is cleared.
 
 ## Out of scope
 
@@ -118,6 +126,17 @@ fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Progress
 
+- 2026-07-23 — **Phase 6 acceptance passed; the restructure is COMPLETE.**
+  A fresh-repo `bootstrap` end-to-end on a throwaway repo returned 13/13 (clean
+  install → generated manifest → own checker green; guards deny secrets and
+  mechanism edits while allowing ordinary files; `session-context` announced a
+  seeded active plan). Full `verify` is green, including offline eval grader
+  validity (`test-eval.sh`). The run caught a residual **load-dependent SIGPIPE
+  phantom-failure** — `harness_missing_prereqs | grep -qx` fails under `pipefail`
+  when `grep -q` closes the pipe before the producer's next `printf` — fixed with
+  a pipe-free capture-then-match in `scripts/test-install-core.sh` (re-pinned).
+  The launch-readiness public-flip gate (Phases 1–6) is cleared; the demo, org
+  move, and flip remain maintainer actions.
 - 2026-07-23 — **Phase 5 shipped as v0.25.0**: single `HARNESS_PROVIDERS`
   declaration + kit-owned `provider-caps` capability table; the three wiring
   lists (skills/agents/hooks) derive with explicit-override; execution
@@ -169,13 +188,15 @@ fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Next action
 
-Execute Phase 6 — the last phase: fresh-repo `bootstrap` acceptance end-to-end
-on a throwaway repo (doubles as the launch demo recording) + full eval grader
-validity, then the public flip in [active/launch-readiness.md](active/launch-readiness.md)
-proceeds. (Phases 1–5 shipped — see
+The restructure is **complete** — all six phases shipped and Phase 6 acceptance
+passed (2026-07-23). No mechanism work remains. The remaining launch steps are
+maintainer actions tracked in
+[active/launch-readiness.md](active/launch-readiness.md): the demo recording
+(item 1), the org move (item 2), and the public flip (item 7) — whose
+standard-consumer-layout gate is now cleared. Per-phase records:
 [completed/v0.21.0-ship-manifest-and-retirement.md](completed/v0.21.0-ship-manifest-and-retirement.md),
 [completed/v0.22.0-adopter-test-descope.md](completed/v0.22.0-adopter-test-descope.md),
 [completed/v0.23.0-mechanism-rehome.md](completed/v0.23.0-mechanism-rehome.md),
 [completed/v0.24.0-content-ia-migration.md](completed/v0.24.0-content-ia-migration.md),
 and
-[completed/v0.25.0-provider-declaration-and-adapters.md](completed/v0.25.0-provider-declaration-and-adapters.md)).
+[completed/v0.25.0-provider-declaration-and-adapters.md](completed/v0.25.0-provider-declaration-and-adapters.md).
