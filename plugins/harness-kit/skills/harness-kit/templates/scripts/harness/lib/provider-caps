@@ -1,0 +1,39 @@
+# provider-caps — kit-owned per-provider capability facts (ADR 011).
+#
+# The single source for the facts that decide which providers land in each
+# derived wiring set. An adopter declares ONE list in harness.conf —
+# HARNESS_PROVIDERS (the provider dirs this repo wires) — and the kit derives
+# the per-facet sets (skill stubs, agent stubs, hook wiring) by filtering that
+# list through the capability columns below. Correct membership is kit
+# knowledge (does .codex read .agents/ natively? does .opencode have a bash
+# hook shim?), not repo policy, so it lives here, in exactly one place.
+#
+# This file is MECHANISM: integrity-pinned in scripts/harness/.harness-manifest
+# and guard-config-protected, like kit-manifest — it is read by check-harness
+# and sync to derive validated wiring sets. Plain text, bash-3.2
+# read/awk-parseable, no jq (ADR 002). '#' lines and blank lines are ignored.
+#
+# Columns (whitespace-separated):
+#   1 provider       provider dir (leading '.', e.g. .claude). NOT .agents —
+#                    .agents/skills/ is the canonical home, never a wiring
+#                    target, so it has no row.
+#   2 skill_stubs    yes|no. 'no' ⇔ the provider reads .agents/skills/
+#                    natively (Codex) and is excluded from generated skill stubs.
+#   3 agent_dialect  md | toml | md-subagent | none. How the generated agent
+#                    stub renders (Codex = TOML; OpenCode = Markdown + a
+#                    `mode: subagent` line); 'none' = receives no agent stub.
+#   4 hook_config    <path>:<shape> | none. The provider's hook-wiring config
+#                    and its jq shape (nested|flat); 'none' = no bash hook shim
+#                    (OpenCode is descoped, per the frozen provider matrix).
+#   5 exec_config    <path>:<checker> | none. The provider's execution-profile
+#                    config and the check-harness #8e validator that reads it.
+#
+# Adding a provider is a one-row change here plus its frozen hook-tuple table
+# and #8e validator in check-instructions.sh (the event/matcher contract and
+# the security-floor keys are richer than a table cell).
+#
+# provider   skill_stubs  agent_dialect  hook_config                    exec_config
+.claude      yes          md             .claude/settings.json:nested   .claude/settings.json:claude
+.cursor      yes          md             .cursor/hooks.json:flat        .cursor/sandbox.json:cursor
+.codex       no           toml           .codex/hooks.json:nested       .codex/config.toml:codex
+.opencode    yes          md-subagent    none                           opencode.json:opencode

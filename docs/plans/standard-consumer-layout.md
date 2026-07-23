@@ -71,13 +71,16 @@ Phased; each phase is one minor release cut via
   generated for providers that don't read `.agents/`). Acceptance met: link
   checker (widened to the new zones), stub checks, and eval machinery all
   pass against the new tree; this repo's own docs migrated identically.
-- [ ] **Phase 5 — single provider declaration + generated adapters**: kit-owned
+- [ ] **Phase 5 — single provider declaration + generated adapters** —
+  **active as v0.25.0** (see
+  [active/v0.25.0-provider-declaration-and-adapters.md](active/v0.25.0-provider-declaration-and-adapters.md)): kit-owned
   provider capability table; adopters declare one `HARNESS_PROVIDERS`; `sync`
   generates per-provider adapter summaries in `.harness/adapters/` and the
   secret-deny mirrors (`SECRET_PATTERNS` → Claude/OpenCode native denies) with
-  semantic `--check`. Acceptance: the four legacy lists demote to explicit
-  overrides; checks #8/#8b/#8d/#8e gate on the derived sets; generated mirrors
-  drift-checked.
+  semantic `--check`. Acceptance: the three wiring lists derive (explicit
+  overrides preserved); `EXECUTION_PROFILE_PROVIDERS` stays opt-in but
+  subset-validated against the table; checks #8/#8b/#8d/#8e gate on the
+  derived/validated sets; generated mirrors drift-checked.
 - [ ] **Phase 6 — acceptance + launch unblock**: fresh-repo `bootstrap`
   end-to-end on a throwaway repo (doubles as the launch demo recording), eval
   grader validity, then the public flip in
@@ -114,6 +117,11 @@ fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Progress
 
+- 2026-07-22 — **Phase 5 activated as v0.25.0**: single `HARNESS_PROVIDERS`
+  declaration + kit-owned `provider-caps` capability table; the three wiring
+  lists (skills/agents/hooks) derive with explicit-override; execution
+  profiles stay opt-in but subset-validated; `sync` grows generated
+  `.harness/adapters/` + `sync secrets` deny-mirror generation (ADR 011).
 - 2026-07-22 — **Phase 4 shipped as v0.24.0**: committed `.harness/`
   content layer (agents/policies/templates/schemas/evals), docs IA
   (standards/runbooks/root ARCHITECTURE/PLANS/tech-debt + index skeletons),
@@ -159,12 +167,12 @@ fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Next action
 
-Author and activate the Phase 5 plan (v0.25.0): kit-owned provider
-capability table, single `HARNESS_PROVIDERS` declaration, `sync` grows
-generated `.harness/adapters/` summaries + secret-deny mirror generation
-(ADR 011)
+Execute Phase 5 (v0.25.0) per
+[active/v0.25.0-provider-declaration-and-adapters.md](active/v0.25.0-provider-declaration-and-adapters.md),
+starting with slice 1 (caps table + derivation + single `HARNESS_PROVIDERS`)
 (Phases 1–4 shipped — see
 [completed/v0.21.0-ship-manifest-and-retirement.md](completed/v0.21.0-ship-manifest-and-retirement.md),
 [completed/v0.22.0-adopter-test-descope.md](completed/v0.22.0-adopter-test-descope.md),
+[completed/v0.23.0-mechanism-rehome.md](completed/v0.23.0-mechanism-rehome.md),
 and
-[completed/v0.23.0-mechanism-rehome.md](completed/v0.23.0-mechanism-rehome.md)).
+[completed/v0.24.0-content-ia-migration.md](completed/v0.24.0-content-ia-migration.md)).

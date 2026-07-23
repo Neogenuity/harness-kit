@@ -50,6 +50,8 @@ mechanism scripts/harness/run-evals
 # --- mechanism: libraries -----------------------------------------------------
 mechanism scripts/harness/lib/install-lib.sh
 mechanism scripts/harness/lib/sync-lib.sh
+mechanism scripts/harness/lib/provider-caps
+mechanism scripts/harness/lib/provider-lib.sh
 mechanism scripts/harness/lib/check-common.sh
 mechanism scripts/harness/lib/check-instructions.sh
 mechanism scripts/harness/lib/check-docs.sh

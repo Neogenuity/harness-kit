@@ -26,6 +26,19 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 # shellcheck source=/dev/null
 [ -f "$ROOT/scripts/harness/harness.conf" ] && . "$ROOT/scripts/harness/harness.conf"
+
+# Derive the skill-stub and agent-stub provider sets from the single
+# HARNESS_PROVIDERS declaration + the kit capability table (ADR 011); an
+# explicit harness.conf value for either wins. Same resolution check-harness
+# uses, so sync and the checker never disagree about who gets a stub.
+# shellcheck disable=SC2034  # read by provider-lib.sh across the source boundary
+PROVIDER_CAPS_FILE="$ROOT/scripts/harness/lib/provider-caps"
+# shellcheck source=/dev/null
+[ -f "$ROOT/scripts/harness/lib/provider-lib.sh" ] && . "$ROOT/scripts/harness/lib/provider-lib.sh"
+if command -v harness_resolve_set >/dev/null 2>&1; then
+    harness_resolve_set PROVIDERS skill
+    harness_resolve_set AGENT_PROVIDERS agent
+fi
 PROVIDERS="${PROVIDERS:-.claude .cursor .opencode}"
 CANONICAL_SKILLS="${CANONICAL_SKILLS:-.agents/skills}"
 

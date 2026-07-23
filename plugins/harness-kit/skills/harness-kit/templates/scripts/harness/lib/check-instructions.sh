@@ -434,6 +434,10 @@ hook_tab=$(printf '\t')
 
 # hook_check_provider <provider_dir> — validates one declared hook-wired
 # provider against the frozen tuple table, incrementing the shared ERRORS.
+# Which providers are hook-wired is DERIVED from HARNESS_PROVIDERS via the
+# capability table's hook_config column (check-common.sh; ADR 011); the config
+# path + jq shape + event/matcher tuple contract stay inline here (a frozen,
+# richer contract than a table cell).
 hook_check_provider() {
     local prov="$1" cfg shape tuples rows rc script event matcher info path
     local scriptpath wrongev badm
@@ -818,6 +822,20 @@ for execution_provider in ${EXECUTION_PROFILE_PROVIDERS:-}; do
             continue ;;
     esac
     execution_seen="$execution_seen$execution_provider "
+    # Execution-profile adoption is opt-in and SEPARATE from wiring (ADR 011):
+    # it is NOT derived from HARNESS_PROVIDERS, because the strict runtime
+    # sandbox floors routinely conflict with local dev. But a floor can only be
+    # adopted for a provider this repo actually wires — when HARNESS_PROVIDERS
+    # is declared, the adopted set must be a subset of it.
+    if [ -n "${HARNESS_PROVIDERS+x}" ]; then
+        case " $HARNESS_PROVIDERS " in
+            *" $execution_provider "*) ;;
+            *)
+                echo "ERROR: EXECUTION_PROFILE_PROVIDERS names '$execution_provider' but it is not in HARNESS_PROVIDERS — an execution floor can only be adopted for a wired provider; add it to HARNESS_PROVIDERS or drop it here"
+                ERRORS=$((ERRORS + 1))
+                continue ;;
+        esac
+    fi
     case "$execution_provider" in
         .claude) execution_check_claude ;;
         .cursor) execution_check_cursor ;;
@@ -826,5 +844,34 @@ for execution_provider in ${EXECUTION_PROFILE_PROVIDERS:-}; do
     esac
 done
 
+
+# 8f. The single provider declaration (harness.conf HARNESS_PROVIDERS) is what
+#     the kit capability table derives every per-facet wiring set from
+#     (check-common.sh; ADR 011). Validate the declaration itself: each entry
+#     must be a KNOWN provider (present in scripts/harness/lib/provider-caps)
+#     and appear at most once. An unknown or duplicated entry silently drops
+#     from every derived set — a wiring hole the downstream per-set checks
+#     (#8d hooks, sync stubs) cannot see, because they only receive the
+#     already-derived set. Skipped when the declaration or the table is absent
+#     (a legacy pre-declaration install keeps the explicit four lists, which
+#     #8d/#8e/sync validate directly).
+if [ -n "${HARNESS_PROVIDERS+x}" ] && command -v harness_caps_providers >/dev/null 2>&1; then
+    hp_known=" $(harness_caps_providers | tr '\n' ' ') "
+    hp_seen=" "
+    for hp in $HARNESS_PROVIDERS; do
+        case "$hp_known" in
+            *" $hp "*) ;;
+            *)
+                echo "ERROR: HARNESS_PROVIDERS names unknown provider '$hp' — it has no row in the capability table (scripts/harness/lib/provider-caps), so it would drop from every derived wiring set. Known providers:$hp_known"
+                ERRORS=$((ERRORS + 1)); continue ;;
+        esac
+        case "$hp_seen" in
+            *" $hp "*)
+                echo "ERROR: HARNESS_PROVIDERS lists '$hp' more than once — declare each wired provider exactly once"
+                ERRORS=$((ERRORS + 1)); continue ;;
+        esac
+        hp_seen="$hp_seen$hp "
+    done
+fi
 
 check_trailer "instructions"
