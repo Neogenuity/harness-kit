@@ -26,12 +26,12 @@ trap cleanup EXIT
 command -v python3 >/dev/null 2>&1 || { echo "FAIL: python3 is required for the repo fixture test"; exit 1; }
 command -v git >/dev/null 2>&1 || { echo "FAIL: git is required for linked-worktree fixture"; exit 1; }
 
-mkdir -p "$main/live_app" "$main/scripts"
+mkdir -p "$main/live_app" "$main/scripts" "$main/scripts/harness/lib"
 cp "$here/fixture/app.py" "$main/live_app/app.py"
 cp "$here/fixture/banner.txt" "$main/live_app/banner.txt"
 cp "$here/fixture/dev.sh" "$main/scripts/dev.sh"
-cp "$repo/plugins/harness-kit/skills/harness-kit/templates/scripts/dev-instance.sh" "$main/scripts/dev-instance.sh"
-chmod +x "$main/scripts/dev.sh" "$main/scripts/dev-instance.sh"
+cp "$repo/plugins/harness-kit/skills/harness-kit/templates/scripts/harness/lib/dev-instance.sh" "$main/scripts/harness/lib/dev-instance.sh"
+chmod +x "$main/scripts/dev.sh" "$main/scripts/harness/lib/dev-instance.sh"
 (
     cd "$main" || exit 1
     git init -q
@@ -46,15 +46,15 @@ git -C "$main" worktree add -q -b linked-fixture "$linked" || exit 1
 # physical path until the candidates separate. This preserves the assertion
 # without turning the documented collision caveat into a probabilistic CI
 # failure.
-port_a=$(cd "$main" && bash scripts/dev-instance.sh port 30000 20000 fixture) || exit 1
-port_b=$(cd "$linked" && bash scripts/dev-instance.sh port 30000 20000 fixture) || exit 1
+port_a=$(cd "$main" && bash scripts/harness/lib/dev-instance.sh port 30000 20000 fixture) || exit 1
+port_b=$(cd "$linked" && bash scripts/harness/lib/dev-instance.sh port 30000 20000 fixture) || exit 1
 candidate_attempt=0
 while [ "$port_a" = "$port_b" ] && [ "$candidate_attempt" -lt 20 ]; do
     git -C "$main" worktree remove --force "$linked" >/dev/null 2>&1 || exit 1
     candidate_attempt=$((candidate_attempt + 1))
     linked="$work/linked-retry-$candidate_attempt"
     git -C "$main" worktree add -q --detach "$linked" HEAD || exit 1
-    port_b=$(cd "$linked" && bash scripts/dev-instance.sh port 30000 20000 fixture) || exit 1
+    port_b=$(cd "$linked" && bash scripts/harness/lib/dev-instance.sh port 30000 20000 fixture) || exit 1
 done
 [ "$port_a" != "$port_b" ] \
     || { echo "FAIL: could not derive distinct candidates after 20 physical-path retries"; exit 1; }
@@ -76,7 +76,7 @@ assert obj["status"] in {"ready", "seeded", "stopped", "unhealthy", "error"}
 assert obj["status"] == sys.argv[3]
 assert isinstance(obj["instance"], str) and re.fullmatch(r"h[0-9a-f]{12}", obj["instance"])
 assert isinstance(obj["url"], str)
-assert obj["logs"] == f'.harness/dev/{obj["instance"]}/app.log'
+assert obj["logs"] == f'.harness/var/dev/{obj["instance"]}/app.log'
 assert isinstance(obj["traces"], str)
 assert type(obj["started"]) is bool
 assert obj["started"] is (sys.argv[4] == "true")
@@ -144,7 +144,7 @@ expected_seed='{"items":[{"id":1,"name":"Ada"}],"seed_version":1}'
 [ "$(http_get "$url_a/data")" = "$expected_seed" ] \
     || { echo "FAIL: deterministic seed content mismatch"; exit 1; }
 printf '{"items":[{"id":99,"name":"Mutated"}],"seed_version":99}\n' \
-    > "$main/.harness/dev/$instance_a/data.json"
+    > "$main/.harness/var/dev/$instance_a/data.json"
 run_ok "$main" seed "$work/a-reseed.json" "$work/a-reseed.err" || exit 1
 [ "$(http_get "$url_a/data")" = "$expected_seed" ] \
     || { echo "FAIL: repeated seed did not reset known data"; exit 1; }

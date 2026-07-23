@@ -162,7 +162,7 @@ new_canary() {
         cp "$_m" "$CANARY/scripts/" 2>/dev/null || true
     done
     [ -d "$SCRIPTS_DIR/hooks" ] && cp -R "$SCRIPTS_DIR/hooks" "$CANARY/scripts/" 2>/dev/null
-    rm -f "$CANARY"/scripts/hooks/test-*.sh 2>/dev/null
+    rm -f "$CANARY"/scripts/harness/hooks/test-*.sh 2>/dev/null
     [ -f "$SCRIPTS_DIR/harness.conf" ] && cp "$SCRIPTS_DIR/harness.conf" "$CANARY/scripts/" 2>/dev/null
     git -C "$CANARY" add -A >/dev/null 2>&1 || return 1
     git -C "$CANARY" commit -qm baseline >/dev/null 2>&1 || return 1

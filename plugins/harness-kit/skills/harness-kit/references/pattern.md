@@ -14,7 +14,7 @@ whatever ships next — without maintaining N parallel configurations.
 2. **Provider shims are generated or thin.** Each harness needs files in its
    own dialect and location (`.claude/skills/`, `.cursor/rules/`, ...). Those
    are either *generated pointer stubs* (skills AND agent personas — both
-   produced by `scripts/sync-agent-skills.sh`, in each provider's dialect:
+   produced by `scripts/harness/sync`, in each provider's dialect:
    `.codex` agent stubs are TOML, the rest Markdown) or *hand-written thin
    pointers* (cursor rules) that carry only the harness-required frontmatter
    plus a "Canonical source: docs/..." line. Frontmatter is copied from the
@@ -22,7 +22,7 @@ whatever ships next — without maintaining N parallel configurations.
    trigger — tuning it in `docs/` must propagate to every harness.
 
 3. **Behavior lives in portable executables, not harness config.** Hooks are
-   plain bash scripts in `scripts/hooks/` that read the event JSON on stdin
+   plain bash scripts in `scripts/harness/hooks/` that read the event JSON on stdin
    and tolerate every harness's field layout. Per-provider hook configs
    (`.claude/settings.json`, `.cursor/hooks.json`, `.codex/hooks.json`) are
    one-line wirings; an OpenCode plugin shim is the documented fourth path,
@@ -30,7 +30,7 @@ whatever ships next — without maintaining N parallel configurations.
    is not hook-wired. This keeps policy identical across harnesses and
    testable in isolation.
 
-4. **Drift is a CI failure, not a code-review hope.** `scripts/check-harness.sh`
+4. **Drift is a CI failure, not a code-review hope.** `scripts/harness/check-harness`
    fails the build when a stub is hand-edited, a canonical skill changes
    without a re-sync, a stub is missing from a provider dir, an AGENTS.md
    link goes dead, or a hook regression test breaks. The pattern survives
@@ -41,7 +41,7 @@ whatever ships next — without maintaining N parallel configurations.
    harness, symlink- and case-aware; patterns single-sourced in
    `harness.conf`) and by the harness's native permission deny list (works
    even when hooks don't fire, e.g. some subagent contexts) —
-   `check-harness.sh` fails when the two drift apart. The mechanism is
+   `check-harness` fails when the two drift apart. The mechanism is
    protected from the agent too: `guard-config.sh` denies edits to hook
    scripts, machinery, and lint configs, and the manifest checksum
    verification in CI catches whatever the hook can't see. Advisory checks
@@ -49,15 +49,18 @@ whatever ships next — without maintaining N parallel configurations.
    the enforcing gate is tests/CI.
 
 6. **Verification is executable, and feedback lands at the fastest layer.**
-   `scripts/verify.sh` is the one executable definition of "done"; AGENTS.md,
+   `scripts/harness/verify` is the one executable definition of "done"; AGENTS.md,
    CLAUDE.md, and skills point at it instead of listing commands, so the
    gates cannot drift across docs. Independent full gates can use its explicit
    parallel queue; serial gates retain cheap-first, fail-fast behavior. The same
    policy runs at three latencies:
    the post-edit hook feeds lint findings back within the turn
-   (milliseconds), the advisory stop-hook can run `verify.sh --fast`
-   (seconds), CI runs everything (minutes). Agents can't ignore a failing
-   gate the way they ignore prose.
+   (milliseconds), the advisory stop-hook can run
+   `scripts/harness/verify --fast` (seconds), CI runs everything (minutes).
+   Agents can't ignore a failing gate the way they ignore prose. The runner
+   is kit-owned mechanism; the repo's gate list is data in
+   `.harness/gates.conf`, so updates ship orchestration fixes without ever
+   touching gate policy.
 
 7. **Runnable apps have one worktree-scoped control surface.** Application
    repos author `scripts/dev.sh up|health|seed|down` against the development
@@ -81,7 +84,7 @@ whatever ships next — without maintaining N parallel configurations.
    are named honestly rather than presented as an OS or network sandbox.
 
 9. **Observability closes the loop.** Denies, advisories, lint findings, and
-   verification gate outcomes append JSON lines to `.harness/log.jsonl`
+   verification gate outcomes append JSON lines to `.harness/var/log.jsonl`
    (git-ignored). Exact five-key v1 review findings coexist with an eight-key
    `version: 2` event envelope; the deterministic `audit-log.sh` reducer owns
    rates, retries, repeated paths, review counts, eval drift, and explicit N/A
@@ -123,33 +126,37 @@ docs/
   agents/<name>.md             # canonical persona docs
   plans/                       # execution plans (surfaced by session-context.sh)
 scripts/
-  harness.conf                 # shared tailoring surface (providers, paths,
-                               #   secret patterns, log toggle)     [tailored]
-  verify.sh                    # executable "done": ordered quality gates
-                               #   (--fast subset for the stop-hook) [tailored]
   dev.sh                       # app-only runtime adapter: up/health/seed/down
                                #   (authored per repo; no generic template) [tailored]
-  dev-instance.sh              # physical-worktree suffix + port candidate helper
-  log-lib.sh                   # fail-open v2 event writer helpers
-  audit-log.sh                 # deterministic local outcome/eval reducer
-  doc-garden.sh                # offline repository documentation scanner
-  sync-agent-skills.sh         # stub + skill-resource mirror generator
-                               #   (+ --check mode, orphan detection)
-  check-harness.sh             # CI drift gate + manifest integrity + doctor
-  kit-manifest                 # ship contract: layer per shipped path + retired set
-  .harness-manifest            # kit version + checksums (upgrade + CI integrity)
-  hooks/
-    lib.sh                     # stdin parsing, deny, feedback, advise-once, hook_log
-    format.sh                  # post-edit format + lint feedback (rules from harness.conf)
-    guard-secrets.sh           # pre-read secret denial (patterns from harness.conf)
-    guard-config.sh            # pre-edit mechanism/lint-config protection [tailored]
-    guard-project-policy.sh    # advisory stop-hook invariants     [tailored]
-    session-context.sh         # session-start orientation banner (branch,
+  harness/                     # KIT-OWNED mechanism tree (sha-pinned, replaced on update)
+    bootstrap  verify  sync    # extensionless verb commands: install/update entry,
+    check-harness              #   gate runner (reads .harness/gates.conf),
+    check-instructions         #   stub+wiring generator, combined coherence audit,
+    check-docs  detect-drift   #   and the per-family checker entries
+    validate-plan  run-evals
+    harness.conf               # shared tailoring surface (providers, paths, secret
+                               #   patterns, format/lint rules, log toggle) [tailored]
+    kit-manifest               # ship contract: layer per shipped path + retired set
+    .harness-manifest          # kit version + checksums (upgrade + CI integrity)
+    lib/                       # shared code: install-lib, check families,
+                               #   eval/log/audit/doc-garden/dev-instance helpers
+    hooks/
+      lib.sh                   # stdin parsing, deny, feedback, advise-once, hook_log
+      format.sh                # post-edit format + lint feedback (rules from harness.conf)
+      guard-secrets.sh         # pre-read secret denial (patterns from harness.conf)
+      guard-config.sh          # pre-edit mechanism/lint-config protection
+      session-context.sh       # session-start orientation banner (branch,
                                #   recent commits, active plans)
-    test-*.sh                  # regression tests, run by check-harness.sh
-.harness/                      # local harness state (git-ignored)
-  log.jsonl                    # mixed hook/review/verification outcome log
-  dev/                         # app-only, worktree-scoped runtime state/logs/traces
+    tests/test-*.sh            # shipped regression floor, run by check-harness
+.harness/                      # AGENT-OPERATIONAL layer (committed, repo-owned)
+  gates.conf                   # THE quality-gate list the verify runner executes
+                               #   (--fast subset for the stop-hook)  [tailored]
+  hooks/
+    guard-project-policy.sh    # advisory stop-hook invariants        [tailored]
+  var/                         # runtime state (git-ignored)
+    log.jsonl                  # mixed hook/review/verification outcome log
+    dev/                       # app-only, worktree-scoped runtime state/logs/traces
+    base/ eval-results/        # update baselines; eval run artifacts
 .claude/   settings.json (permissions + hooks + optional declared profile), skills/, agents/
 .cursor/   hooks.json, sandbox.json (optional declared profile), rules/, skills/, agents/, mcp.json
 .codex/    config.toml (optional declared profile + MCP), hooks.json, agents/*.toml   # skills from .agents/
@@ -161,8 +168,8 @@ scripts/
 
 | Layer | Examples | Packaging treatment |
 | --- | --- | --- |
-| **Mechanism** | sync script, check script, lib.sh, hook tests, `dev-instance.sh` | Copied verbatim; upgraded via manifest; integrity-checked in CI |
-| **Policy** | quality gates (verify.sh), secret patterns, formatter/lint maps and extra protected paths (harness.conf data), permission allowlist, plans dir; app-only authored `dev.sh` | Templates with marked `TAILOR` blocks, or repo-authored adapters where no generic mechanism can fit; pinned after init and never auto-overwritten |
+| **Mechanism** | the whole `scripts/harness/` tree: verb commands (verify runner, checkers, sync, bootstrap), lib/, hooks/, shipped tests | Copied verbatim; upgraded via manifest; integrity-checked in CI |
+| **Policy** | quality gates (`.harness/gates.conf` data), secret patterns, formatter/lint maps and extra protected paths (harness.conf data), the project stop hook (`.harness/hooks/`), permission allowlist, plans dir; app-only authored `dev.sh` | Templates with marked `TAILOR` blocks, or repo-authored adapters where no generic mechanism can fit; pinned after init and never auto-overwritten |
 | **Content** | AGENTS.md, conventions, skills, personas, invariant checks; app-only tailored runtime convention/skill | Authored or tailored per-project; kit provides skeletons + interview |
 
 ## Why stubs instead of symlinks or full copies
@@ -174,7 +181,7 @@ scripts/
   verbatim frontmatter (correct activation), and are pinned to the generator
   output by CI (cannot drift).
 
-The stub-size cap in `check-harness.sh` (25 lines) exists so full copies
+The stub-size cap in `check-harness` (25 lines) exists so full copies
 cannot quietly reappear — any provider SKILL.md that grows past a pointer
 fails the build.
 
@@ -192,11 +199,11 @@ drift.
 
 ## Upgrade model
 
-At install, the kit writes `scripts/.harness-manifest`: the kit version plus
+At install, the kit writes `scripts/harness/.harness-manifest`: the kit version plus
 a sha256 per installed mechanism file, pinned AFTER init-time tailoring. In an
 application repo it also pins the authored `scripts/dev.sh` with a
 ` # tailored` marker; the marker makes it diff-only, not exempt from integrity.
-`check-harness.sh` verifies those checksums on every run, so any later edit
+`check-harness` verifies those checksums on every run, so any later edit
 — agent, human, or merge — fails CI until its line is deliberately re-pinned.
 A line suffixed ` # tailored` marks a deliberate local fork: its checksum is
 **still** integrity-verified (a tailored file may not drift unnoticed — the
@@ -206,7 +213,7 @@ whose checksum still matches the manifest are
 upgraded in place; files that differ (or are marked tailored) get a diff
 instead of an overwrite. Policy templates (TAILOR blocks) and authored policy
 adapters are always treated as tailored after init. Update uses the NEW kit's
-`templates/scripts/install-lib.sh` and its `kit-manifest` — the declarative
+`templates/scripts/harness/lib/install-lib.sh` and its `kit-manifest` — the declarative
 ship contract every file set derives from — to enumerate the new version's
 mechanism: an old installed helper cannot discover files that did not exist
 when it shipped. The kit-manifest's `retired` section lets update *remove* a

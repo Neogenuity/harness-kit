@@ -11,7 +11,7 @@ symlinks, or generated stubs.
 
 ## Decision
 
-`scripts/sync-agent-skills.sh` generates **tiny pointer stubs** — verbatim
+`scripts/harness/sync` generates **tiny pointer stubs** — verbatim
 frontmatter (the `description` is the activation trigger, so it must stay
 identical everywhere) plus a `Canonical source: docs/skills/...` line — and
 CI pins stubs to the generator's exact output.

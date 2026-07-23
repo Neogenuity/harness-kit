@@ -3,6 +3,60 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.23.0 — 2026-07-22
+
+Phase 3 of the standard-consumer-layout restructure
+(`docs/plans/standard-consumer-layout.md`): the mechanism re-home. The flat
+`scripts/` install becomes the standard consumer layout (ADR 010) —
+`scripts/harness/` kit tree + committed `.harness/` repo policy. Old paths
+are `retired` kit-manifest entries; ADR 009's retirement contract is the
+migration.
+
+### Changed
+
+- **`scripts/harness/` command surface:** extensionless verb commands —
+  `bootstrap`, `verify`, `sync`, `check-harness`, `check-instructions`,
+  `check-docs`, `detect-drift`, `validate-plan`, `run-evals` — over
+  `lib/*.sh`, `hooks/*.sh`, and `tests/*.sh`. The checker monolith is
+  decomposed into per-family `lib/check-*.sh` scripts; the `check-harness`
+  orchestrator sums their `ERROR:` lines and owns the combined summary.
+- **Verify split (mechanism/policy completion):** the runner
+  (`scripts/harness/verify`) is kit-owned mechanism, auto-replaced on
+  update; the repo's gate list is declarative data in **`.harness/gates.conf`**
+  (`gate`/`full`/`parallel`/`parallel-each` lines, commands via `bash -c`).
+  A pre-v0.23.0 tailored `verify.sh` gate block migrates to gates.conf as
+  an approved diff. The runner gains a documented `HARNESS_VERIFY_PRELUDE`
+  test seam.
+- **Hooks split by ownership:** mechanism guards live in
+  `scripts/harness/hooks/`; `format.sh` is mechanism now (its formatter/lint
+  maps moved to `harness.conf` `FORMAT_RULES`/`LINT_RULES` data);
+  the repo-owned `guard-project-policy.sh` moves to **`.harness/hooks/`**.
+  Provider hook configs, check #8d tuple tables, and the resolvability scan
+  follow the new paths.
+- **`.harness/` is committed policy; runtime state moves to `.harness/var/`**
+  (`log.jsonl`, `base/`, `eval-results/`, `dev/`, `stop-markers/`). Init
+  and update narrow a pre-v0.23.0 `.harness/` gitignore line to
+  `.harness/var/` (`harness_append_gitignore`).
+- **guard-config protected set collapses** to `scripts/harness/*` + the
+  repo-owned enforcement-layer policy files (`.harness/gates.conf`,
+  `.harness/hooks/*.sh`) + provider/CI configs; repo additions stay in
+  `GUARD_PROTECTED_EXTRA`.
+- **Checks rescoped:** #5b/#6 scan and run exactly the shipped floor at
+  `scripts/harness/tests/test-*.sh` (the dead nested skip-list is gone —
+  the smoke suite self-guards); #9c derives its expected set from the whole
+  `scripts/harness` tree plus the `.harness/` policy paths.
+
+### Migration (pre-v0.23.0 installs)
+
+`harness_update_apply` migrates the integrity manifest to
+`scripts/harness/.harness-manifest` (`migrate` report line), removes every
+pristine old flat path, and installs the new tree; drifted or tailored old
+copies are kept (`retire-keep`) for manual review. Then narrow the
+gitignore, move runtime state under `.harness/var/`, and port tailored
+policy content (gate block → gates.conf; `scripts/harness.conf` →
+`scripts/harness/harness.conf`; the project hook → `.harness/hooks/`).
+Pinned end-to-end by `test-install-update.sh` case (l).
+
 ## 0.22.0 — 2026-07-22
 
 Phase 2 of the standard-consumer-layout restructure

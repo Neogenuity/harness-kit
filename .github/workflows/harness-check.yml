@@ -19,6 +19,6 @@ jobs:
         with:
           persist-credentials: false
       - name: Validate agent harness
-        run: bash scripts/check-harness.sh
+        run: bash scripts/harness/check-harness
       - name: Validate dual-provider packaging
         run: bash scripts/check-packaging.sh

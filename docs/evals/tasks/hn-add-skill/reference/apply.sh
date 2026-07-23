@@ -20,4 +20,4 @@ DOC
 awk '1; /docs\/skills\/release\/SKILL\.md/ && !done {
   print "- [docs/skills/changelog/SKILL.md](docs/skills/changelog/SKILL.md) — update the changelog when cutting a release";
   done=1 }' AGENTS.md > AGENTS.md.tmp && mv AGENTS.md.tmp AGENTS.md
-bash scripts/sync-agent-skills.sh >/dev/null
+bash scripts/harness/sync >/dev/null

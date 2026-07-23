@@ -14,7 +14,7 @@
 # The enforcing gate belongs in tests or CI, not here.
 set -uo pipefail
 
-. "$(dirname "$0")/lib.sh" 2>/dev/null || exit 0
+. "$(dirname "$0")/../../scripts/harness/hooks/lib.sh" 2>/dev/null || exit 0
 
 hook_read_input
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -39,11 +39,11 @@ append() { warnings="${warnings}$1"$'\n'; }
 # — nothing uncommitted means nothing new can fail, and this hook fires on
 # EVERY stop, so the git-status guard avoids a multi-second tax on no-op stops:
 #
-# if [ -x scripts/verify.sh ] && [ -n "$(git status --porcelain 2>/dev/null)" ] \
-#         && ! out=$(bash scripts/verify.sh --fast 2>&1); then
+# if [ -x scripts/harness/verify ] && [ -n "$(git status --porcelain 2>/dev/null)" ] \
+#         && ! out=$(bash scripts/harness/verify --fast 2>&1); then
 #     append "VERIFY WARNING: fast quality gates are failing:"
 #     append "$out"
-#     append "Fix, then run 'bash scripts/verify.sh' before finishing."
+#     append "Fix, then run 'bash scripts/harness/verify' before finishing."
 # fi
 #
 # Close with a pointer to the enforcing gate, e.g.:

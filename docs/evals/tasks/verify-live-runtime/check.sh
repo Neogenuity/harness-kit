@@ -8,8 +8,8 @@ root="$(cd "$here/../../../.." && pwd)"
 command -v python3 >/dev/null 2>&1 || { echo "python3 is required for this repo-only fixture"; exit 1; }
 cmp -s scripts/dev.sh "$here/fixture/dev.sh" \
     || { echo "scripts/dev.sh changed; fix the application instead"; exit 1; }
-cmp -s scripts/dev-instance.sh "$root/plugins/harness-kit/skills/harness-kit/templates/scripts/dev-instance.sh" \
-    || { echo "scripts/dev-instance.sh changed; fix the application instead"; exit 1; }
+cmp -s scripts/harness/lib/dev-instance.sh "$root/plugins/harness-kit/skills/harness-kit/templates/scripts/harness/lib/dev-instance.sh" \
+    || { echo "scripts/harness/lib/dev-instance.sh changed; fix the application instead"; exit 1; }
 
 # Grade workflow evidence before the grader starts its own process. A ready
 # result means the agent leaked an instance; a missing retained log means it
@@ -23,7 +23,7 @@ evidence_log=$(printf '%s' "$initial" | python3 -c '
 import json,re,sys
 o=json.load(sys.stdin)
 assert o["action"] == "health" and o["status"] == "stopped"
-assert re.fullmatch(r"\.harness/dev/h[0-9a-f]{12}/app\.log", o["logs"])
+assert re.fullmatch(r"\.harness/var/dev/h[0-9a-f]{12}/app\.log", o["logs"])
 print(o["logs"])
 ' 2>/dev/null) || { echo "initial health did not report a valid repo-relative log"; exit 1; }
 [ -f "$evidence_log" ] || { echo "missing retained live-flow log: $evidence_log"; exit 1; }

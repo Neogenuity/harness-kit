@@ -17,7 +17,7 @@ runs, so teams do not accumulate conflicting vendor-specific configurations.
 ```mermaid
 flowchart LR
     D["docs/<br/>one canonical knowledge base<br/>(architecture, conventions, skills)"]
-    V["scripts/verify.sh<br/>executable definition of done"]
+    V["scripts/harness/verify<br/>executable definition of done"]
     G["generated stubs<br/>.claude/ .cursor/ .opencode/ .agents/"]
     H["portable hooks<br/>guards + lint feedback, any harness"]
     CI["check-harness.sh (CI)<br/>drift is a build failure"]
@@ -45,7 +45,7 @@ everything else is the dogfood.
 - **`docs/` as the single source of truth** — architecture, conventions,
   skills, personas, indexed by an `AGENTS.md` table of contents (with a thin
   `CLAUDE.md` importing it).
-- **An executable definition of "done"** — `scripts/verify.sh` holds the
+- **An executable definition of "done"** — `scripts/harness/verify` holds the
   ordered quality gates; docs point at it instead of listing commands.
 - **Generated provider stubs** — pointer stubs rendered into
   `.claude/.cursor/.opencode/.agents/skills/` with frontmatter copied
@@ -64,7 +64,7 @@ everything else is the dogfood.
 - **Conditional runtime legibility for applications** — app-shaped repos can
   adopt a tailored, pinned `scripts/dev.sh` lifecycle plus a self-contained
   live-verification skill. Every repo receives the worktree-aware
-  `scripts/dev-instance.sh` helper; libraries receive no placeholder runtime
+  `scripts/harness/lib/dev-instance.sh` helper; libraries receive no placeholder runtime
   contract.
 
 Everything is **vendored into the target repo**: nothing at runtime depends

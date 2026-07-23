@@ -21,7 +21,7 @@ editor.
 2. Run existing harness checks first when present:
 
    ```bash
-   bash scripts/check-harness.sh
+   bash scripts/harness/check-harness
    ```
 
    Keep its `AGENTS.md`/`docs/**/*.md` local-link and configured matrix-stamp
@@ -30,7 +30,7 @@ editor.
 3. Run the model-free, offline extension:
 
    ```bash
-   bash scripts/doc-garden.sh --format table
+   bash scripts/harness/lib/doc-garden.sh --format table
    ```
 
    Use `--format json` for a stable machine-readable report. The scanner covers

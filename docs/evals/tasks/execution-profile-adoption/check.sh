@@ -16,7 +16,7 @@ check() {
 }
 
 profile_declared_once() {
-    [ "$(grep -c '^EXECUTION_PROFILE_PROVIDERS=' scripts/harness.conf)" -eq 1 ]
+    [ "$(grep -c '^EXECUTION_PROFILE_PROVIDERS=' scripts/harness/harness.conf)" -eq 1 ]
 }
 
 doc_has() {
@@ -26,7 +26,7 @@ doc_has() {
 check jq -e '
     .companyPolicy == "keep-me"
     and (.permissions.deny | index("Read(**/.env)") != null)
-    and .hooks.SessionStart[0].hooks[0].command == "scripts/hooks/session-context.sh"
+    and .hooks.SessionStart[0].hooks[0].command == "scripts/harness/hooks/session-context.sh"
     and .sandbox.enabled == true
     and .sandbox.failIfUnavailable == true
     and .sandbox.allowUnsandboxedCommands == true
@@ -116,14 +116,14 @@ reject_provider_telemetry(data)
 PY
 
 check profile_declared_once
-check grep -qx 'EXECUTION_PROFILE_PROVIDERS=".claude .codex"' scripts/harness.conf
-check grep -qx 'EVAL_PROFILE_HARNESS_SENTINEL="keep-existing-harness-policy"' scripts/harness.conf
-check grep -q '^HOOK_WIRED_PROVIDERS=' scripts/harness.conf
-check grep -q '^AGENT_PROVIDERS=' scripts/harness.conf
-check grep -q '^PLANS_DIR=' scripts/harness.conf
-check grep -q '^SECRET_PATTERNS=' scripts/harness.conf
-check grep -q '^SECRET_ALLOW_PATTERNS=' scripts/harness.conf
-check grep -q '^MCP_ALLOWED_SERVERS=' scripts/harness.conf
+check grep -qx 'EXECUTION_PROFILE_PROVIDERS=".claude .codex"' scripts/harness/harness.conf
+check grep -qx 'EVAL_PROFILE_HARNESS_SENTINEL="keep-existing-harness-policy"' scripts/harness/harness.conf
+check grep -q '^HOOK_WIRED_PROVIDERS=' scripts/harness/harness.conf
+check grep -q '^AGENT_PROVIDERS=' scripts/harness/harness.conf
+check grep -q '^PLANS_DIR=' scripts/harness/harness.conf
+check grep -q '^SECRET_PATTERNS=' scripts/harness/harness.conf
+check grep -q '^SECRET_ALLOW_PATTERNS=' scripts/harness/harness.conf
+check grep -q '^MCP_ALLOWED_SERVERS=' scripts/harness/harness.conf
 check test -f docs/conventions/execution-profiles.md
 check grep -q 'docs/conventions/execution-profiles.md' AGENTS.md
 check grep -q 'EVAL_PROFILE_AGENTS_SENTINEL: keep-existing-instructions' AGENTS.md
@@ -166,7 +166,7 @@ check doc_has 'not proof of the full runtime lifecycle'
 check doc_has 'non-root'
 check doc_has 'container-engine socket'
 check doc_has 'postCreateCommand'
-check doc_has '\.harness/log\.jsonl'
+check doc_has '\.harness/var/log\.jsonl'
 check doc_has 'does not join the streams automatically'
 check sh -c '! grep -q "plugins/harness-kit\|skill directory" docs/conventions/execution-profiles.md'
 check sh -c '! grep -Eiq "OTEL_LOG_USER_PROMPTS[[:space:]]*=[[:space:]]*1|Authorization:|Bearer[[:space:]]" docs/conventions/execution-profiles.md'

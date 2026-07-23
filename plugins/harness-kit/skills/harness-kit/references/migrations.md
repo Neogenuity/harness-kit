@@ -14,10 +14,10 @@ For an install from v0.16 or earlier, keep mechanism, policy, and content
 decisions separate:
 
 1. Run update with the new kit's `install-lib.sh`. Its inventory adds
-   `scripts/log-lib.sh`, `scripts/audit-log.sh`, `scripts/doc-garden.sh`, and
-   their tests. It replaces a manifest-matching `scripts/hooks/lib.sh`; a
+   `scripts/harness/lib/log-lib.sh`, `scripts/harness/lib/audit-log.sh`, `scripts/harness/lib/doc-garden.sh`, and
+   their tests. It replaces a manifest-matching `scripts/harness/hooks/lib.sh`; a
    changed copy gets a diff. Do not rewrite the existing mixed local log.
-2. Treat `scripts/verify.sh` as tailored policy even when its old checksum is
+2. Treat `scripts/harness/verify` as tailored policy even when its old checksum is
    known. Review and explicitly approve the v2 gate-instrumentation diff. If it
    is declined, guard/reviewer data remains readable but gate trends are
    no-data/N/A.
@@ -31,31 +31,32 @@ decisions separate:
 
 A second update must be a no-op. Existing content and generated stubs are never
 auto-added or overwritten; `hooks/lib.sh` and the new helpers follow manifest
-checksums, while `verify.sh` stays diff-only.
+checksums, while `.harness/gates.conf` stays diff-only.
 
 ## Per-provider sunset playbooks
 
 **A provider starts reading `.agents/skills/` natively** (already true for
 Codex and OpenCode):
 
-1. Remove the provider's dir from `PROVIDERS` in `scripts/harness.conf`.
+1. Remove the provider's dir from `PROVIDERS` in `scripts/harness/harness.conf`.
 2. Delete `<provider>/skills/` (the sync's orphan check will demand this
    anyway).
-3. `bash scripts/sync-agent-skills.sh && bash scripts/check-harness.sh`,
+3. `bash scripts/harness/sync && bash scripts/harness/check-harness`,
    commit stubs + conf together.
 
 **Claude Code ships native `AGENTS.md` loading**
 (anthropics/claude-code#34235):
 
-1. Delete `CLAUDE.md` (today just an `@AGENTS.md` import + a verify.sh
-   pointer; move any Claude-only lines into AGENTS.md or drop them).
+1. Delete `CLAUDE.md` (today just an `@AGENTS.md` import + a
+   `scripts/harness/verify` pointer; move any Claude-only lines into
+   AGENTS.md or drop them).
 2. Keep `.claude/settings.json` — permissions and hook wiring are separate
    concerns and stay.
 
 **A provider ships native shell hooks** (watch: OpenCode, whose portable-hook
 reuse would take the TS plugin shim — not shipped, descoped 2026-07-13):
 
-1. Wire the same `scripts/hooks/*.sh` scripts in the provider's hook config
+1. Wire the same `scripts/harness/hooks/*.sh` scripts in the provider's hook config
    per the provider matrix conventions (stdin JSON, exit 2 = deny).
 2. Delete any hand-rolled shim (`.opencode/plugins/` for OpenCode); the kit
    ships none by default.
@@ -99,7 +100,7 @@ beside the existing one — zero content duplication.
 4. Extend `check-packaging.sh` to validate the new manifest and marketplace
    entry — schema, name agreement, version == `VERSION`, a contained
    `./`-relative source path.
-5. `bash scripts/verify.sh` green. Releases bump `VERSION` and every
+5. `bash scripts/harness/verify` green. Releases bump `VERSION` and every
    `plugin.json` version together (the packaging gate enforces equality); see
    ADR 007.
 
@@ -115,13 +116,13 @@ canonical location and retire the mirror step entirely:
 
 At that point the kit degrades gracefully into what was always the durable
 core: the canonical `docs/` knowledge base, the portable hooks with their
-tests, `verify.sh`, and the CI drift gate.
+tests, the verify runner with its gates.conf, and the CI drift gate.
 
 ## Rules that keep migrations safe
 
 - Never migrate and upgrade in the same commit — do the kit `update` first,
   then the migration, so diffs stay attributable.
-- Every step above ends with `bash scripts/check-harness.sh` green before
+- Every step above ends with `bash scripts/harness/check-harness` green before
   commit; the drift gate is exactly the machinery that makes these moves
   cheap.
-- Re-pin `scripts/.harness-manifest` when a migration edits mechanism files.
+- Re-pin `scripts/harness/.harness-manifest` when a migration edits mechanism files.

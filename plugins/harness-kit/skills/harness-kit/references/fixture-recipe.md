@@ -6,10 +6,10 @@ seeded plan. It is deliberately tiny — a git repo, one manifest, one source
 file — so the harness's behavior is the only variable.
 
 This is a **manual** recipe. Automated deterministic fixture tests of the
-`init`/`update` *mechanics* now ship as `scripts/test-install-core.sh`,
-`scripts/test-install-update.sh`, and `scripts/test-install-recovery.sh`
+`init`/`update` *mechanics* now ship as `scripts/harness/tests/test-install-core.sh`,
+`scripts/harness/tests/test-install-update.sh`, and `scripts/harness/tests/test-install-recovery.sh`
 (sharing `scripts/install-test-lib.sh`, driving the pure-filesystem functions
-in `scripts/install-lib.sh` — clean init, non-clobber floor, no-op update,
+in `scripts/harness/lib/install-lib.sh` — clean init, non-clobber floor, no-op update,
 mechanism upgrade, tailored-file preservation, drift detection). Use this
 manual recipe when you want to smoke-test a change by hand,
 exercise the model-driven authoring steps the automated suite deliberately
@@ -61,10 +61,10 @@ JSON
 cd "${FIX:?fixture build failed — see the error above}" && echo "fixture at $FIX"
 ```
 
-### If you automate this into a `scripts/test-*.sh`
+### If you automate this into a `scripts/harness/tests/test-*.sh`
 
-`check-harness.sh` check #5b enforces the guarded idiom above across
-`scripts/test-*.sh` and `scripts/hooks/test-*.sh`, and it scans quoted text on
+`check-harness` check #5b enforces the guarded idiom above across
+`scripts/harness/tests/test-*.sh`, and it scans quoted text on
 purpose — the `XXXXXX` template lives inside quotes, so it cannot skip strings
 without going blind to the thing it checks. A test that *generates* a fixture
 script therefore trips it on text it never executes:
@@ -95,15 +95,15 @@ scripts in directly:
 ```bash
 KIT=/path/to/harness-kit/plugins/harness-kit/skills/harness-kit/templates
 mkdir -p scripts
-cp "$KIT"/scripts/harness.conf scripts/
-cp "$KIT"/scripts/check-harness.sh scripts/
-cp -R "$KIT"/scripts/hooks scripts/
-chmod +x scripts/*.sh scripts/hooks/*.sh
+cp "$KIT"/scripts/harness/harness.conf scripts/
+cp "$KIT"/scripts/harness/check-harness scripts/
+cp -R "$KIT"/scripts/harness/hooks scripts/
+chmod +x scripts/*.sh scripts/harness/hooks/*.sh
 ```
 
 ## Verify: session-context announces a seeded plan (scope item 6 acceptance)
 
-`PLANS_DIR` defaults to `docs/plans/active` (see `scripts/harness.conf`). Author
+`PLANS_DIR` defaults to `docs/plans/active` (see `scripts/harness/harness.conf`). Author
 the plans README from the template, seed one plan, and run the hook:
 
 ```bash
@@ -112,7 +112,7 @@ cp "$KIT"/docs/plans/README.md   docs/plans/
 cp "$KIT"/docs/plans/_template.md docs/plans/            # README links it
 cp "$KIT"/docs/plans/_template.md docs/plans/active/demo-plan.md
 
-bash scripts/hooks/session-context.sh
+bash scripts/harness/hooks/session-context.sh
 # expect a line:  Active plans (docs/plans/active/): demo-plan
 ```
 

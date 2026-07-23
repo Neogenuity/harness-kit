@@ -19,7 +19,7 @@ Pass threshold: <e.g. every dimension ≥ 4>.
 
 - Model: `<the judged model, pinned>`
 - Prompt: `<path to the judge prompt, or inline>`
-- Input: the trial transcript under `.harness/eval-results/<task>/<run>/trial-N/`.
+- Input: the trial transcript under `.harness/var/eval-results/<task>/<run>/trial-N/`.
 
 ## Calibration
 

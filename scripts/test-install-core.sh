@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deterministic fixture tests of the kit's install MECHANICS core
-# (scripts/install-lib.sh): runtime-prerequisite preflight, clean init driven
+# (scripts/harness/lib/install-lib.sh): runtime-prerequisite preflight, clean init driven
 # by the shipped mechanism inventory, the non-clobber floor, .gitignore append
 # safety/idempotency, and the harness_conf_* declaration helpers. Each case
 # spins up a throwaway git repo in a scratch dir, drives the library — no
@@ -81,7 +81,7 @@ write_mirrored_claude_settings "$F"
 ( cd "${F:?}" && git_c add -A && git_c commit -qm claude >/dev/null )
 missing=""
 unpinned=""
-manifest_paths=$(awk '{print $2}' "$F/scripts/.harness-manifest")
+manifest_paths=$(awk '{print $2}' "$F/scripts/harness/.harness-manifest")
 while IFS= read -r p; do
     [ -n "$p" ] || continue
     [ -f "$F/$p" ] || missing="$missing $p(absent)"
@@ -110,10 +110,10 @@ if [ -z "$unpinned" ]; then
 else
     fail "clean init: manifest omits an installed mechanism file —$unpinned"
 fi
-grep -qxF '.harness/' "$F/.gitignore" \
-    && pass "clean init: .harness/ is git-ignored" \
-    || fail "clean init: .gitignore missing .harness/"
-out=$(bash "$F/scripts/check-harness.sh" 2>&1); rc=$?
+grep -qxF '.harness/var/' "$F/.gitignore" \
+    && pass "clean init: .harness/var/ is git-ignored" \
+    || fail "clean init: .gitignore missing .harness/var/"
+out=$(bash "$F/scripts/harness/check-harness" 2>&1); rc=$?
 if [ "$rc" = "0" ]; then
     pass "clean init: check-harness.sh passes in the fixture (deny list mirrors SECRET_PATTERNS)"
 else
@@ -132,7 +132,7 @@ s_before=$(sha_of "$F" ".claude/settings.json")
 a_before=$(sha_of "$F" "AGENTS.md")
 harness_install_mechanism "$SCRIPTS_DIR" "$F"
 harness_append_gitignore "$F"
-harness_generate_manifest "$F" "$KIT_VERSION" > "$F/scripts/.harness-manifest"
+harness_generate_manifest "$F" "$KIT_VERSION" > "$F/scripts/harness/.harness-manifest"
 s_after=$(sha_of "$F" ".claude/settings.json")
 a_after=$(sha_of "$F" "AGENTS.md")
 if [ "$s_before" = "$s_after" ] && [ "$a_before" = "$a_after" ]; then
@@ -143,24 +143,24 @@ fi
 rm -rf "$F"
 
 # --- (c) gitignore append: no-trailing-newline merge safety --------------------
-# A '.gitignore' lacking a trailing newline must not have '.harness/' merge
-# onto its last line (e.g. 'node_modules' + '.harness/' -> 'node_modules.harness/').
+# A '.gitignore' lacking a trailing newline must not have '.harness/var/' merge
+# onto its last line (e.g. 'node_modules' + '.harness/var/' -> 'node_modules.harness/var/').
 F=$(mktemp -d "$WORK/gitignore.XXXXXX") || exit 1
 printf 'node_modules' > "$F/.gitignore"
 harness_append_gitignore "$F"
-if grep -qxF 'node_modules' "$F/.gitignore" && grep -qxF '.harness/' "$F/.gitignore"; then
-    pass "gitignore append: a no-trailing-newline file gets its own '.harness/' line, not a merge"
+if grep -qxF 'node_modules' "$F/.gitignore" && grep -qxF '.harness/var/' "$F/.gitignore"; then
+    pass "gitignore append: a no-trailing-newline file gets its own '.harness/var/' line, not a merge"
 else
-    fail "gitignore append: '.harness/' merged onto the prior line (or the prior line was lost)" "$(cat "$F/.gitignore")"
+    fail "gitignore append: '.harness/var/' merged onto the prior line (or the prior line was lost)" "$(cat "$F/.gitignore")"
 fi
 
 # --- (d) gitignore append: idempotent ------------------------------------------
 before=$(sha_of "$F" ".gitignore")
 harness_append_gitignore "$F"
 after=$(sha_of "$F" ".gitignore")
-count=$(grep -cxF '.harness/' "$F/.gitignore")
+count=$(grep -cxF '.harness/var/' "$F/.gitignore")
 if [ "$before" = "$after" ] && [ "$count" -eq 1 ]; then
-    pass "gitignore append: a second call is a no-op (sha unchanged, one '.harness/' line)"
+    pass "gitignore append: a second call is a no-op (sha unchanged, one '.harness/var/' line)"
 else
     fail "gitignore append: a second call changed the file or duplicated the line (count=$count)"
 fi
@@ -172,8 +172,8 @@ rm -rf "$F"
 F=$(make_fixture) || exit 1
 # Simulate the legacy state: strip the declaration entirely (make_fixture
 # leaves it set-but-empty; a pre-v0.14 conf had no line at all).
-grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS)=' "$F/scripts/harness.conf" > "$F/scripts/hc" \
-    && mv "$F/scripts/hc" "$F/scripts/harness.conf"
+grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS)=' "$F/scripts/harness/harness.conf" > "$F/scripts/hc" \
+    && mv "$F/scripts/hc" "$F/scripts/harness/harness.conf"
 repin "$F"
 if ! harness_conf_declared "$F" HOOK_WIRED_PROVIDERS; then
     pass "harness_conf_declared: a pre-declaration harness.conf reads as undeclared"
@@ -186,12 +186,12 @@ rm -rf "$F"
 # A second declare must neither duplicate the line nor reset a value the user
 # has since edited (migration confirms the set ONCE).
 F=$(make_fixture) || exit 1
-grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS)=' "$F/scripts/harness.conf" > "$F/scripts/hc" \
-    && mv "$F/scripts/hc" "$F/scripts/harness.conf"
+grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS)=' "$F/scripts/harness/harness.conf" > "$F/scripts/hc" \
+    && mv "$F/scripts/hc" "$F/scripts/harness/harness.conf"
 harness_conf_declare "$F" HOOK_WIRED_PROVIDERS ".claude .cursor .codex"
 harness_conf_declare "$F" HOOK_WIRED_PROVIDERS ".claude"
-n=$(grep -c '^HOOK_WIRED_PROVIDERS=' "$F/scripts/harness.conf")
-v=$(grep '^HOOK_WIRED_PROVIDERS=' "$F/scripts/harness.conf")
+n=$(grep -c '^HOOK_WIRED_PROVIDERS=' "$F/scripts/harness/harness.conf")
+v=$(grep '^HOOK_WIRED_PROVIDERS=' "$F/scripts/harness/harness.conf")
 if [ "$n" -eq 1 ] && [ "$v" = 'HOOK_WIRED_PROVIDERS=".claude .cursor .codex"' ]; then
     pass "harness_conf_declare: a second declare is a no-op (no duplicate line, first value retained)"
 else

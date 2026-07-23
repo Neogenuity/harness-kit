@@ -10,7 +10,7 @@
 <!-- suite:    capability (expected < 100%, informational) | regression (expected ~100%, fails on a drop)
      polarity: positive (a behavior must happen) | negative (a shortcut must NOT be taken)
      provider: any | claude | codex   (which CLI this task is meaningful for)
-     grade:    check (run check.sh only) | check+verify (also run the workspace's scripts/verify.sh)
+     grade:    check (run check.sh only) | check+verify (also run the workspace's scripts/harness/verify)
      network:  none | required        (Codex required = experimental broad local/private proxy)
      execution: default | provider-config-write
                 (explicit provider policy/config edits only; metadata does not authorize it;

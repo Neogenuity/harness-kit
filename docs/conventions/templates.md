@@ -7,7 +7,7 @@ mechanical ones.
 
 ## Every guard ships with a regression test
 
-A new or changed hook under `templates/scripts/hooks/` gets a matching
+A new or changed hook under `templates/scripts/harness/hooks/` gets a matching
 `test-<name>.sh` beside it, runnable standalone. A guard without a test is a
 future silent failure — the hook will break on some payload shape and nobody
 will notice, because hooks fail open by design. CI runs every template test;

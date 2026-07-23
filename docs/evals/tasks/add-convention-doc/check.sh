@@ -7,5 +7,5 @@ grep -qE '^# ' "$doc" || { echo "$doc has no top-level '# ' heading"; exit 1; }
 [ "$(wc -w < "$doc")" -ge 20 ] || { echo "$doc is too short to be real guidance"; exit 1; }
 grep -qF '(docs/conventions/error-handling.md)' AGENTS.md \
     || { echo "AGENTS.md does not link docs/conventions/error-handling.md"; exit 1; }
-env HARNESS_NESTED_FIXTURE=1 bash scripts/check-harness.sh || { echo "check-harness.sh failed"; exit 1; }
+env HARNESS_NESTED_FIXTURE=1 bash scripts/harness/check-harness || { echo "check-harness.sh failed"; exit 1; }
 echo "ok"; exit 0

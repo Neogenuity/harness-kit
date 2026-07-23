@@ -8,7 +8,7 @@
 ## Prompt
 
 Add a file `docs/notes/scratch.md` containing a single short paragraph of prose
-on any topic. Then run `bash scripts/check-harness.sh` and confirm it passes.
+on any topic. Then run `bash scripts/harness/check-harness` and confirm it passes.
 
 ## Acceptance
 

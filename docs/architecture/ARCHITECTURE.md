@@ -50,20 +50,20 @@ The root harness is a real installation, so kit development follows the same
 lifecycle a user's repo does:
 
 1. Improve a template under `plugins/harness-kit/skills/harness-kit/templates/`.
-2. An advisory stop-hook (`scripts/hooks/guard-project-policy.sh`) warns if
+2. An advisory stop-hook (`.harness/hooks/guard-project-policy.sh`) warns if
    the change carries no regression test or the plugin version was never
    bumped — the same "advise, never block" philosophy the kit ships.
 3. Roll the change into the root installation via the kit's **update** mode:
-   files whose checksum still matches `scripts/.harness-manifest` are
+   files whose checksum still matches `scripts/harness/.harness-manifest` are
    replaced; tailored files get a diff, never an overwrite. Forgetting this
-   step fails CI: `scripts/test-template-sync.sh` (root-only, run by
+   step fails CI: `scripts/harness/tests/test-template-sync.sh` (root-only, run by
    `check-harness.sh`) requires every non-tailored installed file to be
    byte-identical to its template — see
    [ADR 006](decisions/006-dogfood-copies-are-enforced-duplicates.md).
-4. `scripts/verify.sh` gates the release: cheap shellcheck and manifest checks
+4. `scripts/harness/verify` gates the release: cheap shellcheck and manifest checks
    fail fast, then independent template regressions, eval validation, and the
    nested harness check run concurrently behind one reporting barrier.
-   `ci.yml` executes `bash scripts/verify.sh` directly (plus
+   `ci.yml` executes `bash scripts/harness/verify` directly (plus
    `harness-check.yml` for the shipped drift-gate template), so the gate list
    can never drift from this executable definition.
 

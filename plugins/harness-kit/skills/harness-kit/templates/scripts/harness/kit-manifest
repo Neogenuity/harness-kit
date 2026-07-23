@@ -1,0 +1,161 @@
+# kit-manifest — the harness-kit SHIP CONTRACT: the single declarative source
+# for which files the kit installs, which ownership layer each belongs to, and
+# which previously-shipped paths are retired. install-lib.sh derives every
+# file set from this file (there are no hard-coded inventory lists); the
+# drift checks (#9c/#9d) derive manifest-completeness from it; the kit's
+# update mode reads the NEW kit's copy to decide what to replace, add, and
+# remove.
+#
+# Format: one entry per line —
+#   <layer> <repo-relative path> [src=<path under the kit's scripts/ tree>]
+# Fields are whitespace-separated; '#' lines and blank lines are ignored.
+# src= names the template source when it differs from the default derivation
+# (strip the leading `scripts/` from the path). content entries use
+# dest= the other way around: their path is template-relative and dest=
+# names the installed location — they are authored/copied by the SKILL's
+# init flow, never by the installer.
+#
+# Layers:
+#   mechanism        Copied verbatim at init; update REPLACES it while the
+#                    installed copy still matches its integrity pin.
+#   policy           Template copied at init, owned by the repo after: update
+#                    only ever DIFFS it, even when pristine and unmarked.
+#   optional-policy  Authored per repo (never copied from the kit); when
+#                    present it is integrity-pinned and diff-only, like policy.
+#   retired          No longer shipped. Update REMOVES the installed copy only
+#                    when it is pristine (sha still matches its pin) and not
+#                    '# tailored'; drifted or tailored copies are kept and
+#                    reported for manual review — retirement never deletes
+#                    local changes.
+#
+# This file is itself mechanism: integrity-pinned in
+# scripts/harness/.harness-manifest and protected by guard-config.sh — it
+# tells update what to overwrite and delete, which makes it the most
+# security-sensitive shipped file after the integrity manifest. Ship a new
+# file by adding its line here; stop shipping one by MOVING its line to the
+# retired layer (never just deleting the line).
+
+# --- mechanism: command surface (scripts/harness/) ----------------------------
+mechanism scripts/harness/kit-manifest
+mechanism scripts/harness/bootstrap
+mechanism scripts/harness/verify
+mechanism scripts/harness/sync
+mechanism scripts/harness/check-harness
+mechanism scripts/harness/check-instructions
+mechanism scripts/harness/check-docs
+mechanism scripts/harness/detect-drift
+mechanism scripts/harness/validate-plan
+mechanism scripts/harness/run-evals
+
+# --- mechanism: libraries -----------------------------------------------------
+mechanism scripts/harness/lib/install-lib.sh
+mechanism scripts/harness/lib/sync-lib.sh
+mechanism scripts/harness/lib/check-common.sh
+mechanism scripts/harness/lib/check-instructions.sh
+mechanism scripts/harness/lib/check-docs.sh
+mechanism scripts/harness/lib/check-plan.sh
+mechanism scripts/harness/lib/check-tests.sh
+mechanism scripts/harness/lib/check-drift.sh
+mechanism scripts/harness/lib/check-doctor.sh
+mechanism scripts/harness/lib/eval-lib.sh
+mechanism scripts/harness/lib/eval.sh
+mechanism scripts/harness/lib/eval-harness.sh
+mechanism scripts/harness/lib/log-lib.sh
+mechanism scripts/harness/lib/audit-log.sh
+mechanism scripts/harness/lib/doc-garden.sh
+mechanism scripts/harness/lib/dev-instance.sh
+
+# --- mechanism: hooks (the one policy hook lives under policy below) ----------
+mechanism scripts/harness/hooks/lib.sh
+mechanism scripts/harness/hooks/README.md
+mechanism scripts/harness/hooks/guard-secrets.sh
+mechanism scripts/harness/hooks/guard-config.sh
+mechanism scripts/harness/hooks/format.sh
+mechanism scripts/harness/hooks/session-context.sh
+
+# --- mechanism: shipped test floor (scripts/harness/tests/) -------------------
+mechanism scripts/harness/tests/test-harness-smoke.sh
+mechanism scripts/harness/tests/test-advise-once.sh
+mechanism scripts/harness/tests/test-affected-files.sh
+mechanism scripts/harness/tests/test-codex-hooks-cwd.sh
+mechanism scripts/harness/tests/test-deny-reasons.sh
+mechanism scripts/harness/tests/test-format-feedback.sh
+mechanism scripts/harness/tests/test-guard-config.sh
+mechanism scripts/harness/tests/test-guard-project-policy.sh
+mechanism scripts/harness/tests/test-guard-secrets.sh
+mechanism scripts/harness/tests/test-session-context.sh
+mechanism scripts/harness/tests/test-dev-instance.sh
+mechanism scripts/harness/tests/test-log.sh
+mechanism scripts/harness/tests/test-audit-log.sh
+mechanism scripts/harness/tests/test-doc-garden.sh
+mechanism scripts/harness/tests/test-verify.sh
+
+# --- policy: repo-owned after init; update diffs, never replaces --------------
+# (guard-secrets.sh is mechanism since v0.21.0, format.sh since v0.23.0:
+# their policy is harness.conf data. The verify RUNNER is mechanism; the
+# repo's gate list is the .harness/gates.conf policy file below.)
+policy scripts/harness/harness.conf
+policy .harness/gates.conf src=gates.conf
+policy .harness/hooks/guard-project-policy.sh src=hooks/guard-project-policy.sh
+
+# --- optional-policy: authored per repo, pinned when present ------------------
+optional-policy scripts/dev.sh
+
+# --- content: authored/copied by the SKILL's init flow, never by install ------
+content AGENTS.md.tmpl dest=AGENTS.md
+content CLAUDE.md.tmpl dest=CLAUDE.md
+content ci/github-actions-harness-check.yml dest=.github/workflows/harness-check.yml
+content ci/github-actions-review.yml dest=.github/workflows/review.yml
+content ci/github-actions-eval-cron.yml dest=.github/workflows/eval-cron.yml
+
+# --- retired: no longer shipped; update removes pristine, untailored copies ---
+# v0.20.0 split test-install.sh into focused suites.
+retired scripts/test-install.sh
+# v0.22.0 adopter test descope: conformance suites became maintainer-only.
+retired scripts/install-test-lib.sh
+retired scripts/test-install-core.sh
+retired scripts/test-install-update.sh
+retired scripts/test-install-recovery.sh
+retired scripts/test-check-harness.sh
+retired scripts/test-eval.sh
+retired scripts/test-fixture-isolation.sh
+# v0.23.0 mechanism re-home: the flat scripts/ layout moved under
+# scripts/harness/ (commands, lib/, hooks/, tests/); verify.sh split into
+# the kit-owned runner + the repo's .harness/gates.conf; the project-policy
+# hook moved to repo-owned .harness/hooks/. Every old path retires; tailored
+# forks (e.g. a repo's verify.sh gate list) are kept for manual migration.
+retired scripts/check-harness.sh
+retired scripts/sync-agent-skills.sh
+retired scripts/install-lib.sh
+retired scripts/verify.sh
+retired scripts/harness.conf
+retired scripts/kit-manifest
+retired scripts/eval-lib.sh
+retired scripts/eval.sh
+retired scripts/eval-harness.sh
+retired scripts/log-lib.sh
+retired scripts/audit-log.sh
+retired scripts/doc-garden.sh
+retired scripts/dev-instance.sh
+retired scripts/test-harness-smoke.sh
+retired scripts/test-dev-instance.sh
+retired scripts/test-log.sh
+retired scripts/test-audit-log.sh
+retired scripts/test-doc-garden.sh
+retired scripts/test-verify.sh
+retired scripts/hooks/lib.sh
+retired scripts/hooks/README.md
+retired scripts/hooks/guard-secrets.sh
+retired scripts/hooks/guard-config.sh
+retired scripts/hooks/format.sh
+retired scripts/hooks/session-context.sh
+retired scripts/hooks/guard-project-policy.sh
+retired scripts/hooks/test-advise-once.sh
+retired scripts/hooks/test-affected-files.sh
+retired scripts/hooks/test-codex-hooks-cwd.sh
+retired scripts/hooks/test-deny-reasons.sh
+retired scripts/hooks/test-format-feedback.sh
+retired scripts/hooks/test-guard-config.sh
+retired scripts/hooks/test-guard-project-policy.sh
+retired scripts/hooks/test-guard-secrets.sh
+retired scripts/hooks/test-session-context.sh

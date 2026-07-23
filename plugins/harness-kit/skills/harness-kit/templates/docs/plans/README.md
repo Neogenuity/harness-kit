@@ -2,8 +2,8 @@
 
 Long-horizon work needs state that survives context windows: what is being
 built, how far it got, what was decided, and what "done" means.
-`scripts/hooks/session-context.sh` announces every plan in `active/` at session
-start (the directory is set by `PLANS_DIR` in `scripts/harness.conf`), so a
+`scripts/harness/hooks/session-context.sh` announces every plan in `active/` at session
+start (the directory is set by `PLANS_DIR` in `scripts/harness/harness.conf`), so a
 fresh session — or a subagent in a worktree — starts oriented instead of
 re-deriving context.
 

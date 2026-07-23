@@ -9,5 +9,5 @@
 # present); what's missing is any code-reviewer finding.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-mkdir -p .harness
-cat "$here/prior-log.jsonl" >> .harness/log.jsonl
+mkdir -p .harness/var
+cat "$here/prior-log.jsonl" >> .harness/var/log.jsonl

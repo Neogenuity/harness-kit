@@ -9,7 +9,7 @@
 #           alongside deny / lint-findings events. Fixture-invalid => exit 1
 #           (the repo/grader is broken, not the reviewer).
 #
-#   Gate B  CATCH-RATE over .harness/log.jsonl (item 5). Matches each reviewer
+#   Gate B  CATCH-RATE over .harness/var/log.jsonl (item 5). Matches each reviewer
 #           finding to a planted defect by (file, category) with non-empty
 #           evidence — the manifest guarantees one defect per (file, category)
 #           cell, so line numbers are informational, not matched. Pinned:
@@ -23,7 +23,7 @@ set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 manifest="$here/reference/defects.json"
 sample="$here/reference/findings.sample.jsonl"
-log=".harness/log.jsonl"
+log=".harness/var/log.jsonl"
 
 N=8
 CATCH_MIN=5
@@ -60,7 +60,7 @@ for e in deny lint-findings review-finding; do
 done
 echo "GateA: schema + audit backward-compat OK (v1 five-key shape, detail parses, mixed-event log groups)"
 
-# ---- Gate B: catch-rate over the reviewer's .harness/log.jsonl ---------------
+# ---- Gate B: catch-rate over the reviewer's .harness/var/log.jsonl ---------------
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/seeded-defect-XXXXXX")" || { echo "GateB: mktemp failed"; exit 1; }
 trap 'rm -rf "$tmp"' EXIT
 

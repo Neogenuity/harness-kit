@@ -18,6 +18,6 @@ doc="docs/example.md"
 [ -f "$doc" ] || { echo "missing $doc"; exit 1; }
 [ "$(wc -w < "$doc")" -ge 20 ] || { echo "$doc is too short"; exit 1; }
 # Grade against the workspace's own checks (fast subset, not the full gate):
-env HARNESS_NESTED_FIXTURE=1 bash scripts/check-harness.sh || { echo "check-harness.sh failed"; exit 1; }
+env HARNESS_NESTED_FIXTURE=1 bash scripts/harness/check-harness || { echo "check-harness.sh failed"; exit 1; }
 
 echo "ok"; exit 0

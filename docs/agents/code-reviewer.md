@@ -7,7 +7,7 @@ tools: Read, Grep, Glob, Bash
 # Code Reviewer Agent
 
 An inferential reviewer that runs **after** the deterministic gates
-(`scripts/verify.sh`) already pass. The computational layer — formatters,
+(`scripts/harness/verify`) already pass. The computational layer — formatters,
 linters, type-checks, tests, drift/manifest checks — has said "green"; this
 persona reviews what those gates *cannot see*. It is the judge separated from
 the doer: the main agent (the doer) delegates here for a second, independent
@@ -68,7 +68,7 @@ the code is guessing.
 
 ## Findings schema (machine-parseable)
 
-Emit **one JSON line per finding**, appended to `.harness/log.jsonl` — the same
+Emit **one JSON line per finding**, appended to `.harness/var/log.jsonl` — the same
 git-ignored harness log the guard hooks write, so the audit workflow counts
 review findings alongside deny/advise/lint/gate events. Each reviewer line stays
 an **exact v1 record** even where current hooks and `verify.sh` emit the
@@ -113,7 +113,7 @@ detail=$(jq -cn --arg severity high --argjson line 42 \
 jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --arg hook code-reviewer --arg event review-finding \
   --arg file src/discount.py --arg detail "$detail" \
-  '{ts:$ts, hook:$hook, event:$event, file:$file, detail:$detail}' >> .harness/log.jsonl
+  '{ts:$ts, hook:$hook, event:$event, file:$file, detail:$detail}' >> .harness/var/log.jsonl
 ```
 
 A consumer reads the structured fields back with
@@ -123,13 +123,13 @@ A consumer reads the structured fields back with
 
 The seeded-defect eval (`docs/evals/tasks/seeded-defect-review/`) is the
 executable proof of this schema: its grader consumes exactly these lines with
-the audit `group_by`, and `scripts/test-eval.sh` pins the schema offline.
+the audit `group_by`, and `scripts/harness/tests/test-eval.sh` pins the schema offline.
 
 ## Output Format
 
 Two parts, in this order:
 
-1. **The log lines** appended to `.harness/log.jsonl` (above) — the machine record.
+1. **The log lines** appended to `.harness/var/log.jsonl` (above) — the machine record.
 2. A **human summary** back to the caller: findings grouped by severity
    (high → low), each as `severity  category  file:line — evidence -> suggested fix`.
    End with one line: `N finding(s): H high, M medium, L low` — or

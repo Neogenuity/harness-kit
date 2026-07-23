@@ -17,9 +17,9 @@ chmod +x scripts/dev.sh
 rm -f docs/conventions/execution-profiles.md
 
 tmp="$(mktemp "${TMPDIR:-/tmp}/profile-conf-XXXXXX")"
-grep -v '^EXECUTION_PROFILE_PROVIDERS=' scripts/harness.conf > "$tmp" || true
+grep -v '^EXECUTION_PROFILE_PROVIDERS=' scripts/harness/harness.conf > "$tmp" || true
 printf '%s\n' 'EVAL_PROFILE_HARNESS_SENTINEL="keep-existing-harness-policy"' >> "$tmp"
-mv "$tmp" scripts/harness.conf
+mv "$tmp" scripts/harness/harness.conf
 
 tmp="$(mktemp "${TMPDIR:-/tmp}/profile-agents-XXXXXX")"
 grep -v 'docs/conventions/execution-profiles.md' AGENTS.md > "$tmp" || true

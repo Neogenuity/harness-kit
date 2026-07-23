@@ -4,16 +4,16 @@
 `<new_src_scripts>` to the NEW kit's `templates/scripts/` directory, source
 `<new_src_scripts>/install-lib.sh`, and run `harness_missing_prereqs`; surface
 anything it prints. Do **not** source the target repo's old
-`scripts/install-lib.sh` for update decisions: it cannot enumerate mechanism
+`scripts/harness/lib/install-lib.sh` for update decisions: it cannot enumerate mechanism
 files introduced after that version. `jq` is the critical prerequisite —
 without it every guard hook fails OPEN, so
 an upgraded harness's feedback layer stays inert until `jq` is installed; `git`
 and a sha256 tool (`shasum`/`sha256sum`) are the other hard dependencies. Name
 any that are missing and have the user ACKNOWLEDGE (or install them) before
 proceeding. Detection only — the guards' fail-open posture is unchanged and
-`check-harness.sh`'s doctor keeps WARNing on the same condition (check #10).
+`check-harness`'s doctor keeps WARNing on the same condition (check #10).
 
-1. Read the target's `scripts/.harness-manifest` (version + checksums). If
+1. Read the target's `scripts/harness/.harness-manifest` (version + checksums). If
    missing, fall back to audit and offer to adopt the manifest.
 2. Use the NEW kit's `kit-manifest` (read through the NEW `install-lib.sh`'s
    `harness_update_apply`) as the inventory; never reconstruct
@@ -29,6 +29,20 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    `test-install-update.sh` pins. Set
    `HARNESS_ALLOW_MECHANISM_EDITS=1` for the session if `guard-config.sh` is
    wired — upgrading the mechanism is the intended use of that escape hatch.
+
+   **Layout migration (pre-v0.23.0 installs).** `harness_update_apply`
+   itself migrates the integrity manifest from `scripts/.harness-manifest`
+   to `scripts/harness/.harness-manifest` (reported `migrate ...`), retires
+   the old flat paths, and installs the `scripts/harness/` tree. After the
+   apply, run `harness_append_gitignore <repo_root>` — it narrows a
+   pre-v0.23.0 `.harness/` ignore line to `.harness/var/` (gates.conf and
+   the policy hook are committed now) — and move the repo's runtime state
+   under `.harness/var/` (`log.jsonl`, `base/`, `eval-results/`, `dev/`).
+   Tailored policy CONTENT moves as approved diffs, not automatically: the
+   old `verify.sh` gate block becomes `.harness/gates.conf` declarations,
+   `scripts/harness.conf` content moves to `scripts/harness/harness.conf`,
+   and a tailored `scripts/hooks/guard-project-policy.sh` moves to
+   `.harness/hooks/`. Their old copies are retire-keep until resolved.
 
    **Retired paths.** The NEW kit-manifest's `retired` section names files the
    kit no longer ships. `harness_update_apply` removes an installed copy only
@@ -63,7 +77,7 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
      is on hand, so the persisted base is the only path.
    The **channel-independent** path is the locally-persisted base:
    `harness_recover_old_templates <repo_root> <out_dir>` (`install-lib.sh`)
-   reproduces the version's templates from `.harness/base/<version>/scripts/`
+   reproduces the version's templates from `.harness/var/base/<version>/scripts/`
    with NO git and NO network — it is the code `test-install-recovery.sh`
    pins for the no-local-git channel. init writes that snapshot at install
    time and step 4
@@ -73,9 +87,9 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    resort — diff the tailored file against the NEW template only and say so.
    Never present a silent empty diff.
 3. Never auto-overwrite policy files (the kit-manifest's policy and
-   optional-policy layers: `verify.sh`,
-   `guard-project-policy.sh`, `harness.conf`, an app repo's authored
-   `dev.sh` — plus provider
+   optional-policy layers: `.harness/gates.conf`,
+   `.harness/hooks/guard-project-policy.sh`, `harness.conf`, an app repo's
+   authored `dev.sh` — plus provider
    configs, `.cursor/sandbox.json`, and `.devcontainer/*`, which are never
    pinned) — diff only. (`guard-secrets.sh` is mechanism since v0.21.0 and
    `format.sh` since v0.23.0: their policy lives entirely in `harness.conf` —
@@ -85,19 +99,22 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    rules as part of the update diff.) Never auto-add or
    overwrite content files, including conventions, skills, AGENTS links, and
    generated stubs; mechanism update and content adoption are separate acts.
-   In particular, `verify.sh` remains tailored policy: show the old-template →
-   new-template diff for v2 gate instrumentation and apply it only with explicit
-   approval. Installing the reducer/writer helpers alone does not prove gate
-   outcomes are emitted; if that diff is declined, audit reports gate trends as
-   no-data/N/A while continuing to read existing v1 hook/reviewer lines.
+   The verify RUNNER is mechanism since v0.23.0 (a pristine copy upgrades
+   automatically); the repo's gate list stays tailored policy in
+   `.harness/gates.conf` — a pre-v0.23.0 install's tailored `verify.sh` gate
+   block migrates into gates.conf declarations as part of the update diff,
+   applied only with explicit approval. Installing the reducer/writer
+   helpers alone does not prove gate outcomes are emitted; if that migration
+   is declined, audit reports gate trends as no-data/N/A while continuing to
+   read existing v1 hook/reviewer lines.
 4. Rewrite the manifest with the new version/checksums — `harness_repin_manifest`
    in `install-lib.sh` regenerates it while preserving every ` # tailored`
    marker — then persist the new templates as the NEXT update's diff base with
    `harness_persist_base <new_src_scripts> <repo_root> <new_version>` (prune the
-   superseded `.harness/base/<old_version>/`), and re-run `check-harness.sh` and
+   superseded `.harness/var/base/<old_version>/`), and re-run `check-harness` and
    all hook tests.
 5. **Migrate the declared provider sets if an older install lacks them.**
-   `check-harness.sh` now fails when an adopted harness leaves
+   `check-harness` now fails when an adopted harness leaves
    `HOOK_WIRED_PROVIDERS` (semantic hook-wiring validation) or `AGENT_PROVIDERS`
    (agent-stub coherence) undeclared, and `harness.conf` is diff-only here so the
    lines never appear on their own. If either is absent (`harness_conf_declared`
@@ -125,11 +142,11 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    app detection and recon to propose boot, health, deterministic seed/reset,
    port, log, and trace mappings. Non-app repos report N/A. For an app without
    the bundle, explain that new kit mechanism now supplies
-   `scripts/dev-instance.sh`, but take no content action unless the user opts
+   `scripts/harness/lib/dev-instance.sh`, but take no content action unless the user opts
    in. On opt-in only: author (never template-copy) executable
    `scripts/dev.sh`; copy and tailor `docs/conventions/dev-runtime.md` and
    `docs/skills/verify-live/SKILL.md`; add their conditional AGENTS links; run
-   `scripts/sync-agent-skills.sh`; and manifest-pin `dev.sh` with
+   `scripts/harness/sync`; and manifest-pin `dev.sh` with
    ` # tailored`. If any of these files already exists, preserve it and show a
    proposed diff — never silently replace local content. Re-run the v1 contract
    checks and manifest/stub checks after approved adoption.
@@ -152,7 +169,7 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    and its AGENTS link, without adding a provider declaration.
    Otherwise defer it explicitly; there is no placeholder template to copy.
 8. **Offer outcome-telemetry and doc-garden content separately.** Never rewrite
-   `.harness/log.jsonl`; v1 and v2 lines intentionally coexist. Offer the
+   `.harness/var/log.jsonl`; v1 and v2 lines intentionally coexist. Offer the
    self-contained `templates/docs/conventions/outcome-telemetry.md` plus its
    AGENTS link after the v2 mechanism update. Separately offer
    `templates/docs/skills/doc-garden/SKILL.md`, its conditional AGENTS link, and

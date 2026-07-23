@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Root-only dogfood gate: never shipped in the plugin templates (no shipped
 # entry in the kit-manifest ship contract), pinned as '# tailored' in
-# scripts/.harness-manifest by the release step, not by this script. Validates
+# scripts/harness/.harness-manifest by the release step, not by this script. Validates
 # that the REAL shipped provider hook configs in
 # plugins/harness-kit/skills/harness-kit/templates/providers/{claude,cursor,codex}
 # pass check-harness.sh check #8d (the frozen hook-tuple contract) inside a
@@ -31,7 +31,7 @@ TPL_PROVIDERS="$ROOT/plugins/harness-kit/skills/harness-kit/templates/providers"
 [ -d "$TPL_PROVIDERS" ] || { echo "SKIP: no provider templates"; exit 0; }
 
 # shellcheck source=/dev/null
-. "$TPL_SCRIPTS/install-lib.sh"
+. "$TPL_SCRIPTS/harness/lib/install-lib.sh"
 KIT_VERSION="0.0.0-fixture"
 
 # Guarded scratch base — bare `mktemp -d` ignores $TMPDIR on macOS (it
@@ -52,16 +52,16 @@ F=$(mktemp -d "$WORK/providers.XXXXXX") || exit 1
 ( cd "${F:?}" && git init -q )
 harness_install_mechanism "$TPL_SCRIPTS" "$F"
 harness_append_gitignore "$F"
-{ grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS|EXECUTION_PROFILE_PROVIDERS)=' "$F/scripts/harness.conf"
+{ grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS|EXECUTION_PROFILE_PROVIDERS)=' "$F/scripts/harness/harness.conf"
   printf 'HOOK_WIRED_PROVIDERS=".claude .cursor .codex"\nAGENT_PROVIDERS=""\nEXECUTION_PROFILE_PROVIDERS=""\n'
-} > "$F/scripts/hc" && mv "$F/scripts/hc" "$F/scripts/harness.conf"
+} > "$F/scripts/hc" && mv "$F/scripts/hc" "$F/scripts/harness/harness.conf"
 mkdir -p "$F/.claude" "$F/.cursor" "$F/.codex"
 cp "$TPL_PROVIDERS/claude/settings.json" "$F/.claude/settings.json"
 cp "$TPL_PROVIDERS/cursor/hooks.json" "$F/.cursor/hooks.json"
 cp "$TPL_PROVIDERS/codex/hooks.json" "$F/.codex/hooks.json"
-harness_generate_manifest "$F" "$KIT_VERSION" > "$F/scripts/.harness-manifest"
+harness_generate_manifest "$F" "$KIT_VERSION" > "$F/scripts/harness/.harness-manifest"
 ( cd "${F:?}" && git_c add -A && git_c commit -qm init >/dev/null )
-out=$(cd "${F:?}" && bash scripts/check-harness.sh 2>&1); rc=$?
+out=$(cd "${F:?}" && bash scripts/harness/check-harness 2>&1); rc=$?
 if [ "$rc" = "0" ]; then
     pass "real templates: shipped provider hook configs validate all tuples (#8d)"
 else

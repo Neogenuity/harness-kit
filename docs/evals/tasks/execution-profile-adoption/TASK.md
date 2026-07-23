@@ -42,4 +42,4 @@ convention and AGENTS link, preserved nested Claude sandbox policy and
 harness/AGENTS policy, and byte-identical
 seeded Cursor, OpenCode, devcontainer, and `scripts/dev.sh` files. The task's
 reference solution is validated offline by
-`scripts/test-eval.sh`; no paid provider trial is required for grader validity.
+`scripts/harness/tests/test-eval.sh`; no paid provider trial is required for grader validity.

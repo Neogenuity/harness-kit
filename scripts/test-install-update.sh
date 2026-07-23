@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deterministic fixture tests of the kit's update MECHANICS
-# (scripts/install-lib.sh's harness_update_decision/harness_update_apply):
+# (scripts/harness/lib/install-lib.sh's harness_update_decision/harness_update_apply):
 # no-op re-application, pristine mechanism replacement, '# tailored'
 # preservation, policy-file diff-only behavior, undeclared local drift,
 # migrating in newly-shipped mechanism (toplevel AND hooks), and carrying
@@ -9,8 +9,8 @@
 # the loop — and asserts concrete post-state, then tears the fixture down.
 # See install-test-lib.sh for the shared preamble (nested-run guard, scratch
 # base, make_fixture/repin/pass/fail/finish). Runnable standalone and in CI
-# (it is a scripts/test-*.sh, so check-harness.sh check #6 and verify.sh's
-# template-tests gate both pick it up by name).
+# (since v0.23.0 it runs as this repo's explicit `install-suite-update` gate
+# in .harness/gates.conf).
 #
 # Clean init / non-clobber / gitignore / harness_conf_* live in
 # test-install-core.sh; recovery + dev.sh policy live in
@@ -48,12 +48,12 @@ rm -rf "$F"
 # version and the manifest re-pinned to the new checksum.
 F=$(make_fixture) || exit 1
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
-printf '\n# UPGRADED\n' >> "$NEWKIT/scripts/sync-agent-skills.sh"
+printf '\n# UPGRADED\n' >> "$NEWKIT/scripts/harness/sync"
 harness_update_apply "$NEWKIT/scripts" "$F" >/dev/null
 repin "$F" 9.9.9
-newpin=$(grep "scripts/sync-agent-skills.sh" "$F/scripts/.harness-manifest" | awk '{print $1}')
-actual=$(sha_of "$F" "scripts/sync-agent-skills.sh")
-if grep -q "UPGRADED" "$F/scripts/sync-agent-skills.sh" && [ "$newpin" = "$actual" ]; then
+newpin=$(grep "scripts/harness/sync" "$F/scripts/harness/.harness-manifest" | awk '{print $1}')
+actual=$(sha_of "$F" "scripts/harness/sync")
+if grep -q "UPGRADED" "$F/scripts/harness/sync" && [ "$newpin" = "$actual" ]; then
     pass "mechanism upgrade: untailored file replaced and manifest re-pinned"
 else
     fail "mechanism upgrade: file not replaced or manifest not re-pinned"
@@ -64,15 +64,15 @@ rm -rf "$F" "$NEWKIT"
 # A '# tailored' file whose content differs from the template is NOT replaced by
 # update; it is left for the user to diff, and its own checksum pin is honored.
 F=$(make_fixture) || exit 1
-printf '\n# LOCAL FORK\n' >> "$F/scripts/verify.sh"
-newsha=$(sha_of "$F" "scripts/verify.sh")
-grep -v "scripts/verify.sh" "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
-printf '%s  scripts/verify.sh # tailored\n' "$newsha" >> "$F/scripts/.hm"
-mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
+printf '\n# LOCAL FORK\n' >> "$F/scripts/harness/verify"
+newsha=$(sha_of "$F" "scripts/harness/verify")
+grep -v "scripts/harness/verify" "$F/scripts/harness/.harness-manifest" > "$F/scripts/.hm"
+printf '%s  scripts/harness/verify # tailored\n' "$newsha" >> "$F/scripts/.hm"
+mv "$F/scripts/.hm" "$F/scripts/harness/.harness-manifest"
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"   # pristine verify.sh differs
 harness_update_apply "$NEWKIT/scripts" "$F" >/dev/null
-kept=$(sha_of "$F" "scripts/verify.sh")
-if grep -q "LOCAL FORK" "$F/scripts/verify.sh" && [ "$kept" = "$newsha" ]; then
+kept=$(sha_of "$F" "scripts/harness/verify")
+if grep -q "LOCAL FORK" "$F/scripts/harness/verify" && [ "$kept" = "$newsha" ]; then
     pass "tailored preservation: '# tailored' file left untouched by update, pin honored"
 else
     fail "tailored preservation: a tailored file was replaced or its pin drifted"
@@ -88,21 +88,21 @@ rm -rf "$F" "$NEWKIT"
 # auto-replaced — pin all three so no classification silently flips.
 F=$(make_fixture) || exit 1
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
-printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/hooks/guard-project-policy.sh"
-printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/hooks/guard-secrets.sh"
-printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/hooks/format.sh"
+printf '\n# KIT CHANGE\n' >> "$NEWKIT/.harness/hooks/guard-project-policy.sh"
+printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/harness/hooks/guard-secrets.sh"
+printf '\n# KIT CHANGE\n' >> "$NEWKIT/scripts/harness/hooks/format.sh"
 harness_update_apply "$NEWKIT/scripts" "$F" >/dev/null
-if ! grep -q "KIT CHANGE" "$F/scripts/hooks/guard-project-policy.sh"; then
+if ! grep -q "KIT CHANGE" "$F/.harness/hooks/guard-project-policy.sh"; then
     pass "policy diff-only: update does not auto-replace a pristine guard-project-policy.sh"
 else
     fail "policy diff-only: guard-project-policy.sh was auto-replaced by update"
 fi
-if grep -q "KIT CHANGE" "$F/scripts/hooks/guard-secrets.sh"; then
+if grep -q "KIT CHANGE" "$F/scripts/harness/hooks/guard-secrets.sh"; then
     pass "mechanism reclassification: pristine guard-secrets.sh IS auto-replaced (v0.21.0 layer change)"
 else
     fail "mechanism reclassification: pristine guard-secrets.sh was not replaced — did it fall back into a policy layer?"
 fi
-if grep -q "KIT CHANGE" "$F/scripts/hooks/format.sh"; then
+if grep -q "KIT CHANGE" "$F/scripts/harness/hooks/format.sh"; then
     pass "mechanism reclassification: pristine format.sh IS auto-replaced (v0.23.0 layer change)"
 else
     fail "mechanism reclassification: pristine format.sh was not replaced — did it fall back into a policy layer?"
@@ -119,8 +119,8 @@ rm -rf "$F" "$NEWKIT"
 # hand-edited after install with no repin — must be preserved too, not
 # silently overwritten by the next update.
 F=$(make_fixture) || exit 1
-printf '\n# LOCAL DRIFT\n' >> "$F/scripts/sync-agent-skills.sh"
-line=$(grep 'scripts/sync-agent-skills.sh' "$F/scripts/.harness-manifest")
+printf '\n# LOCAL DRIFT\n' >> "$F/scripts/harness/sync"
+line=$(grep 'scripts/harness/sync' "$F/scripts/harness/.harness-manifest")
 decision=$(harness_update_decision "$F" "$line")
 if [ "$decision" = "diff" ]; then
     pass "local-drift-preserve: harness_update_decision classifies sha-mismatched drift as diff"
@@ -128,12 +128,12 @@ else
     fail "local-drift-preserve: harness_update_decision returned '$decision', expected diff"
 fi
 out=$(harness_update_apply "$SCRIPTS_DIR" "$F")
-if has_line "$out" "keep scripts/sync-agent-skills.sh"; then
+if has_line "$out" "keep scripts/harness/sync"; then
     pass "local-drift-preserve: harness_update_apply reports 'keep', not 'replace'"
 else
-    fail "local-drift-preserve: harness_update_apply did not report 'keep scripts/sync-agent-skills.sh'" "$out"
+    fail "local-drift-preserve: harness_update_apply did not report 'keep scripts/harness/sync'" "$out"
 fi
-if grep -q "LOCAL DRIFT" "$F/scripts/sync-agent-skills.sh"; then
+if grep -q "LOCAL DRIFT" "$F/scripts/harness/sync"; then
     pass "local-drift-preserve: the drifted content survives the update"
 else
     fail "local-drift-preserve: update overwrote the locally drifted file"
@@ -151,18 +151,18 @@ F=$(make_fixture) || exit 1
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
 printf '#!/usr/bin/env bash\necho future-mech\n' > "$NEWKIT/scripts/future-mech.sh"
 chmod +x "$NEWKIT/scripts/future-mech.sh"
-printf '#!/usr/bin/env bash\necho future-hook\n' > "$NEWKIT/scripts/hooks/future-hook.sh"
-chmod +x "$NEWKIT/scripts/hooks/future-hook.sh"
+printf '#!/usr/bin/env bash\necho future-hook\n' > "$NEWKIT/scripts/harness/hooks/future-hook.sh"
+chmod +x "$NEWKIT/scripts/harness/hooks/future-hook.sh"
 # The NEW kit declares both files in its ship contract — inventory is data
 # (kit-manifest lines), not code, since v0.21.0.
-printf 'mechanism scripts/future-mech.sh\nmechanism scripts/hooks/future-hook.sh\n' \
-    >> "$NEWKIT/scripts/kit-manifest"
+printf 'mechanism scripts/future-mech.sh\nmechanism scripts/harness/hooks/future-hook.sh\n' \
+    >> "$NEWKIT/scripts/harness/kit-manifest"
 # Subshell sourcing of the NEW kit's library mirrors the real update flow
 # (update.md: always source the incoming kit's install-lib.sh) and keeps any
 # of its state out of the rest of this suite.
 out1=$(
     # shellcheck source=/dev/null
-    . "$NEWKIT/scripts/install-lib.sh"
+    . "$NEWKIT/scripts/harness/lib/install-lib.sh"
     harness_update_apply "$NEWKIT/scripts" "$F"
 )
 if has_line "$out1" "add scripts/future-mech.sh"; then
@@ -170,25 +170,25 @@ if has_line "$out1" "add scripts/future-mech.sh"; then
 else
     fail "synthetic-future-file: 'add scripts/future-mech.sh' missing" "$out1"
 fi
-if has_line "$out1" "add scripts/hooks/future-hook.sh"; then
+if has_line "$out1" "add scripts/harness/hooks/future-hook.sh"; then
     pass "synthetic-future-file: new-kit inventory adds the new hook (hooks add pass)"
 else
-    fail "synthetic-future-file: 'add scripts/hooks/future-hook.sh' missing" "$out1"
+    fail "synthetic-future-file: 'add scripts/harness/hooks/future-hook.sh' missing" "$out1"
 fi
-if [ -x "$F/scripts/future-mech.sh" ] && [ -x "$F/scripts/hooks/future-hook.sh" ]; then
+if [ -x "$F/scripts/future-mech.sh" ] && [ -x "$F/scripts/harness/hooks/future-hook.sh" ]; then
     pass "synthetic-future-file: both new files are installed executable"
 else
     fail "synthetic-future-file: a new file was not installed executable"
 fi
 before_mech=$(sha_of "$F" "scripts/future-mech.sh")
-before_hook=$(sha_of "$F" "scripts/hooks/future-hook.sh")
+before_hook=$(sha_of "$F" "scripts/harness/hooks/future-hook.sh")
 out2=$(
     # shellcheck source=/dev/null
-    . "$NEWKIT/scripts/install-lib.sh"
+    . "$NEWKIT/scripts/harness/lib/install-lib.sh"
     harness_update_apply "$NEWKIT/scripts" "$F"
 )
 after_mech=$(sha_of "$F" "scripts/future-mech.sh")
-after_hook=$(sha_of "$F" "scripts/hooks/future-hook.sh")
+after_hook=$(sha_of "$F" "scripts/harness/hooks/future-hook.sh")
 if ! has_line "$out2" "add scripts/future-mech.sh" \
         && [ "$before_mech" = "$after_mech" ] && [ "$before_hook" = "$after_hook" ]; then
     pass "synthetic-future-file: a second apply is idempotent (no re-add, shas unchanged)"
@@ -197,11 +197,11 @@ else
 fi
 newmanifest=$(
     # shellcheck source=/dev/null
-    . "$NEWKIT/scripts/install-lib.sh"
+    . "$NEWKIT/scripts/harness/lib/install-lib.sh"
     harness_repin_manifest "$F" "$KIT_VERSION"
 )
 mech_pin=$(printf '%s\n' "$newmanifest" | awk '$2 == "scripts/future-mech.sh" {print $1}')
-hook_pin=$(printf '%s\n' "$newmanifest" | awk '$2 == "scripts/hooks/future-hook.sh" {print $1}')
+hook_pin=$(printf '%s\n' "$newmanifest" | awk '$2 == "scripts/harness/hooks/future-hook.sh" {print $1}')
 if [ "$mech_pin" = "$after_mech" ] && [ "$hook_pin" = "$after_hook" ]; then
     pass "synthetic-future-file: repin via the new-kit library discovers and pins both new paths"
 else
@@ -219,11 +219,11 @@ F=$(make_fixture) || exit 1
 printf '#!/usr/bin/env bash\necho local-gate\n' > "$F/scripts/check-local-gate.sh"
 chmod +x "$F/scripts/check-local-gate.sh"
 gatesha=$(sha_of "$F" "scripts/check-local-gate.sh")
-printf '%s  scripts/check-local-gate.sh # tailored\n' "$gatesha" >> "$F/scripts/.harness-manifest"
+printf '%s  scripts/check-local-gate.sh # tailored\n' "$gatesha" >> "$F/scripts/harness/.harness-manifest"
 repin "$F" 9.9.9
-line=$(grep 'scripts/check-local-gate.sh' "$F/scripts/.harness-manifest" || true)
+line=$(grep 'scripts/check-local-gate.sh' "$F/scripts/harness/.harness-manifest" || true)
 recomputed=$(sha_of "$F" "scripts/check-local-gate.sh")
-header=$(head -1 "$F/scripts/.harness-manifest")
+header=$(head -1 "$F/scripts/harness/.harness-manifest")
 if [ -n "$line" ] \
         && printf '%s\n' "$line" | grep -q '# tailored' \
         && [ "${line%% *}" = "$recomputed" ] \
@@ -234,7 +234,7 @@ else
 fi
 rm "$F/scripts/check-local-gate.sh"
 repin "$F" 9.9.9
-if grep -q 'scripts/check-local-gate.sh' "$F/scripts/.harness-manifest"; then
+if grep -q 'scripts/check-local-gate.sh' "$F/scripts/harness/.harness-manifest"; then
     fail "tailored carry-forward: repin re-pinned a deleted file (the [ -f ] filter did not drop it)"
 else
     pass "tailored carry-forward: deleting the file drops its pin on the next repin"
@@ -247,21 +247,21 @@ rm -rf "$F"
 # update removes it, and the subsequent repin drops its pin — the exact
 # sequence that needed a manual `rm` at v0.20.0.
 retire_in_newkit() {  # retire_in_newkit <newkit_scripts_dir> <repo-relative-path>
-    local kmf="$1/kit-manifest" path="$2"
+    local kmf="$1/harness/kit-manifest" path="$2"
     awk -v p="$path" '!($2 == p && ($1 == "mechanism" || $1 == "policy"))' "$kmf" > "$kmf.tmp" \
         && mv "$kmf.tmp" "$kmf"
     printf 'retired %s\n' "$path" >> "$kmf"
 }
 F=$(make_fixture) || exit 1
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
-retire_in_newkit "$NEWKIT/scripts" "scripts/test-log.sh"
+retire_in_newkit "$NEWKIT/scripts" "scripts/harness/tests/test-log.sh"
 out=$(harness_update_apply "$NEWKIT/scripts" "$F")
-if has_line "$out" "remove scripts/test-log.sh" && [ ! -f "$F/scripts/test-log.sh" ]; then
+if has_line "$out" "remove scripts/harness/tests/test-log.sh" && [ ! -f "$F/scripts/harness/tests/test-log.sh" ]; then
     pass "retirement: pristine unmarked retired file is removed and reported"
 else
     fail "retirement: pristine retired file not removed or not reported" "$out"
 fi
-if has_line "$out" "add scripts/test-log.sh"; then
+if has_line "$out" "add scripts/harness/tests/test-log.sh"; then
     fail "retirement: the add pass re-installed a retired file"
 else
     pass "retirement: the add pass does not resurrect a retired file"
@@ -270,10 +270,10 @@ fi
 # repin (driven by the new ship contract) must drop the removed file's pin.
 newmanifest=$(
     # shellcheck source=/dev/null
-    . "$NEWKIT/scripts/install-lib.sh"
+    . "$NEWKIT/scripts/harness/lib/install-lib.sh"
     harness_repin_manifest "$F" "$KIT_VERSION"
 )
-if printf '%s\n' "$newmanifest" | awk '$2 == "scripts/test-log.sh" {found=1} END {exit !found}'; then
+if printf '%s\n' "$newmanifest" | awk '$2 == "scripts/harness/tests/test-log.sh" {found=1} END {exit !found}'; then
     fail "retirement: repin still pins the removed file"
 else
     pass "retirement: repin drops the removed file's pin"
@@ -286,12 +286,12 @@ rm -rf "$F" "$NEWKIT"
 # left for manual review.
 F=$(make_fixture) || exit 1
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
-retire_in_newkit "$NEWKIT/scripts" "scripts/test-log.sh"
-printf '\n# LOCAL DRIFT\n' >> "$F/scripts/test-log.sh"
+retire_in_newkit "$NEWKIT/scripts" "scripts/harness/tests/test-log.sh"
+printf '\n# LOCAL DRIFT\n' >> "$F/scripts/harness/tests/test-log.sh"
 out=$(harness_update_apply "$NEWKIT/scripts" "$F")
-if has_line "$out" "retire-keep scripts/test-log.sh" \
-        && [ -f "$F/scripts/test-log.sh" ] \
-        && grep -q "LOCAL DRIFT" "$F/scripts/test-log.sh"; then
+if has_line "$out" "retire-keep scripts/harness/tests/test-log.sh" \
+        && [ -f "$F/scripts/harness/tests/test-log.sh" ] \
+        && grep -q "LOCAL DRIFT" "$F/scripts/harness/tests/test-log.sh"; then
     pass "retirement: drifted retired file is kept with its local changes and reported"
 else
     fail "retirement: drifted retired file was deleted or not reported" "$out"
@@ -303,24 +303,24 @@ rm -rf "$F" "$NEWKIT"
 # reports 'retire-keep', and repin carries its pin forward with the marker.
 F=$(make_fixture) || exit 1
 NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
-retire_in_newkit "$NEWKIT/scripts" "scripts/test-log.sh"
-printf '\n# LOCAL FORK\n' >> "$F/scripts/test-log.sh"
-forksha=$(sha_of "$F" "scripts/test-log.sh")
-grep -v "scripts/test-log.sh" "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
-printf '%s  scripts/test-log.sh # tailored\n' "$forksha" >> "$F/scripts/.hm"
-mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
+retire_in_newkit "$NEWKIT/scripts" "scripts/harness/tests/test-log.sh"
+printf '\n# LOCAL FORK\n' >> "$F/scripts/harness/tests/test-log.sh"
+forksha=$(sha_of "$F" "scripts/harness/tests/test-log.sh")
+grep -v "scripts/harness/tests/test-log.sh" "$F/scripts/harness/.harness-manifest" > "$F/scripts/.hm"
+printf '%s  scripts/harness/tests/test-log.sh # tailored\n' "$forksha" >> "$F/scripts/.hm"
+mv "$F/scripts/.hm" "$F/scripts/harness/.harness-manifest"
 out=$(harness_update_apply "$NEWKIT/scripts" "$F")
-if has_line "$out" "retire-keep scripts/test-log.sh" && [ -f "$F/scripts/test-log.sh" ]; then
+if has_line "$out" "retire-keep scripts/harness/tests/test-log.sh" && [ -f "$F/scripts/harness/tests/test-log.sh" ]; then
     pass "retirement: tailored retired file is kept and reported"
 else
     fail "retirement: tailored retired file was deleted or not reported" "$out"
 fi
 newmanifest=$(
     # shellcheck source=/dev/null
-    . "$NEWKIT/scripts/install-lib.sh"
+    . "$NEWKIT/scripts/harness/lib/install-lib.sh"
     harness_repin_manifest "$F" "$KIT_VERSION"
 )
-line=$(printf '%s\n' "$newmanifest" | awk '$2 == "scripts/test-log.sh" {print; exit}')
+line=$(printf '%s\n' "$newmanifest" | awk '$2 == "scripts/harness/tests/test-log.sh" {print; exit}')
 case "$line" in *"# tailored"*) fork_marked=1 ;; *) fork_marked=0 ;; esac
 if [ -n "$line" ] && [ "$fork_marked" = 1 ] && [ "${line%% *}" = "$forksha" ]; then
     pass "retirement: repin carries the tailored retired pin forward with marker and sha"
@@ -331,17 +331,18 @@ rm -rf "$F" "$NEWKIT"
 
 # --- (k) v0.22.0 descope migration: a pre-descope install updates clean --------
 # Simulate the real migration this suite's own descope shipped: a
-# v0.21.0-layout install still carries the seven conformance-suite files,
-# pinned and pristine; updating to THIS kit must remove every one and leave
-# no retired-but-pinned residue after repin. (The smoke-suite add pass is the
-# generic add behavior case (f) already pins — make_fixture installs the
-# current shipped set, so the smoke test is present from the start here.)
+# v0.21.0-layout install still carries the seven conformance-suite files at
+# their OLD flat paths, pinned and pristine; updating to THIS kit must remove
+# every one and leave no retired-but-pinned residue after repin. (The
+# smoke-suite add pass is the generic add behavior case (f) already pins —
+# make_fixture installs the current shipped set, so the smoke test is present
+# from the start here.)
 F=$(make_fixture) || exit 1
 DESCOPED="scripts/install-test-lib.sh scripts/test-install-core.sh scripts/test-install-update.sh scripts/test-install-recovery.sh scripts/test-check-harness.sh scripts/test-eval.sh scripts/test-fixture-isolation.sh"
 for p in $DESCOPED; do
     printf '#!/usr/bin/env bash\necho old-suite\n' > "$F/$p"
     chmod +x "$F/$p"
-    printf '%s  %s\n' "$(sha_of "$F" "$p")" "$p" >> "$F/scripts/.harness-manifest"
+    printf '%s  %s\n' "$(sha_of "$F" "$p")" "$p" >> "$F/scripts/harness/.harness-manifest"
 done
 out=$(harness_update_apply "$SCRIPTS_DIR" "$F")
 missing=""
@@ -355,11 +356,56 @@ else
     fail "descope migration: incomplete removal —$missing" "$out"
 fi
 repin "$F"
-leftover=$(awk '$2 ~ /install-test-lib|test-install-(core|update|recovery)|test-check-harness|test-eval\.sh|test-fixture-isolation/ {print $2}' "$F/scripts/.harness-manifest")
+leftover=$(awk '$2 ~ /install-test-lib|test-install-(core|update|recovery)|test-check-harness|test-eval\.sh|test-fixture-isolation/ {print $2}' "$F/scripts/harness/.harness-manifest")
 if [ -z "$leftover" ]; then
     pass "descope migration: repin leaves no pins for the removed suites"
 else
     fail "descope migration: stale pins survive repin" "$leftover"
+fi
+rm -rf "$F"
+
+# --- (l) v0.23.0 mechanism re-home: a v0.22.0-layout install updates clean -----
+# The whole flat scripts/ layout moved under scripts/harness/ (and the verify
+# gate list to .harness/gates.conf). A pre-move install carries the OLD
+# integrity-manifest location, old flat mechanism files (pinned, pristine),
+# and the broad '.harness/' gitignore. Update must migrate the manifest,
+# remove every pristine old path, install the new tree, and the gitignore
+# helper must narrow the old ignore line — retirement is the migration.
+F=$(mktemp -d "$WORK/oldlayout.XXXXXX") || exit 1
+( cd "${F:?}" && git init -q . )
+printf '.harness/\n' > "$F/.gitignore"
+mkdir -p "$F/scripts/hooks"
+OLDFILES="scripts/check-harness.sh scripts/sync-agent-skills.sh scripts/install-lib.sh scripts/verify.sh scripts/log-lib.sh scripts/hooks/lib.sh scripts/hooks/guard-secrets.sh"
+printf '# harness-kit 0.22.0\n' > "$F/scripts/.harness-manifest"
+for p in $OLDFILES; do
+    printf '#!/usr/bin/env bash\necho old\n' > "$F/$p"
+    chmod +x "$F/$p"
+    printf '%s  %s\n' "$(sha_of "$F" "$p")" "$p" >> "$F/scripts/.harness-manifest"
+done
+out=$(harness_update_apply "$SCRIPTS_DIR" "$F")
+harness_append_gitignore "$F"
+rehome_bad=""
+has_line "$out" "migrate scripts/harness/.harness-manifest" || rehome_bad="$rehome_bad no-manifest-migrate"
+[ -f "$F/scripts/.harness-manifest" ] && rehome_bad="$rehome_bad old-manifest-left"
+for p in $OLDFILES; do
+    if [ -f "$F/$p" ]; then rehome_bad="$rehome_bad $p(still-present)"; fi
+done
+[ -x "$F/scripts/harness/verify" ] || rehome_bad="$rehome_bad no-new-runner"
+[ -f "$F/.harness/gates.conf" ] || rehome_bad="$rehome_bad no-gates-conf"
+[ -f "$F/.harness/hooks/guard-project-policy.sh" ] || rehome_bad="$rehome_bad no-policy-hook"
+grep -qxF '.harness/var/' "$F/.gitignore" || rehome_bad="$rehome_bad gitignore-not-narrowed"
+if grep -qxF '.harness/' "$F/.gitignore"; then rehome_bad="$rehome_bad broad-ignore-left"; fi
+if [ -z "$rehome_bad" ]; then
+    pass "v0.23.0 re-home: manifest migrated, old flat layout removed, new tree + policy installed, gitignore narrowed"
+else
+    fail "v0.23.0 re-home: migration incomplete —$rehome_bad" "$out"
+fi
+repin "$F"
+leftover=$(awk '$2 ~ /^scripts\/(hooks\/|[^\/]+\.sh$)/ {print $2}' "$F/scripts/harness/.harness-manifest")
+if [ -z "$leftover" ]; then
+    pass "v0.23.0 re-home: repin leaves no pins for the old flat layout"
+else
+    fail "v0.23.0 re-home: stale flat-layout pins survive repin" "$leftover"
 fi
 rm -rf "$F"
 

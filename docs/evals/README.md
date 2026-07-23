@@ -74,7 +74,7 @@ this prose documents it>
   polarity, provider, grade, network, execution) before a run starts, dying and
   naming the offending value on a typo.
 - **grade** — `check` runs only `check.sh`; `check+verify` additionally runs the
-  workspace's `scripts/verify.sh`. Most tasks put the exact subset they need
+  workspace's `scripts/harness/verify`. Most tasks put the exact subset they need
   inside `check.sh` (faster than the full gate).
 - **network** — declares whether the task needs provider network access, such
   as reaching a localhost HTTP server (default `none`). For Codex, `required`
@@ -125,7 +125,7 @@ can't catch the shortcut is false-green).
   a stronger signal than an ordinary miss. Recorded outcome:
   `negative_violation`.
 - **any other non-zero** — an ordinary unmet goal (including a `check+verify`
-  task whose `scripts/verify.sh` failed — that path has no violation concept
+  task whose `scripts/harness/verify` failed — that path has no violation concept
   and always reports this way). Recorded outcome: `task_failure`.
 
 Every `results.jsonl` line carries the mapped `outcome`, and `eval-harness.sh`
@@ -138,21 +138,21 @@ even on a capability-suite task; only `capability` tasks failing with ordinary
 
 ```bash
 # One task, 3 independent trials, on a real model:
-bash scripts/eval.sh add-convention-doc --provider claude --model haiku --trials 3
-bash scripts/eval.sh add-convention-doc --provider codex  --model gpt-5.6-terra
+bash scripts/harness/run-evals add-convention-doc --provider claude --model haiku --trials 3
+bash scripts/harness/run-evals add-convention-doc --provider codex  --model gpt-5.6-terra
 
 # Plumbing / grader-validity check with NO model spend (runs the reference
 # solution as a mock agent through the full pipeline):
-bash scripts/eval.sh add-convention-doc --provider mock --trials 1
+bash scripts/harness/run-evals add-convention-doc --provider mock --trials 1
 
 # Score the latest results against the baseline (fails on a regression-suite drop):
-bash scripts/eval-harness.sh
+bash scripts/harness/lib/eval-harness.sh
 
 # Record the current numbers as the baseline:
-bash scripts/eval-harness.sh --update-baseline
+bash scripts/harness/lib/eval-harness.sh --update-baseline
 ```
 
-Transcripts and per-trial logs land under `.harness/eval-results/<task>/<run>/`
+Transcripts and per-trial logs land under `.harness/var/eval-results/<task>/<run>/`
 (git-ignored). A full multi-model run costs real model calls — run it on a
 schedule or after a harness change, never as a per-PR gate.
 

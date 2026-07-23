@@ -3,22 +3,22 @@
   "hooks": {
     "sessionStart": [
       {
-        "command": "scripts/hooks/session-context.sh"
+        "command": "scripts/harness/hooks/session-context.sh"
       }
     ],
     "afterFileEdit": [
       {
-        "command": "scripts/hooks/format.sh"
+        "command": "scripts/harness/hooks/format.sh"
       }
     ],
     "beforeReadFile": [
       {
-        "command": "scripts/hooks/guard-secrets.sh"
+        "command": "scripts/harness/hooks/guard-secrets.sh"
       }
     ],
     "stop": [
       {
-        "command": "scripts/hooks/guard-project-policy.sh"
+        "command": ".harness/hooks/guard-project-policy.sh"
       }
     ]
   }

@@ -3,7 +3,7 @@
 # (test-install-core.sh, test-install-update.sh, test-install-recovery.sh):
 # the nested-run guard, install-lib.sh sourcing, a guarded scratch base, the
 # pass/fail/git/sha helpers, the fixture builders, and the pass/fail trailer.
-# Each suite exercises a different slice of scripts/install-lib.sh against
+# Each suite exercises a different slice of scripts/harness/lib/install-lib.sh against
 # throwaway fixtures — no model in the loop — so this file holds only what
 # every slice needs in common.
 #
@@ -40,7 +40,15 @@ export HARNESS_NESTED_FIXTURE=1
 
 # The caller sets SCRIPTS_DIR (its own directory) before sourcing this file.
 # shellcheck source=/dev/null
-. "$SCRIPTS_DIR/install-lib.sh"
+. "$SCRIPTS_DIR/harness/lib/install-lib.sh"
+
+# Since v0.23.0 the INSTALLED layout differs from the kit's template layout
+# for policy files (kit-manifest src= entries install outside scripts/), so
+# fixtures install from the template tree — the actual ship artifact — not
+# the root's installed copy. test-template-sync pins the mechanism tree
+# byte-identical between the two, so the code under test is the same either
+# way; only the source-tree SHAPE differs.
+SCRIPTS_DIR="$(cd "$SCRIPTS_DIR/../plugins/harness-kit/skills/harness-kit/templates/scripts" && pwd)"
 KIT_VERSION="0.0.0-fixture"
 
 # One guarded scratch base for every fixture the calling suite builds. The
@@ -78,10 +86,10 @@ make_fixture() {
     # validate zero providers instead of failing on absent configs. Set BEFORE the
     # manifest so the harness.conf pin matches. Robust to a source conf that never
     # had the lines (strip-then-append). The non-empty sets get their own cases.
-    { grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS|EXECUTION_PROFILE_PROVIDERS)=' "$w/scripts/harness.conf"
+    { grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS|EXECUTION_PROFILE_PROVIDERS)=' "$w/scripts/harness/harness.conf"
       printf 'HOOK_WIRED_PROVIDERS=""\nAGENT_PROVIDERS=""\nEXECUTION_PROFILE_PROVIDERS=""\n'
-    } > "$w/scripts/harness.conf.tmp" && mv "$w/scripts/harness.conf.tmp" "$w/scripts/harness.conf"
-    harness_generate_manifest "$w" "$KIT_VERSION" > "$w/scripts/.harness-manifest"
+    } > "$w/scripts/harness/harness.conf.tmp" && mv "$w/scripts/harness/harness.conf.tmp" "$w/scripts/harness/harness.conf"
+    harness_generate_manifest "$w" "$KIT_VERSION" > "$w/scripts/harness/.harness-manifest"
     ( cd "${w:?}" && git_c add -A && git_c commit -qm init >/dev/null )
     printf '%s' "$w"
 }
@@ -92,14 +100,14 @@ make_fixture() {
 # provider configs are not).
 repin() {
     harness_repin_manifest "$1" "${2:-$KIT_VERSION}" > "$1/scripts/.hm" \
-        && mv "$1/scripts/.hm" "$1/scripts/.harness-manifest"
+        && mv "$1/scripts/.hm" "$1/scripts/harness/.harness-manifest"
 }
 
 # write_mirrored_claude_settings <root> — a .claude/settings.json whose deny list
 # mirrors the fixture's SECRET_PATTERNS, so check-harness.sh check #8 runs green.
 write_mirrored_claude_settings() {
     local root="$1" pat sp deny=""
-    sp=$(. "$root/scripts/harness.conf" && printf '%s' "$SECRET_PATTERNS")
+    sp=$(. "$root/scripts/harness/harness.conf" && printf '%s' "$SECRET_PATTERNS")
     set -f
     for pat in $sp; do deny="$deny \"Read($pat)\","; done
     set +f

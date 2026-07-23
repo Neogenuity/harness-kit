@@ -21,7 +21,7 @@ templates being shipped, and an annotated tag pushed.
 
 ## Steps
 
-1. `bash scripts/verify.sh` — all gates green before anything else.
+1. `bash scripts/harness/verify` — all gates green before anything else.
 2. Decide the version (semver: mechanism behavior or template layout changes
    are at least minor while pre-1.0). `plugins/harness-kit/VERSION` is the
    single source of truth — set it there, and set the same value in **both**
@@ -37,22 +37,22 @@ templates being shipped, and an annotated tag pushed.
 5. If `plugins/harness-kit/skills/harness-kit/templates/scripts/` changed since the last
    release, roll the changes into this repo's own installation (the kit's
    **update** mode: replace manifest-matching files in `scripts/`, diff
-   tailored ones), then re-pin `scripts/.harness-manifest` with the new
+   tailored ones), then re-pin `scripts/harness/.harness-manifest` with the new
    version header and checksums (command in the SKILL's init step 8; set
    `HARNESS_ALLOW_MECHANISM_EDITS=1` for the session). This step is
-   CI-enforced: `scripts/test-template-sync.sh` fails when a non-tailored
+   CI-enforced: `scripts/harness/tests/test-template-sync.sh` fails when a non-tailored
    installed file differs from its template.
-6. `bash scripts/verify.sh` again — the manifest gate must pass post-re-pin.
+6. `bash scripts/harness/verify` again — the manifest gate must pass post-re-pin.
 7. Commit `release: v<version>`, tag `v<version>` (annotated), push with
    `--follow-tags`.
 
 ## Verification
 
-- `bash scripts/verify.sh` passes on the release commit.
+- `bash scripts/harness/verify` passes on the release commit.
 - `git show v<version>` shows the tag on the release commit.
 - `plugins/harness-kit/VERSION`, both plugin.json versions, and the
   CHANGELOG heading all state the same version (`check-packaging.sh`
-  enforces the version trio). The `scripts/.harness-manifest` header matches
+  enforces the version trio). The `scripts/harness/.harness-manifest` header matches
   only when step 5 ran — it records the last release that changed
   `templates/scripts/`, so it legitimately lags on a docs-only release
   (v0.13.0 shipped with the header at 0.12.0).

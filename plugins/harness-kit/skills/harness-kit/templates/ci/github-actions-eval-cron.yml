@@ -95,7 +95,7 @@ jobs:
               echo "skip $slug (pinned to $pin, this run is $PROVIDER)"; continue
             fi
             echo "::group::eval $slug ($PROVIDER)"
-            bash scripts/eval.sh "$slug" --provider "$PROVIDER" \
+            bash scripts/harness/run-evals "$slug" --provider "$PROVIDER" \
               "${model_arg[@]}" --trials "$TRIALS" || { echo "::error::eval $slug failed unexpectedly"; failed=1; }
             echo "::endgroup::"
             ran=1
@@ -109,11 +109,11 @@ jobs:
         # --no-fail reports regressions/violations without failing the job, so the
         # transcripts still upload. Drop --no-fail to make a regression fail the
         # run. NEVER add --update-baseline here — a human records baselines.
-        run: bash scripts/eval-harness.sh --no-fail
+        run: bash scripts/harness/lib/eval-harness.sh --no-fail
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: eval-results
-          path: .harness/eval-results/
+          path: .harness/var/eval-results/
           retention-days: 30

@@ -19,7 +19,7 @@ valid provider-specific policy.
 ## Decision
 
 Execution-profile adoption is explicit in the tailored
-`EXECUTION_PROFILE_PROVIDERS` set in `scripts/harness.conf`.
+`EXECUTION_PROFILE_PROVIDERS` set in `scripts/harness/harness.conf`.
 
 - Unset or empty means the optional profiles are not adopted. Legacy installs
   remain valid and update/audit may offer adoption without performing it.

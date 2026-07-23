@@ -70,8 +70,9 @@ misfire on the router alone, but the reference carries the steps.
   and **write the manifest AFTER tailoring** (step 8) so its checksums pin the
   tailored state.
 - **`SECRET_PATTERNS` in `harness.conf` is the single source** for the secret
-  guard — mirror it into every provider deny-list (`check-harness.sh` fails on a
-  miss). Verify with `verify.sh` + `check-harness.sh` before declaring done.
+  guard — mirror it into every provider deny-list (`check-harness` fails on a
+  miss). Verify with `scripts/harness/verify` + `scripts/harness/check-harness`
+  before declaring done.
 
 ## audit — grade an existing repo → [references/modes/audit.md](references/modes/audit.md)
 
@@ -80,7 +81,7 @@ misfire on the router alone, but the reference carries the steps.
 - **Check the native permission deny-list mirrors the secret guard**, and report
   the MCP trust-inventory state, the governance docs, eval-bank health, and the
   age of the oldest `baselines.json` cell.
-- **Use `scripts/audit-log.sh` for outcome arithmetic.** Report its mixed-version
+- **Use `scripts/harness/lib/audit-log.sh` for outcome arithmetic.** Report its mixed-version
   data quality, gate/retry, repeated-deny, and review-count results; report
   session-trailer status/items, eval drift, and explicit N/A states. Inspect
   oldest baseline age separately; never manufacture plan cycles or PR
@@ -88,7 +89,7 @@ misfire on the router alone, but the reference carries the steps.
 - **Grade declared execution profiles provider-by-provider** as adopted,
   drifted, unavailable, or unverifiable; unset/empty is unadopted. Keep the
   provider observability availability table separate from
-  `.harness/log.jsonl`, and audit devcontainer files statically unless the user
+  `.harness/var/log.jsonl`, and audit devcontainer files statically unless the user
   separately authorizes a build/run verification. Require the combined
   convention/link for an adopted profile or devcontainer, while treating a
   merely pre-existing devcontainer as an offerable, unadopted boundary.
@@ -97,15 +98,15 @@ misfire on the router alone, but the reference carries the steps.
   unpinned, invalid JSON, stopped, unhealthy, or ready. Existing apps opt in to
   adoption; audit never starts, seeds, stops, or adds runtime content.
 - **Offer to fix; don't fix unasked.**
-- **Doc gardening is read-only by default.** Reuse `check-harness.sh`, then the
-  offline `scripts/doc-garden.sh`; external probes, edits, commits, pushes, and
+- **Doc gardening is read-only by default.** Reuse `check-harness`, then the
+  offline `scripts/harness/lib/doc-garden.sh`; external probes, edits, commits, pushes, and
   PRs are separately authorized actions.
 
 ## add-skill / add-agent / add-hook — extend → [references/modes/add.md](references/modes/add.md)
 
 - **Author the canonical file in `docs/`**, link it from AGENTS.md, run
-  `sync-agent-skills.sh`, and commit canonical + generated stubs together.
-- **Every guard hook ships a `test-<name>.sh`** wired into `check-harness.sh` —
+  `scripts/harness/sync`, and commit canonical + generated stubs together.
+- **Every guard hook ships a `test-<name>.sh`** wired into `check-harness` —
   a guard without a test is a future silent failure.
 - **Sweat the frontmatter `description`** — it is the activation trigger.
 
@@ -114,13 +115,13 @@ misfire on the router alone, but the reference carries the steps.
 - **Checksum matches manifest → replace** with the new kit version; **differs,
   or the manifest line is ` # tailored` → diff only**, never auto-overwrite.
 - **Never auto-overwrite policy files** (the kit-manifest's policy layers:
-  `verify.sh`, `guard-project-policy.sh`, `harness.conf`, an
-  authored `dev.sh` — plus provider
+  `.harness/gates.conf`, `.harness/hooks/guard-project-policy.sh`,
+  `harness.conf`, an authored `dev.sh` — plus provider
   configs, `.cursor/sandbox.json`, and `.devcontainer/*`, which are never pinned).
 - **Retired paths are removed only when pristine and untailored** (the NEW
   kit-manifest's `retired` section drives it); drifted or tailored copies are
   kept and reported for manual review — retirement never deletes local changes.
-- **Run the NEW kit's `templates/scripts/install-lib.sh`** (whose
+- **Run the NEW kit's `templates/scripts/harness/lib/install-lib.sh`** (whose
   `kit-manifest` is the ship contract), not the target's
   old copy, so update discovers mechanism files introduced by the new version.
   Runtime convention/skill/script adoption is a separate explicit opt-in for
@@ -128,17 +129,18 @@ misfire on the router alone, but the reference carries the steps.
   opt-ins too; content is never auto-added or overwritten.
 - **Outcome migration is split by ownership.** New reducer/scanner/log helpers
   and tests join the mechanism inventory; a pristine hook library can replace.
-  `verify.sh` stays tailored policy, so v2 gate instrumentation is an approved
+  The verify RUNNER is mechanism (auto-replaced); the repo's gate list stays
+  tailored policy in `.harness/gates.conf`, so gate changes are an approved
   diff. The telemetry convention, doc-garden skill, AGENTS links, and generated
   stubs remain opt-in content on an existing install.
 - **Re-pin the manifest afterward** (preserving every ` # tailored` marker) and
-  re-run `check-harness.sh` + hook tests. A real *standards* shift routes to
+  re-run `check-harness` + hook tests. A real *standards* shift routes to
   [references/migrations.md](references/migrations.md), not improvisation.
 
 ## Rules that hold in every mode
 
 - `docs/` is the single source of truth; never edit a generated stub by hand.
-- Every guard hook gets a regression test wired into `check-harness.sh`.
+- Every guard hook gets a regression test wired into `check-harness`.
 - Hooks fail open; denial is exit 2; advisory stop-hooks never hard-block.
 - `scripts/dev.sh`, where applicable, is tailored repo policy: pin and diff it,
   never replace it from a generic template or operate another worktree's app.
@@ -148,7 +150,7 @@ misfire on the router alone, but the reference carries the steps.
   experimental broad local/private-network compatibility disjunction. Name its
   broader reach and ownership-safe teardown limit. Never claim OpenCode permissions are an
   OS/network sandbox or Cursor repo config proves the effective UI/admin policy.
-- Provider telemetry is not `.harness/log.jsonl`: the local stream accepts mixed
+- Provider telemetry is not `.harness/var/log.jsonl`: the local stream accepts mixed
   exact-v1 and eight-key `version: 2` records, but ships no exporter endpoint,
   auth header, credential, real hostname, raw-prompt opt-in, provider import, or
   automatic cross-stream join. See the self-contained

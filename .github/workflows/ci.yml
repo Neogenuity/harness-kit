@@ -25,8 +25,8 @@ jobs:
       - name: Hook templates are executable
         run: |
           fails=0
-          for f in plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/*.sh \
-                   plugins/harness-kit/skills/harness-kit/templates/scripts/*.sh; do
+          for f in plugins/harness-kit/skills/harness-kit/templates/scripts/harness/hooks/*.sh \
+                   plugins/harness-kit/skills/harness-kit/templates/scripts/hooks/*.sh; do
             [ -x "$f" ] || { echo "not executable: $f"; fails=1; }
           done
           exit $fails
@@ -49,9 +49,9 @@ jobs:
       # runners.
       #
       # info/style shellcheck notices are acceptable in templates (helpers
-      # sit next to commented TAILOR arms); verify.sh's shellcheck gate
+      # sit next to commented TAILOR arms); the verify runner's shellcheck gate
       # fails on warning and above, and lints both the shipped templates and
       # the root-only tailored scripts (verify.sh, check-packaging.sh, …),
       # which have no template twin.
-      - name: verify.sh
-        run: bash scripts/verify.sh
+      - name: verify
+        run: bash scripts/harness/verify

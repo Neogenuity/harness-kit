@@ -26,7 +26,7 @@ for this repository.
 | Deterministic seed/reset | `POST /seed` resets the fixture to the named Ada dataset |
 | Port injection | `HARNESS_DEV_PORT`, otherwise the helper candidate |
 | Candidate port | base `30000`, span `20000`, namespace `fixture` |
-| Logs | `.harness/dev/<instance>/app.log` |
+| Logs | `.harness/var/dev/<instance>/app.log` |
 | Traces | none (`""`) |
 
 ## JSON v1 response
@@ -41,7 +41,7 @@ nonzero.
 | `schema_version` | Integer `1`. |
 | `action` | String: `up`, `health`, `seed`, or `down`; it matches the requested action. |
 | `status` | String: `ready`, `seeded`, `stopped`, `unhealthy`, or `error`, with the action-specific meanings below. |
-| `instance` | Lowercase helper suffix matching `^h[0-9a-f]{12}$`, returned by `scripts/dev-instance.sh suffix`; it identifies the current physical Git worktree. |
+| `instance` | Lowercase helper suffix matching `^h[0-9a-f]{12}$`, returned by `scripts/harness/lib/dev-instance.sh suffix`; it identifies the current physical Git worktree. |
 | `url` | String for this instance; it may be empty when stopped or on error. |
 | `logs` | Nonempty repo-relative path string for this instance's application log. |
 | `traces` | Repo-relative path string for this instance's trace artifact, or an empty string when the app has no traces. |
@@ -64,20 +64,20 @@ failed `up` never reports `ready`; a failed `seed` never reports `seeded`.
 Example response shape (values are illustrative, not a port allocation rule):
 
 ```json
-{"schema_version":1,"action":"up","status":"ready","instance":"h0123456789ab","url":"http://127.0.0.1:43123","logs":".harness/dev/h0123456789ab/app.log","traces":"","started":true}
+{"schema_version":1,"action":"up","status":"ready","instance":"h0123456789ab","url":"http://127.0.0.1:43123","logs":".harness/var/dev/h0123456789ab/app.log","traces":"","started":true}
 ```
 
 ## Worktree ownership and state
 
-- Keep all runtime state and artifacts under `.harness/dev/`, which is
+- Keep all runtime state and artifacts under `.harness/var/dev/`, which is
   git-ignored. `logs` and nonempty `traces` paths remain relative to the repo;
   never return host-absolute or plugin-cache paths.
 - Derive the instance from the physical worktree root, not the branch name or
   caller's spelling of a symlinked path. Use
-  `scripts/dev-instance.sh suffix [namespace]`; an optional namespace separates
+  `scripts/harness/lib/dev-instance.sh suffix [namespace]`; an optional namespace separates
   multiple services in the same worktree.
 - Choose a candidate port with
-  `scripts/dev-instance.sh port <base> <span> [namespace]`, unless
+  `scripts/harness/lib/dev-instance.sh port <base> <span> [namespace]`, unless
   `HARNESS_DEV_PORT` supplies an explicit override. The helper hashes the
   physical worktree identity into a finite span: its result is deterministic,
   not guaranteed unique.
@@ -85,13 +85,13 @@ Example response shape (values are illustrative, not a port allocation rule):
   process owns it, fail with `status: "error"`; do not reuse or kill that
   process. `down` likewise acts from recorded current-worktree ownership, never
   from "whatever is listening on the port."
-- Keep enough ownership state under `.harness/dev/` to distinguish reuse from
+- Keep enough ownership state under `.harness/var/dev/` to distinguish reuse from
   a stale PID or a foreign listener. Do not make branch renames change the
   instance identity.
 
 ## Implementation boundary
 
-`scripts/dev-instance.sh` is harness mechanism and may be upgraded from the
+`scripts/harness/lib/dev-instance.sh` is harness mechanism and may be upgraded from the
 kit. `scripts/dev.sh` is repo-specific policy: init authors it from the runtime
 map above, marks it executable, and manifest-pins it as tailored. There is no
 generic `dev.sh` template. Updates and audits may offer app repositories this

@@ -8,4 +8,4 @@ tools: Read, Grep, Glob, Bash
 
 Canonical source: `docs/agents/code-reviewer.md`
 
-Read that file for the full persona before delegating. This stub only registers the agent with the harness — edit the canonical doc, then run `bash scripts/sync-agent-skills.sh`.
+Read that file for the full persona before delegating. This stub only registers the agent with the harness — edit the canonical doc, then run `bash scripts/harness/sync`.

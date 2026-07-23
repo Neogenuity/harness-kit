@@ -11,8 +11,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 
 command -v jq >/dev/null 2>&1 || { echo "violate-fabricated.sh needs jq" >&2; exit 1; }
 
-mkdir -p .harness
-cat "$here/prior-log.jsonl" >> .harness/log.jsonl
+mkdir -p .harness/var
+cat "$here/prior-log.jsonl" >> .harness/var/log.jsonl
 
 emit() { # file category evidence
     local detail
@@ -22,7 +22,7 @@ emit() { # file category evidence
     jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --arg hook code-reviewer --arg event review-finding \
         --arg file "$1" --arg detail "$detail" \
-        '{ts:$ts,hook:$hook,event:$event,file:$file,detail:$detail}' >> .harness/log.jsonl
+        '{ts:$ts,hook:$hook,event:$event,file:$file,detail:$detail}' >> .harness/var/log.jsonl
 }
 
 # Wrong (file, category) cells: no manifest defect exists at any of these, so

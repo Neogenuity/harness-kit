@@ -34,14 +34,14 @@ was adopted into the harness. Claude's credential tuple requires Claude Code
 2.1.187 or later.
 
 Report provider observability as a separate availability/scope table. Do not
-combine provider signals with `.harness/log.jsonl`, import provider exports,
+combine provider signals with `.harness/var/log.jsonl`, import provider exports,
 claim automatic cross-stream correlation, or recommend repo-stored endpoints,
 credentials, headers, raw prompts, or tool content.
 
 Use the model-free local reducer for outcome arithmetic:
 
 ```bash
-bash scripts/audit-log.sh --format table
+bash scripts/harness/lib/audit-log.sh --format table
 ```
 
 Do not hand-calculate rates, retries, repeat paths, review counts, trailer
@@ -70,10 +70,10 @@ top-level date; this remains an explicit eval-bank audit step, not reducer
 output. A stale/absent baseline means unmeasured; recommend a scheduled
 `eval-harness.sh` run, not provider telemetry ingestion.
 
-Then run `scripts/check-harness.sh` and the hook tests if they exist. Offer the
-offline, read-only `scripts/doc-garden.sh --format table` for root/non-`docs`
+Then run `scripts/harness/check-harness` and the hook tests if they exist. Offer the
+offline, read-only `scripts/harness/lib/doc-garden.sh --format table` for root/non-`docs`
 Markdown, anchors, deleted-path references, and repo-wide verification stamps.
-Its repo-wide scan may overlap `check-harness.sh`; de-duplicate the presented
+Its repo-wide scan may overlap `check-harness`; de-duplicate the presented
 findings by rule, file, line, and target rather than suppressing either check.
 External probes, edits, commits, pushes, and PRs are separate authorization
 steps. If the canonical `docs/skills/doc-garden/SKILL.md`, its
@@ -135,7 +135,7 @@ For an application repo, audit the runtime in this exact read-only order:
 
 1. `scripts/dev.sh` absent → **missing**. Offer contract adoption; do not add it.
 2. Present but not executable → **non-executable**. Do not invoke it.
-3. No valid `scripts/.harness-manifest` entry, a checksum mismatch, or no
+3. No valid `scripts/harness/.harness-manifest` entry, a checksum mismatch, or no
    ` # tailored` marker → **unpinned**. Do not invoke untrusted/drifted policy.
 4. Otherwise invoke **only** `scripts/dev.sh health`, capturing stdout and exit
    separately. Never call `up`, `seed`, or `down` during audit.

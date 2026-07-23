@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deterministic fixture tests of the kit's install RECOVERY + dev.sh policy
-# (scripts/install-lib.sh): no-local-git old-template recovery for
+# (scripts/harness/lib/install-lib.sh): no-local-git old-template recovery for
 # copied/plugin installs, the missing-base fallback signal, and
 # scripts/dev.sh's special status as pinned-but-never-templated project
 # policy. Each case spins up a throwaway git repo in a scratch dir, drives
@@ -34,8 +34,8 @@ recv=$(harness_recover_old_templates "$F" "$REC/old"); rc=$?
 # and (c) reproduce the installed templates byte-for-byte (a faithful diff base)
 # — spot-check a policy file and a hook.
 if [ "$rc" = "0" ] && [ "$recv" = "$KIT_VERSION" ] \
-   && cmp -s "$SCRIPTS_DIR/verify.sh" "$REC/old/verify.sh" \
-   && cmp -s "$SCRIPTS_DIR/hooks/guard-secrets.sh" "$REC/old/hooks/guard-secrets.sh"; then
+   && cmp -s "$SCRIPTS_DIR/gates.conf" "$REC/old/gates.conf" \
+   && cmp -s "$SCRIPTS_DIR/harness/hooks/guard-secrets.sh" "$REC/old/harness/hooks/guard-secrets.sh"; then
     pass "old-template recovery: no-local-git install recovers the version's base byte-for-byte"
 else
     fail "old-template recovery: no-git recovery failed (rc=$rc version=$recv)"
@@ -44,7 +44,7 @@ rm -rf "$REC"
 # No persisted base (e.g. a teammate's fresh clone, where the git-ignored base was
 # never checked out) → recovery returns non-zero so update falls back to the
 # git-tag / upstream-fetch channels instead of silently diffing nothing.
-rm -rf "${F:?}/.harness/base"
+rm -rf "${F:?}/.harness/var/base"
 REC2=$(mktemp -d "$WORK/recover2.XXXXXX") || exit 1
 harness_recover_old_templates "$F" "$REC2/old" >/dev/null 2>&1; rc=$?
 if [ "$rc" != "0" ]; then
@@ -76,7 +76,7 @@ if [ ! -e "$BASE/dev.sh" ]; then
 else
     fail "project policy: persisted base captured scripts/dev.sh as mechanism"
 fi
-harness_generate_manifest "$F" "$KIT_VERSION" > "$F/scripts/.harness-manifest"
+harness_generate_manifest "$F" "$KIT_VERSION" > "$F/scripts/harness/.harness-manifest"
 harness_update_apply "$ROGUE/scripts" "$F" >/dev/null
 if [ ! -e "$F/scripts/dev.sh" ]; then
     pass "project policy: update add pass never installs scripts/dev.sh"
@@ -87,20 +87,20 @@ fi
 printf '#!/usr/bin/env bash\necho PROJECT-OWNED\n' > "$F/scripts/dev.sh"
 chmod +x "$F/scripts/dev.sh"
 repin "$F"
-devpin=$(grep 'scripts/dev.sh' "$F/scripts/.harness-manifest" || true)
+devpin=$(grep 'scripts/dev.sh' "$F/scripts/harness/.harness-manifest" || true)
 if [ -n "$devpin" ] && [ "${devpin%% *}" = "$(sha_of "$F" scripts/dev.sh)" ]; then
     pass "project policy: authored scripts/dev.sh is manifest-pinned"
 else
     fail "project policy: authored scripts/dev.sh was not pinned"
 fi
 # Mark it tailored and prove both update and re-pin preserve ownership/content.
-grep -v 'scripts/dev.sh' "$F/scripts/.harness-manifest" > "$F/scripts/.hm"
+grep -v 'scripts/dev.sh' "$F/scripts/harness/.harness-manifest" > "$F/scripts/.hm"
 printf '%s  scripts/dev.sh # tailored\n' "$(sha_of "$F" scripts/dev.sh)" >> "$F/scripts/.hm"
-mv "$F/scripts/.hm" "$F/scripts/.harness-manifest"
+mv "$F/scripts/.hm" "$F/scripts/harness/.harness-manifest"
 harness_update_apply "$ROGUE/scripts" "$F" >/dev/null
 repin "$F" 9.9.9
 if grep -qF 'PROJECT-OWNED' "$F/scripts/dev.sh" \
-   && grep 'scripts/dev.sh' "$F/scripts/.harness-manifest" | grep -qF '# tailored'; then
+   && grep 'scripts/dev.sh' "$F/scripts/harness/.harness-manifest" | grep -qF '# tailored'; then
     pass "project policy: tailored scripts/dev.sh stays diff-only and its marker survives re-pin"
 else
     fail "project policy: update replaced scripts/dev.sh or re-pin lost its tailored marker"

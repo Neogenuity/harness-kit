@@ -5,5 +5,5 @@ description = "Inferential reviewer for a completed diff AFTER verify.sh passes 
 developer_instructions = """
 Canonical source: docs/agents/code-reviewer.md — read it first for the full persona. This stub only
 registers the agent with the harness; edit the canonical doc and re-run
-bash scripts/sync-agent-skills.sh. Non-blocking.
+bash scripts/harness/sync. Non-blocking.
 """

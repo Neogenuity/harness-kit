@@ -7,7 +7,7 @@ tools: Read, Grep, Glob, Bash
 # Code Reviewer Agent
 
 An inferential reviewer that runs **after** the deterministic gates
-(`scripts/verify.sh`) already pass. The computational layer — formatters,
+(`scripts/harness/verify`) already pass. The computational layer — formatters,
 linters, type-checks, tests, drift/manifest checks — has said "green"; this
 persona reviews what those gates *cannot see*. It is the judge separated from
 the doer: the main agent (the doer) delegates here for a second, independent
@@ -68,7 +68,7 @@ the code is guessing.
 
 ## Findings schema (machine-parseable)
 
-Emit **one JSON line per finding**, appended to `.harness/log.jsonl` — the same
+Emit **one JSON line per finding**, appended to `.harness/var/log.jsonl` — the same
 git-ignored harness log the guard hooks write, so the audit workflow counts
 review findings alongside deny/advise/lint/gate events. Each reviewer line stays
 an **exact v1 record** even where current hooks and `verify.sh` emit the
@@ -113,7 +113,7 @@ detail=$(jq -cn --arg severity high --argjson line 42 \
 jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --arg hook code-reviewer --arg event review-finding \
   --arg file src/discount.py --arg detail "$detail" \
-  '{ts:$ts, hook:$hook, event:$event, file:$file, detail:$detail}' >> .harness/log.jsonl
+  '{ts:$ts, hook:$hook, event:$event, file:$file, detail:$detail}' >> .harness/var/log.jsonl
 ```
 
 A consumer reads the structured fields back with
@@ -125,7 +125,7 @@ A consumer reads the structured fields back with
 
 Two parts, in this order:
 
-1. **The log lines** appended to `.harness/log.jsonl` (above) — the machine record.
+1. **The log lines** appended to `.harness/var/log.jsonl` (above) — the machine record.
 2. A **human summary** back to the caller: findings grouped by severity
    (high → low), each as `severity  category  file:line — evidence -> suggested fix`.
    End with one line: `N finding(s): H high, M medium, L low` — or
@@ -137,7 +137,7 @@ Two parts, in this order:
 
 <!-- -- TAILOR: project context for the reviewer ---------------------------------
 Fill in the specifics a reviewer of THIS repo needs, e.g.:
-  - what `scripts/verify.sh` already covers (so the persona never duplicates it)
+  - what `scripts/harness/verify` already covers (so the persona never duplicates it)
   - the repo's definition of "scope" (a ticket? a plan under docs/plans/?)
   - domains where over-engineering is especially costly here
 Keep it short — the four classes above are the mechanism; this block is the only
@@ -154,7 +154,7 @@ frontmatter — one stub per declared `AGENT_PROVIDERS` entry, in that provider'
 dialect: `.claude/agents/<name>.md`, `.cursor/agents/<name>.md`,
 `.opencode/agents/<name>.md` (Markdown) and `.codex/agents/<name>.toml` (TOML,
 routing carried as `developer_instructions`). Tune the routing `description`
-HERE, then run `bash scripts/sync-agent-skills.sh` — `check-harness.sh` (via
+HERE, then run `bash scripts/harness/sync` — `check-harness.sh` (via
 `--check`) fails on a stub that drifts from the generator, is missing from a
 declared provider, or orphans a deleted canonical persona. Non-blocking review.
 -->

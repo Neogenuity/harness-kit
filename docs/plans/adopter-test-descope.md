@@ -30,13 +30,13 @@ cleanup, not a performance fix.
 ## Target
 
 Keep the exhaustive install/update suites as **maintainer-only** conformance
-tests (like `scripts/test-provider-templates.sh` and
-`scripts/test-template-sync.sh`, root-only and `# tailored`-pinned). Adopters
+tests (like `scripts/harness/tests/test-provider-templates.sh` and
+`scripts/harness/tests/test-template-sync.sh`, root-only and `# tailored`-pinned). Adopters
 keep only:
 
 - static harness integrity checks (`check-harness.sh` itself),
 - hook behavioral tests relevant to their installed configuration
-  (`scripts/hooks/test-*.sh`),
+  (`scripts/harness/hooks/test-*.sh`),
 - a small post-init/post-update smoke test (install a throwaway fixture,
   assert the checker is green — roughly today's clean-init case).
 
@@ -55,5 +55,5 @@ descoping, `install-lib.sh` needs a retirement contract, e.g.:
   drifted-retired kept + flagged, tailored-retired kept with pin carried.
 
 The v0.20.0 release notes document the interim caveat for the one existing
-install (this repo, pre-launch): delete the orphaned `scripts/test-install.sh`
+install (this repo, pre-launch): delete the orphaned `scripts/harness/tests/test-install.sh`
 by hand after updating, then re-pin.

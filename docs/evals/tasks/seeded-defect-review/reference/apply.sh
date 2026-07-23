@@ -5,15 +5,15 @@
 # MUST score `pass` (test-eval.sh enforces this offline, no model).
 #
 # It seeds the two pre-existing v1 log lines first (prior-log.jsonl), so the
-# graded .harness/log.jsonl is a MIX of deny / lint-findings / review-finding —
+# graded .harness/var/log.jsonl is a MIX of deny / lint-findings / review-finding —
 # proving the schema is backward-compatible with the existing audit log.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 
 command -v jq >/dev/null 2>&1 || { echo "apply.sh needs jq" >&2; exit 1; }
 
-mkdir -p .harness
-cat "$here/prior-log.jsonl" >> .harness/log.jsonl
+mkdir -p .harness/var
+cat "$here/prior-log.jsonl" >> .harness/var/log.jsonl
 
 # One finding per manifest defect: file + category (the matched keys) come
 # straight from defects.json; evidence is the manifest note (non-empty), the fix
@@ -31,5 +31,5 @@ jq -c '.defects[]' "$here/defects.json" | while IFS= read -r d; do
     jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --arg hook code-reviewer --arg event review-finding \
         --arg file "$file" --arg detail "$detail" \
-        '{ts:$ts,hook:$hook,event:$event,file:$file,detail:$detail}' >> .harness/log.jsonl
+        '{ts:$ts,hook:$hook,event:$event,file:$file,detail:$detail}' >> .harness/var/log.jsonl
 done

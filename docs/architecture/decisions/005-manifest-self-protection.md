@@ -18,7 +18,7 @@ Two layers, because neither alone is sufficient:
    machinery, manifests, hook wiring, CI gates, and (tailored per repo) lint
    configs. Escape hatch for intentional maintenance:
    `HARNESS_ALLOW_MECHANISM_EDITS=1`.
-2. **`scripts/.harness-manifest`** — sha256 per mechanism file, verified by
+2. **`scripts/harness/.harness-manifest`** — sha256 per mechanism file, verified by
    `check-harness.sh` in CI. This catches what the hook can't see: `sed -i`
    via shell, edits from harnesses without pre-edit events (Cursor), or a
    human hand-edit. Any un-pinned change fails the build until its line is
@@ -37,5 +37,5 @@ Two layers, because neither alone is sufficient:
 **Amended by [ADR 009](009-declarative-ship-manifest.md) (v0.21.0):** the
 integrity manifest's role is unchanged, but its producer and update's
 replace-vs-diff decision table now derive their file sets from the shipped
-`scripts/kit-manifest` ship contract instead of hard-coded lists, and the
+`scripts/harness/kit-manifest` ship contract instead of hard-coded lists, and the
 protected set grows to include the kit-manifest itself.

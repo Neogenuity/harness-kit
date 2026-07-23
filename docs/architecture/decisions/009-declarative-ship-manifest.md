@@ -18,7 +18,7 @@ recorded blocker for the adopter test descope plan.
 
 ## Decision
 
-One declarative, shipped file — `scripts/kit-manifest` — is the SHIP
+One declarative, shipped file — `scripts/harness/kit-manifest` — is the SHIP
 CONTRACT:
 
 - Plain-text lines `<layer> <path>` (whitespace-separated, `#` comments,
@@ -39,7 +39,7 @@ CONTRACT:
   copies are kept and reported `retire-keep`, and check #9d keeps WARNing
   while they linger. Retirement can never delete local changes.
 - The kit-manifest is itself mechanism: sha-pinned in
-  `scripts/.harness-manifest`, protected by `guard-config.sh`, and required
+  `scripts/harness/.harness-manifest`, protected by `guard-config.sh`, and required
   on adopted repos by check #9d — it tells update what to overwrite and
   delete, which makes it the most security-sensitive shipped file after the
   integrity manifest.

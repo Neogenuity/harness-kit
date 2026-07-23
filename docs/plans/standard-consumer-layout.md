@@ -45,14 +45,15 @@ Phased; each phase is one minor release cut via
   hard-coded lists; `harness_update_apply` gains `remove` for pristine,
   non-tailored retired files; check #9c derives its set from it. Acceptance:
   retirement fixtures (pristine-removed / drifted-kept / tailored-kept) pass;
-  `scripts/test-install.sh` listed retired proves the v0.20.0 caveat is closed.
+  `scripts/harness/tests/test-install.sh` listed retired proves the v0.20.0 caveat is closed.
 - [x] **Phase 2 — adopter test descope + cleanups** — **shipped 2026-07-22 as
   v0.22.0** (tag v0.22.0, eb59b3b; see
   [completed/v0.22.0-adopter-test-descope.md](completed/v0.22.0-adopter-test-descope.md)).
   Absorbed [adopter-test-descope.md](adopter-test-descope.md); conformance
   suites are maintainer-only, adopters run the shipped smoke suite, rename
   conventions are `dest=` data.
-- [ ] **Phase 3 — mechanism re-home**: `scripts/harness/` extensionless verb
+- [x] **Phase 3 — mechanism re-home** — **shipped 2026-07-22 as v0.23.0**
+  (see [completed/v0.23.0-mechanism-rehome.md](completed/v0.23.0-mechanism-rehome.md)): `scripts/harness/` extensionless verb
   commands (`bootstrap`, `verify`, `sync`, `check-instructions`, `check-docs`,
   `detect-drift`, `validate-plan`, `run-evals`) over shared `lib/`; mechanism
   hooks move to `scripts/harness/hooks/` with their tailorable parts extracted
@@ -105,13 +106,18 @@ parallel.
 ## Verification
 
 Per phase: templates edited first, rolled into the root install, manifest
-re-pinned, `bash scripts/verify.sh` green, release tagged. Every
+re-pinned, `bash scripts/harness/verify` green, release tagged. Every
 layout-changing phase adds an update-from-previous-release fixture to the
 install suites asserting the checker stays green across the move. Phase 6's
 fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Progress
 
+- 2026-07-22 — **Phase 3 shipped as v0.23.0**: mechanism re-homed to
+  `scripts/harness/` verb commands + decomposed check families; verify
+  runner/gates.conf split; hooks split by ownership; `.harness/var/`
+  runtime split; dogfood root migrated via the real update path; ADR 010.
+  Phase 4 (content/IA migration) is next.
 - 2026-07-22 — **Phase 2 shipped as v0.22.0** (tag v0.22.0, eb59b3b): seven
   conformance suites descoped to maintainer-only, shipped smoke test in,
   descope migration fixture-proven. Phase 3 (mechanism re-home) activated.
@@ -146,8 +152,11 @@ fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Next action
 
-Execute Phase 3 per [active/v0.23.0-mechanism-rehome.md](active/v0.23.0-mechanism-rehome.md)
-(Phases 1–2 shipped — see
-[completed/v0.21.0-ship-manifest-and-retirement.md](completed/v0.21.0-ship-manifest-and-retirement.md)
+Author and activate the Phase 4 plan (content/IA migration, v0.24.0):
+`.harness/` committed content layer, docs IA, canonical skills →
+`.agents/skills/`, GEMINI.md + copilot-instructions templates
+(Phases 1–3 shipped — see
+[completed/v0.21.0-ship-manifest-and-retirement.md](completed/v0.21.0-ship-manifest-and-retirement.md),
+[completed/v0.22.0-adopter-test-descope.md](completed/v0.22.0-adopter-test-descope.md),
 and
-[completed/v0.22.0-adopter-test-descope.md](completed/v0.22.0-adopter-test-descope.md)).
+[completed/v0.23.0-mechanism-rehome.md](completed/v0.23.0-mechanism-rehome.md)).

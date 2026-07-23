@@ -13,7 +13,7 @@ seed is reset, `GET /` shows `Runtime Placeholder: Ada` instead of
 `Harness Runtime Ready: Ada`. Use the repository's live-verification workflow
 and `scripts/dev.sh` lifecycle to reproduce the behavior, fix the application,
 then re-run the affected live flow. Keep `scripts/dev.sh` and
-`scripts/dev-instance.sh` unchanged, and stop the instance when you finish.
+`scripts/harness/lib/dev-instance.sh` unchanged, and stop the instance when you finish.
 
 ## Acceptance
 

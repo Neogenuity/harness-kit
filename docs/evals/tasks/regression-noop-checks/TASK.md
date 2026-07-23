@@ -8,7 +8,7 @@
 ## Prompt
 
 Verify the repository's harness is healthy by running
-`bash scripts/check-harness.sh`. Do NOT modify, create, or delete any files.
+`bash scripts/harness/check-harness`. Do NOT modify, create, or delete any files.
 Report whether the check passed.
 
 ## Acceptance

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# validate-plan — execution-plan hygiene: active plans carry a next action and have not gone stale
+# Thin command entry: the implementation is kit mechanism in lib/.
+exec bash "$(dirname "$0")/lib/check-plan.sh" "$@"

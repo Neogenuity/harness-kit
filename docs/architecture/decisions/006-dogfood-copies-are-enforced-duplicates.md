@@ -21,7 +21,7 @@ root files are tailored for this repo and must never ship.
 Keep both copies, with a direction and a gate. The **templates are the
 source of truth** — edit them first; the root install is downstream, rolled
 forward by copy + manifest re-pin (the kit's own update mode).
-`scripts/test-template-sync.sh` — root-only, never shipped — enforces the
+`scripts/harness/tests/test-template-sync.sh` — root-only, never shipped — enforces the
 relationship: every non-tailored mechanism file must be byte-identical to
 its template twin, and every manifest-pinned file must still have a template
 twin. It is named `test-*.sh` so check #6 runs it in CI and

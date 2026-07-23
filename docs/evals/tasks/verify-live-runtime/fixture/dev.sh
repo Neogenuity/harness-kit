@@ -7,9 +7,9 @@ ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
     exit 1
 }
 ROOT=$(cd "$ROOT" && pwd -P) || exit 1
-HELPER="$ROOT/scripts/dev-instance.sh"
+HELPER="$ROOT/scripts/harness/lib/dev-instance.sh"
 INSTANCE=$(bash "$HELPER" suffix fixture) || exit 1
-STATE_REL=".harness/dev/$INSTANCE"
+STATE_REL=".harness/var/dev/$INSTANCE"
 STATE="$ROOT/$STATE_REL"
 PID_FILE="$STATE/pid"
 PORT_FILE="$STATE/port"

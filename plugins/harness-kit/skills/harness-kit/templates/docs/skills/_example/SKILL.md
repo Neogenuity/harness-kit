@@ -20,13 +20,13 @@ description: >-
 
 1. <Concrete, ordered steps. Name real paths and real commands.>
 2. <Prefer "copy the pattern in <existing file>" over abstract instructions.>
-3. <End with `bash scripts/verify.sh`.>
+3. <End with `bash scripts/harness/verify`.>
 
 ## Verification
 
 - <How to prove the work is correct — the test command, the URL to hit,
   the log line to expect.>
-- `bash scripts/verify.sh` passes.
+- `bash scripts/harness/verify` passes.
 
 ## Common Mistakes
 

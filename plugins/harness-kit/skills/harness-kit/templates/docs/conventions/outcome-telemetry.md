@@ -1,9 +1,9 @@
 # Local outcome telemetry
 
-The harness writes local, git-ignored events to `.harness/log.jsonl`. This is a
+The harness writes local, git-ignored events to `.harness/var/log.jsonl`. This is a
 repository feedback stream, not provider telemetry: it installs no collector,
 imports no provider export, and makes no team-wide or retention guarantee.
-Use `bash scripts/audit-log.sh --format table` for deterministic reduction; do
+Use `bash scripts/harness/lib/audit-log.sh --format table` for deterministic reduction; do
 not recompute rates or joins by hand.
 
 ## Mixed-version contract
@@ -168,7 +168,7 @@ success.
 Run the reducer against local artifacts:
 
 ```bash
-bash scripts/audit-log.sh --format table
+bash scripts/harness/lib/audit-log.sh --format table
 ```
 
 Use `--format json` when another deterministic tool consumes the result. Its

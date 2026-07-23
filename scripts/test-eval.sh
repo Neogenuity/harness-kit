@@ -11,7 +11,7 @@
 #     grader actually catches the forbidden shortcut, not merely "some
 #     non-pass" — a grader that can't is false-green).
 # This is the offline half of the behavioral-evals plan; live pass-rate
-# baselines come from scripts/eval.sh against a real provider.
+# baselines come from scripts/harness/run-evals against a real provider.
 #
 # Set EVAL_TEST_QUICK=1 to skip the per-task workspace clones (unit + schema
 # checks only) for a fast local loop; verify.sh runs the full suite.
@@ -20,7 +20,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 1
 # shellcheck source=/dev/null
-. "$ROOT/scripts/eval-lib.sh"
+. "$ROOT/scripts/harness/lib/eval-lib.sh"
 
 TASKS_DIR="${EVAL_TASKS_DIR:-docs/evals/tasks}"
 fails=0
@@ -87,7 +87,7 @@ else
         bad "variant: eval_result_json should default to bare when omitted"
     fi
 
-    if [ ! -f "$ROOT/scripts/eval-harness.sh" ]; then
+    if [ ! -f "$ROOT/scripts/harness/lib/eval-harness.sh" ]; then
         ok "variant: eval-harness.sh back-compat (skipped: script absent)"
     elif ! vtmp="$(mktemp -d "${TMPDIR:-/tmp}/test-eval-variant-XXXXXX")" || [ -z "$vtmp" ]; then
         bad "variant: mktemp failed (eval-harness back-compat)"
@@ -102,7 +102,7 @@ else
             eval_result_json legacy-novariant claude haiku capability positive run1 3 true 1 0 /tmp/x 1700000000 pass | jq -c 'del(.variant)'
         } > "$rd/results.jsonl"
         bl="$vtmp/baselines.json"
-        bash "$ROOT/scripts/eval-harness.sh" --results-dir "$vtmp/results" --baseline "$bl" --update-baseline \
+        bash "$ROOT/scripts/harness/lib/eval-harness.sh" --results-dir "$vtmp/results" --baseline "$bl" --update-baseline \
             >"$vtmp/out.log" 2>&1
         rc=$?
         key_present="$(jq -r '.tasks["legacy-novariant"].runs["claude/haiku"] // "MISSING"' "$bl" 2>/dev/null)"
@@ -125,8 +125,8 @@ fi
 # was added, so --help stopped before --baseline/--expected-trials).
 # Checking for each script's OWN newest documented flag is the most sensitive
 # canary: it is the first thing to disappear if END is ever short again.
-if [ -f "$ROOT/scripts/eval-harness.sh" ]; then
-    help_out="$(bash "$ROOT/scripts/eval-harness.sh" --help 2>&1)"
+if [ -f "$ROOT/scripts/harness/lib/eval-harness.sh" ]; then
+    help_out="$(bash "$ROOT/scripts/harness/lib/eval-harness.sh" --help 2>&1)"
     if has "$help_out" '--baseline' \
             && has "$help_out" '--expected-trials' \
             && has "$help_out" '--format'; then
@@ -137,8 +137,8 @@ if [ -f "$ROOT/scripts/eval-harness.sh" ]; then
 else
     ok "eval-harness.sh --help completeness (skipped: script absent)"
 fi
-if [ -f "$ROOT/scripts/eval.sh" ]; then
-    help_out="$(bash "$ROOT/scripts/eval.sh" --help 2>&1)"
+if [ -f "$ROOT/scripts/harness/run-evals" ]; then
+    help_out="$(bash "$ROOT/scripts/harness/run-evals" --help 2>&1)"
     if has "$help_out" '--variant' \
             && has "$help_out" '--allow-provider-config-write'; then
         ok "eval.sh --help prints its full option block, including --variant and --allow-provider-config-write"
@@ -241,13 +241,13 @@ UEOF
 
     # eval-harness.sh tolerates a MIXED old/new results dir — usage on one row,
     # absent on another — because it scores correctness only (item-1 acceptance).
-    if [ -f "$ROOT/scripts/eval-harness.sh" ]; then
+    if [ -f "$ROOT/scripts/harness/lib/eval-harness.sh" ]; then
         mrd="$utmp/results/mix-demo"; mkdir -p "$mrd"
         {
             eval_result_json mix-demo claude haiku capability positive run1 1 true 1 0 /tmp/x 1700000000 pass "$(eval_usage_json claude "$utmp/claude.jsonl")"
             eval_result_json mix-demo claude haiku capability positive run1 2 true 1 0 /tmp/x 1700000000 pass | jq -c 'del(.usage)'
         } > "$mrd/results.jsonl"
-        if bash "$ROOT/scripts/eval-harness.sh" --results-dir "$utmp/results" --baseline "$utmp/none.json" >/dev/null 2>&1; then
+        if bash "$ROOT/scripts/harness/lib/eval-harness.sh" --results-dir "$utmp/results" --baseline "$utmp/none.json" >/dev/null 2>&1; then
             ok "usage: eval-harness scores a mixed usage/no-usage results dir without error"
         else
             bad "usage: eval-harness failed on a mixed old/new results dir"
@@ -316,10 +316,10 @@ fi
 # suite was written against).
 if ! command -v jq >/dev/null 2>&1; then
     ok "eval-harness.sh scorer fixtures (skipped: jq absent)"
-elif [ ! -f "$ROOT/scripts/eval-harness.sh" ]; then
+elif [ ! -f "$ROOT/scripts/harness/lib/eval-harness.sh" ]; then
     ok "eval-harness.sh scorer fixtures (skipped: script absent)"
 else
-    _harness() { bash "$ROOT/scripts/eval-harness.sh" "$@"; }
+    _harness() { bash "$ROOT/scripts/harness/lib/eval-harness.sh" "$@"; }
 
     # (i) run selection: an old run "zzz" (no run_started_at — legacy shape)
     # is lexicographically GREATER than a timestamped run id, but a newer
@@ -688,11 +688,11 @@ fi
 # whatever this repo's working tree happens to look like.
 #
 # Fixture repo R is built ONCE and reused by every sub-case below: its
-# scripts/ holds COPIES of this repo's rolled scripts/eval-lib.sh,
-# scripts/eval.sh, scripts/eval-harness.sh (inside this dogfood repo they are
+# scripts/ holds COPIES of this repo's rolled scripts/harness/lib/eval-lib.sh,
+# scripts/harness/run-evals, scripts/harness/lib/eval-harness.sh (inside this dogfood repo they are
 # byte-identical to the templates that generated them). eval.sh derives its
 # own ROOT from its own location (`dirname "$0"`/..), so running
-# `bash "$R/scripts/eval.sh"` makes R — not this repo — eval.sh's source
+# `bash "$R/scripts/harness/run-evals"` makes R — not this repo — eval.sh's source
 # repo: R's dirty/clean state is what the dirty-tree guard sees, and
 # eval_prepare_workspace clones R, not $ROOT. R's own synthetic tasks live
 # under R/tasks, entirely separate from $TASKS_DIR (the real docs/evals/tasks
@@ -704,15 +704,18 @@ if ! command -v git >/dev/null 2>&1; then
     ok "runner-guards fixtures (skipped: git absent)"
 elif ! command -v jq >/dev/null 2>&1; then
     ok "runner-guards fixtures (skipped: jq absent)"
-elif [ ! -f "$ROOT/scripts/eval.sh" ] || [ ! -f "$ROOT/scripts/eval-harness.sh" ] || [ ! -f "$ROOT/scripts/eval-lib.sh" ]; then
+elif [ ! -f "$ROOT/scripts/harness/run-evals" ] || [ ! -f "$ROOT/scripts/harness/lib/eval-harness.sh" ] || [ ! -f "$ROOT/scripts/harness/lib/eval-lib.sh" ]; then
     ok "runner-guards fixtures (skipped: rolled eval scripts absent under $ROOT/scripts)"
 elif ! R_BASE="$(mktemp -d "${TMPDIR:-/tmp}/test-eval-runner-XXXXXX")" || [ -z "$R_BASE" ]; then
     bad "runner-guards fixtures: mktemp failed (fixture repo)"
 else
     trap 'rm -rf "$R_BASE" 2>/dev/null' EXIT
     R="$R_BASE/R"
-    mkdir -p "$R/scripts" "$R/tasks"
-    cp "$ROOT/scripts/eval-lib.sh" "$ROOT/scripts/eval.sh" "$ROOT/scripts/eval-harness.sh" "$R/scripts/"
+    mkdir -p "$R/scripts/harness/lib" "$R/tasks"
+    cp "$ROOT/scripts/harness/run-evals" "$R/scripts/harness/"
+    cp "$ROOT/scripts/harness/lib/eval.sh" "$ROOT/scripts/harness/lib/eval-lib.sh" \
+       "$ROOT/scripts/harness/lib/eval-harness.sh" "$R/scripts/harness/lib/"
+    chmod +x "$R/scripts/harness/run-evals"
 
     # ok-task: trivial positive capability task, always passes.
     mkdir -p "$R/tasks/ok-task/reference"
@@ -901,7 +904,7 @@ TASKEOF
     # (a) dirty-tree refusal, then --allow-dirty-head override.
     echo "untracked" > "$R/scratch.txt"
     rd_a="$R_BASE/results-a"
-    bash "$R/scripts/eval.sh" ok-task --provider mock --trials 1 \
+    bash "$R/scripts/harness/run-evals" ok-task --provider mock --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_a" --run-id dirty-no \
         >"$R_BASE/a-no.out" 2>"$R_BASE/a-no.err"
     rc=$?
@@ -911,7 +914,7 @@ TASKEOF
         bad "runner guards: dirty tree should refuse and mention --allow-dirty-head (rc=$rc)"
         sed 's/^/    /' "$R_BASE/a-no.err"
     fi
-    bash "$R/scripts/eval.sh" ok-task --provider mock --trials 1 \
+    bash "$R/scripts/harness/run-evals" ok-task --provider mock --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_a" --run-id dirty-yes --allow-dirty-head \
         >"$R_BASE/a-yes.out" 2>"$R_BASE/a-yes.err"
     rc=$?
@@ -928,7 +931,7 @@ TASKEOF
     # for the bank-metadata check above), mitigating the drift risk of two
     # independent copies of "suite is capability|regression" disagreeing.
     rd_b="$R_BASE/results-b"
-    bash "$R/scripts/eval.sh" bad-enum --provider mock --trials 1 \
+    bash "$R/scripts/harness/run-evals" bad-enum --provider mock --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_b" --run-id benum \
         >"$R_BASE/b.out" 2>"$R_BASE/b.err"
     rc=$?
@@ -940,7 +943,7 @@ TASKEOF
     fi
 
     rd_b2="$R_BASE/results-b2"
-    bash "$R/scripts/eval.sh" bad-network --provider mock --trials 1 \
+    bash "$R/scripts/harness/run-evals" bad-network --provider mock --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_b2" --run-id bnetwork \
         >"$R_BASE/b2.out" 2>"$R_BASE/b2.err"
     rc=$?
@@ -957,7 +960,7 @@ TASKEOF
     # call through, the shim absorbs it instead of any live spend, and the
     # assertion below catches the regression via the SHIM-INVOKED marker.
     rd_c="$R_BASE/results-c"
-    bash "$R/scripts/eval.sh" pinned --provider mock --trials 1 \
+    bash "$R/scripts/harness/run-evals" pinned --provider mock --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_c" --run-id pin-mock \
         >"$R_BASE/c-mock.out" 2>"$R_BASE/c-mock.err"
     rc=$?
@@ -969,7 +972,7 @@ TASKEOF
     fi
 
     rd_c_mock_maint="$R_BASE/results-c-mock-maint"
-    bash "$R/scripts/eval.sh" provider-config-write --provider mock --trials 1 \
+    bash "$R/scripts/harness/run-evals" provider-config-write --provider mock --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_c_mock_maint" --run-id pin-mock-maint \
         >"$R_BASE/c-mock-maint.out" 2>"$R_BASE/c-mock-maint.err"
     rc=$?
@@ -983,7 +986,7 @@ TASKEOF
     fi
 
     rd_c_mock_flag="$R_BASE/results-c-mock-flag"
-    bash "$R/scripts/eval.sh" ok-task --provider mock --trials 1 --allow-provider-config-write \
+    bash "$R/scripts/harness/run-evals" ok-task --provider mock --trials 1 --allow-provider-config-write \
         --tasks-dir "$R/tasks" --results-dir "$rd_c_mock_flag" --run-id pin-mock-flag \
         >"$R_BASE/c-mock-flag.out" 2>"$R_BASE/c-mock-flag.err"
     rc=$?
@@ -1005,7 +1008,7 @@ exit 7
 TASKEOF
     chmod +x "$shimdir/claude"
     rd_c2="$R_BASE/results-c2"
-    PATH="$shimdir:$PATH" bash "$R/scripts/eval.sh" pinned --provider claude --trials 1 \
+    PATH="$shimdir:$PATH" bash "$R/scripts/harness/run-evals" pinned --provider claude --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_c2" --run-id pin-claude \
         >"$R_BASE/c-claude.out" 2>"$R_BASE/c-claude.err"
     rc=$?
@@ -1042,7 +1045,7 @@ TASKEOF
     chmod +x "$shimdir/codex"
     rd_c3="$R_BASE/results-c3"
     CODEX_SHIM_ARGS="$R_BASE/codex-required.args" PATH="$shimdir:$PATH" \
-        bash "$R/scripts/eval.sh" network-required --provider codex --model shim --trials 1 \
+        bash "$R/scripts/harness/run-evals" network-required --provider codex --model shim --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_c3" --run-id network-required \
         >"$R_BASE/codex-required.out" 2>"$R_BASE/codex-required.err"
     rc3=$?
@@ -1066,7 +1069,7 @@ TASKEOF
     rd_c4="$R_BASE/results-c4"
     CODEX_SHIM_ARGS="$R_BASE/codex-default.args" CODEX_SHIM_ENV="$R_BASE/codex-default.env" \
         HARNESS_ALLOW_MECHANISM_EDITS=1 PATH="$shimdir:$PATH" \
-        bash "$R/scripts/eval.sh" ok-task --provider codex --model shim --trials 1 \
+        bash "$R/scripts/harness/run-evals" ok-task --provider codex --model shim --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_c4" --run-id network-default \
         >"$R_BASE/codex-default.out" 2>"$R_BASE/codex-default.err"
     rc4=$?
@@ -1091,7 +1094,7 @@ TASKEOF
     # acknowledgment. Each one-sided opt-in refuses before provider invocation.
     rm -f "$R_BASE/codex-maint-no-flag.invoked" "$R_BASE/codex-flag-default.invoked"
     CODEX_SHIM_ARGS="$R_BASE/codex-maint-no-flag.args" CODEX_SHIM_INVOKED="$R_BASE/codex-maint-no-flag.invoked" PATH="$shimdir:$PATH" \
-        bash "$R/scripts/eval.sh" provider-config-write --provider codex --model shim --trials 1 \
+        bash "$R/scripts/harness/run-evals" provider-config-write --provider codex --model shim --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$R_BASE/results-c5-no-flag" --run-id provider-config-write-no-flag \
         >"$R_BASE/codex-maint-no-flag.out" 2>"$R_BASE/codex-maint-no-flag.err"
     rc5a=$?
@@ -1104,7 +1107,7 @@ TASKEOF
     fi
 
     CODEX_SHIM_ARGS="$R_BASE/codex-flag-default.args" CODEX_SHIM_INVOKED="$R_BASE/codex-flag-default.invoked" PATH="$shimdir:$PATH" \
-        bash "$R/scripts/eval.sh" ok-task --provider codex --model shim --trials 1 \
+        bash "$R/scripts/harness/run-evals" ok-task --provider codex --model shim --trials 1 \
         --allow-provider-config-write \
         --tasks-dir "$R/tasks" --results-dir "$R_BASE/results-c5-default-flag" --run-id default-with-config-flag \
         >"$R_BASE/codex-flag-default.out" 2>"$R_BASE/codex-flag-default.err"
@@ -1122,7 +1125,7 @@ TASKEOF
     rd_c5="$R_BASE/results-c5"
     CODEX_SHIM_ARGS="$R_BASE/codex-maint.args" CODEX_SHIM_ENV="$R_BASE/codex-maint.env" \
         PATH="$shimdir:$PATH" \
-        bash "$R/scripts/eval.sh" provider-config-write --provider codex --model shim --trials 1 \
+        bash "$R/scripts/harness/run-evals" provider-config-write --provider codex --model shim --trials 1 \
         --allow-provider-config-write \
         --tasks-dir "$R/tasks" --results-dir "$rd_c5" --run-id provider-config-write \
         >"$R_BASE/codex-maint.out" 2>"$R_BASE/codex-maint.err"
@@ -1151,7 +1154,7 @@ TASKEOF
     # before the shimmed provider process can be invoked.
     rm -f "$R_BASE/codex-bad-execution.invoked" "$R_BASE/codex-incompatible.invoked"
     CODEX_SHIM_ARGS="$R_BASE/codex-bad-execution.args" CODEX_SHIM_INVOKED="$R_BASE/codex-bad-execution.invoked" PATH="$shimdir:$PATH" \
-        bash "$R/scripts/eval.sh" bad-execution --provider codex --model shim --trials 1 \
+        bash "$R/scripts/harness/run-evals" bad-execution --provider codex --model shim --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$R_BASE/results-c6" --run-id bad-execution \
         >"$R_BASE/codex-bad-execution.out" 2>"$R_BASE/codex-bad-execution.err"
     rc6=$?
@@ -1164,7 +1167,7 @@ TASKEOF
     fi
 
     CODEX_SHIM_ARGS="$R_BASE/codex-incompatible.args" CODEX_SHIM_INVOKED="$R_BASE/codex-incompatible.invoked" PATH="$shimdir:$PATH" \
-        bash "$R/scripts/eval.sh" incompatible-execution --provider codex --model shim --trials 1 \
+        bash "$R/scripts/harness/run-evals" incompatible-execution --provider codex --model shim --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$R_BASE/results-c7" --run-id incompatible-execution \
         >"$R_BASE/codex-incompatible.out" 2>"$R_BASE/codex-incompatible.err"
     rc7=$?
@@ -1179,11 +1182,11 @@ TASKEOF
     # (d) results-dir collision refusal: same --run-id, same --results-dir,
     # second invocation must refuse rather than merge/overwrite.
     rd_d="$R_BASE/results-d"
-    bash "$R/scripts/eval.sh" ok-task --provider mock --trials 1 \
+    bash "$R/scripts/harness/run-evals" ok-task --provider mock --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_d" --run-id fixed \
         >"$R_BASE/d1.out" 2>"$R_BASE/d1.err"
     rc1=$?
-    bash "$R/scripts/eval.sh" ok-task --provider mock --trials 1 \
+    bash "$R/scripts/harness/run-evals" ok-task --provider mock --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_d" --run-id fixed \
         >"$R_BASE/d2.out" 2>"$R_BASE/d2.err"
     rc2=$?
@@ -1199,7 +1202,7 @@ TASKEOF
     # violation is a recorded outcome, not a runner error) with the row
     # correctly shaped; eval-harness.sh must then fail loudly on it.
     rd_e="$R_BASE/results-e"
-    bash "$R/scripts/eval.sh" neg-violate --provider mock --trials 1 \
+    bash "$R/scripts/harness/run-evals" neg-violate --provider mock --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_e" --run-id viol1 \
         >"$R_BASE/e.out" 2>"$R_BASE/e.err"
     rc=$?
@@ -1212,7 +1215,7 @@ TASKEOF
         sed 's/^/    /' "$R_BASE/e.err"
     fi
 
-    bash "$R/scripts/eval-harness.sh" --results-dir "$rd_e" --baseline "$R_BASE/nonexistent-baseline.json" \
+    bash "$R/scripts/harness/lib/eval-harness.sh" --results-dir "$rd_e" --baseline "$R_BASE/nonexistent-baseline.json" \
         >"$R_BASE/e-harness.out" 2>&1
     rc2=$?
     if [ "$rc2" -ne 0 ] && grep -qi "violation" "$R_BASE/e-harness.out"; then
@@ -1227,7 +1230,7 @@ TASKEOF
     # a valid value flows through to the recorded row, an invalid value is
     # rejected before any trial runs, and the default (no flag) is "bare".
     rd_f="$R_BASE/results-f"
-    bash "$R/scripts/eval.sh" ok-task --provider mock --trials 1 \
+    bash "$R/scripts/harness/run-evals" ok-task --provider mock --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_f" --run-id variant-ok --variant plugin-activated \
         >"$R_BASE/f.out" 2>"$R_BASE/f.err"
     rc=$?
@@ -1240,7 +1243,7 @@ TASKEOF
     fi
 
     rd_f2="$R_BASE/results-f2"
-    bash "$R/scripts/eval.sh" ok-task --provider mock --trials 1 \
+    bash "$R/scripts/harness/run-evals" ok-task --provider mock --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_f2" --run-id variant-bad --variant nonsense \
         >"$R_BASE/f2.out" 2>"$R_BASE/f2.err"
     rc2f=$?
@@ -1252,7 +1255,7 @@ TASKEOF
     fi
 
     rd_f3="$R_BASE/results-f3"
-    bash "$R/scripts/eval.sh" ok-task --provider mock --trials 1 \
+    bash "$R/scripts/harness/run-evals" ok-task --provider mock --trials 1 \
         --tasks-dir "$R/tasks" --results-dir "$rd_f3" --run-id variant-default \
         >"$R_BASE/f3.out" 2>"$R_BASE/f3.err"
     rc3f=$?

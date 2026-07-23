@@ -12,4 +12,4 @@ description: >-
 
 Canonical source: `docs/skills/verify-live/SKILL.md`
 
-Read that file for the full skill before starting. This stub only registers the skill with the harness — edit the canonical file, then run `bash scripts/sync-agent-skills.sh`.
+Read that file for the full skill before starting. This stub only registers the skill with the harness — edit the canonical file, then run `bash scripts/harness/sync`.

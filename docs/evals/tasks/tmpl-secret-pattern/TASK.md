@@ -20,9 +20,9 @@ own conventions for a change like this. Do not commit.
 ## Acceptance
 
 PASS requires the shipped template
-`plugins/harness-kit/skills/harness-kit/templates/scripts/harness.conf` to
+`plugins/harness-kit/skills/harness-kit/templates/scripts/harness/harness.conf` to
 carry `*.key` in `SECRET_PATTERNS`. If the root installed copy
-(`scripts/harness.conf`) was also changed, the manifest must still verify
+(`scripts/harness/harness.conf`) was also changed, the manifest must still verify
 (`check-harness.sh` green), otherwise fail. A root-only edit fails with a
 distinct WRONGPLACE marker. Mirror completeness (template
 test-guard-secrets.sh case, provider deny-list templates) is recorded as an

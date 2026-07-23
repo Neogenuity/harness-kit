@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# check-harness — the full harness coherence check: runs every check family
+# (instructions, docs, plan, tests, drift, doctor) and owns the combined
+# summary. CI and the smoke test call THIS; each family is also a standalone
+# command (check-instructions, check-docs, validate-plan, detect-drift; the
+# tests and doctor families run only here).
+# Exit code: 0 if all checks pass, 1 otherwise.
+set -uo pipefail
+
+LIB="$(cd "$(dirname "$0")/lib" && pwd)"
+echo "Checking agent harness..."
+total=0
+for fam in instructions docs plan tests drift doctor; do
+    out=$(HARNESS_CHECK_CHILD=1 bash "$LIB/check-$fam.sh" 2>&1); rc=$?
+    [ -n "$out" ] && printf '%s\n' "$out"
+    # grep -c consumes its whole input (no early exit), so the pipe is safe
+    # under an inherited ignored SIGPIPE — unlike grep -q (see check-drift).
+    n=$(printf '%s\n' "$out" | grep -c '^ERROR:')
+    if [ "$rc" -ne 0 ] && [ "$n" -eq 0 ]; then
+        echo "ERROR: check-$fam exited $rc without reporting an error"
+        n=1
+    fi
+    total=$((total + n))
+done
+
+if [ "$total" -gt 0 ]; then
+    echo ""
+    echo "FAILED: $total harness check(s)"
+    exit 1
+fi
+echo "OK: agent harness is coherent"
+exit 0

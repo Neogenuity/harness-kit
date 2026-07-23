@@ -14,7 +14,7 @@ line and every required section — `## Objective`, `## Value`, `## Scope`,
 `## Out of scope`, `## Dependencies`, `## Verification`, `## Progress`,
 `## Decisions`, and `## Next action` — each with real content. Do not add
 markdown links to files that do not exist (the harness link-checks every doc).
-Run `bash scripts/check-harness.sh` and confirm it passes.
+Run `bash scripts/harness/check-harness` and confirm it passes.
 
 ## Acceptance
 

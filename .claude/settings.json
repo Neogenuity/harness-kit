@@ -6,13 +6,13 @@
       "Bash(git log:*)",
       "Bash(git show:*)",
       "Bash(shellcheck:*)",
-      "Bash(bash scripts/verify.sh:*)",
-      "Bash(bash scripts/check-harness.sh:*)",
-      "Bash(bash scripts/sync-agent-skills.sh:*)",
-      "Bash(bash scripts/hooks/test-guard-secrets.sh:*)",
-      "Bash(bash scripts/hooks/test-guard-config.sh:*)",
-      "Bash(bash scripts/hooks/test-format-feedback.sh:*)",
-      "Bash(bash scripts/hooks/test-advise-once.sh:*)"
+      "Bash(bash scripts/harness/verify:*)",
+      "Bash(bash scripts/harness/check-harness:*)",
+      "Bash(bash scripts/harness/sync:*)",
+      "Bash(bash scripts/harness/tests/test-guard-secrets.sh:*)",
+      "Bash(bash scripts/harness/tests/test-guard-config.sh:*)",
+      "Bash(bash scripts/harness/tests/test-format-feedback.sh:*)",
+      "Bash(bash scripts/harness/tests/test-advise-once.sh:*)"
     ],
     "deny": [
       "Read(./.env)",
@@ -80,7 +80,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/session-context.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/harness/hooks/session-context.sh"
           }
         ]
       }
@@ -91,7 +91,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/format.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/harness/hooks/format.sh"
           }
         ]
       }
@@ -102,7 +102,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/guard-secrets.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/harness/hooks/guard-secrets.sh"
           }
         ]
       },
@@ -111,7 +111,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/guard-config.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/harness/hooks/guard-config.sh"
           }
         ]
       }
@@ -121,7 +121,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/guard-project-policy.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.harness/hooks/guard-project-policy.sh"
           }
         ]
       }

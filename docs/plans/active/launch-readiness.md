@@ -92,7 +92,7 @@ parallel-track the mechanism plans.
 README.md carries no unresolved launch checkboxes; the demo recording,
 org-move grep, hygiene-pass note, and "what 1.0 promises" section are all
 linkable and current; the repository's GitHub visibility is public and the
-install path works from a cold clone; `bash scripts/check-harness.sh`
+install path works from a cold clone; `bash scripts/harness/check-harness`
 link-checks pass on every doc this plan touches.
 
 ## Progress
@@ -149,7 +149,7 @@ link-checks pass on every doc this plan touches.
   - Verified every relative link added in README.md/CONTRIBUTING.md/
     SECURITY.md resolves to an existing file (manual check — none of these
     three files are covered by `check-harness.sh`'s link checker, which
-    only scans `AGENTS.md` files and `docs/`). `bash scripts/check-harness.sh`
+    only scans `AGENTS.md` files and `docs/`). `bash scripts/harness/check-harness`
     stays green (no mechanism touched).
   - Left untouched, as scoped: item 1 (demo recording), item 2 (org move),
     item 7 (flip repo public) — all user actions.

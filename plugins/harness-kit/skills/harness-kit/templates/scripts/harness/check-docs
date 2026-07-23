@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# check-docs — knowledge-base health: link resolution and verification-stamp freshness
+# Thin command entry: the implementation is kit mechanism in lib/.
+exec bash "$(dirname "$0")/lib/check-docs.sh" "$@"

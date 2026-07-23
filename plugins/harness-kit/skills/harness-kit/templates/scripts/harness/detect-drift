@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# detect-drift — integrity: every mechanism file matches its pin; ship contract present; retired paths surfaced
+# Thin command entry: the implementation is kit mechanism in lib/.
+exec bash "$(dirname "$0")/lib/check-drift.sh" "$@"

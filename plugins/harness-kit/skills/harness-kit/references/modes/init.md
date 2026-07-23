@@ -4,7 +4,7 @@ Read [../pattern.md](../pattern.md) first if unread this session; provider file
 locations and event mappings are in [../provider-matrix.md](../provider-matrix.md).
 
 **Preflight — runtime prerequisites (before scaffolding anything).** Source the
-NEW kit's `templates/scripts/install-lib.sh` and run
+NEW kit's `templates/scripts/harness/lib/install-lib.sh` and run
 `harness_missing_prereqs`; name every tool it prints to the user *before*
 installing the mechanism. The critical one is
 **`jq`**: without it every guard hook fails OPEN (see the provider matrix), so
@@ -14,7 +14,7 @@ lists stay live. `git` and a sha256 tool (`shasum`/`sha256sum`) are the other
 hard dependencies. If any are missing, get the user to ACKNOWLEDGE scaffolding a
 harness whose feedback layer is degraded (better: install the dependency first)
 — do not silently proceed. This is a name-and-acknowledge gate ONLY: it does
-**not** change the guards' deliberate fail-open posture, and `check-harness.sh`'s
+**not** change the guards' deliberate fail-open posture, and `check-harness`'s
 doctor keeps WARNing on the same condition on every later run (check #10).
 
 1. **Recon (before asking anything).** Detect: languages and build files
@@ -28,7 +28,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    `.cursor/sandbox.json`, Codex sandbox/approval/network keys, OpenCode
    `permission`); any `.devcontainer/` plus the concrete image, Dockerfile, or
    Compose service it uses; secret-file patterns present (`.env*`,
-   `auth.json`, key files); docs already written; existing `.harness/log.jsonl`,
+   `auth.json`, key files); docs already written; existing `.harness/var/log.jsonl`,
    eval baselines/results, and documentation scheduling. Also classify the repo
    as an **application** (a local service/site/API with meaningful running state) or
    **non-app** (library, docs, static data, or another repo with no running app
@@ -44,11 +44,13 @@ doctor keeps WARNing on the same condition on every later run (check #10).
 
 2. **Interview (only what recon can't answer).** Ask, ideally in one round:
    - Quality gates: the ordered commands that define "done" (recon proposes,
-     user confirms). These are written into `scripts/verify.sh`, which is the
-     single executable source for them — docs only point at it.
+     user confirms). These are written as declarations into
+     `.harness/gates.conf`, which the kit-owned `scripts/harness/verify`
+     runner executes — docs only point at the runner.
    - The millisecond-fast linter per file type for the post-edit feedback
-     loop (`format.sh`'s second TAILOR map) — recon proposes from the
-     toolchain; slow static analysis stays in `verify.sh`.
+     loop (`harness.conf`'s `FORMAT_RULES`/`LINT_RULES` data) — recon
+     proposes from the toolchain; slow static analysis stays in the full
+     gates of `.harness/gates.conf`.
    - Which providers to wire beyond Claude Code + `AGENTS.md` (Cursor?
      Codex? OpenCode? `.agents`? — cheap to include, default to all five).
    - **Execution-profile adoption is a separate explicit choice.** For each
@@ -100,7 +102,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    file set comes from the source's `kit-manifest` — the declarative SHIP
    CONTRACT (one `<layer> <path>` line per shipped file: mechanism, policy,
    optional-policy, plus a retired section) that installs alongside the
-   mechanism as `scripts/kit-manifest`. Never copy from a hard-coded list;
+   mechanism as `scripts/harness/kit-manifest`. Never copy from a hard-coded list;
    every installer/manifest/checker function derives its set from the
    kit-manifest, so a new shipped file is one added line. The shipped set
    includes `dev-instance.sh` (physical-worktree suffix and candidate-port
@@ -108,25 +110,33 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    (deterministic mixed-log/eval reduction), `doc-garden.sh` (offline
    documentation scanning), and their regression coverage as well as the
    config, install/sync/check/eval/verify, and hook machinery.
-   `chmod +x scripts/hooks/*.sh scripts/*.sh`.
-   `install-lib.sh` is the deterministic, model-free core of this flow —
-   `harness_install_mechanism` copies exactly the declared set, and step 8's
-   `harness_generate_manifest` and `update` mode both flow through the same
-   contract; the
-   `test-install-core.sh` / `test-install-update.sh` / `test-install-recovery.sh`
-   suites (sharing `install-test-lib.sh`) are its fixture coverage. Tailor
-   `harness.conf` (providers, plans dir, secret patterns). Append `.harness/`
-   to the repo's `.gitignore` — the hook observability log lives there.
+   (`harness_install_mechanism` marks the extensionless commands and every
+   `*.sh` executable itself — no manual chmod pass).
+   `lib/install-lib.sh` is the deterministic, model-free core of this flow —
+   `harness_install_mechanism` copies exactly the set the kit-manifest
+   declares, and step 8's `harness_generate_manifest` and `update` mode both
+   flow through the same contract; the kit repo's maintainer-only
+   `test-install-*.sh` suites are its fixture coverage, and the shipped
+   `tests/test-harness-smoke.sh` is the adopter-side proof. Tailor
+   `harness.conf` (providers, plans dir, secret patterns). Append
+   `.harness/var/` to the repo's `.gitignore` — runtime state (the
+   observability log, update baselines, eval results) lives there; the rest
+   of `.harness/` (gates.conf, the project-policy hook) is committed.
 
 4. **Tailor policy** in the marked `TAILOR` blocks:
-   - `verify.sh`: write the interviewed quality gates as `gate` (fast:
-     formatter/linter), `full_gate` (serial typecheck/tests), or
-     `parallel_full_gate` (independent typecheck/tests) lines. Keep serial gates
-     cheapest-first and keep the default `harness` gate. Only parallelize gates
-     that do not consume one another's outputs or share mutable fixtures. Keep
-     the template's v2 gate-event wrapper intact: it emits name, mode, outcome,
-     exit code, and integer duration without logging command arguments/output or
-     changing a gate result.
+   - `.harness/gates.conf`: write the interviewed quality gates as one
+     declaration per line — `gate` (fast: formatter/linter, runs in both
+     modes), `full` (serial typecheck/tests), `parallel` (independent
+     typecheck/tests), or `parallel-each` (one gate per glob-matched file).
+     Keep serial gates cheapest-first and keep the default `harness` gate
+     (`bash scripts/harness/check-harness`) and the shipped-test
+     `parallel-each`. Only parallelize gates that do not consume one
+     another's outputs or share mutable fixtures; a `full` gate is also a
+     barrier for parallel gates declared before it. The RUNNER
+     (`scripts/harness/verify`) is kit-owned mechanism — it emits the v2
+     gate events (name, mode, outcome, exit code, integer duration, never
+     command output) itself, so gate policy and orchestration can no longer
+     drift apart.
    - `harness.conf` `FORMAT_RULES` / `LINT_RULES`: one
      `<glob[|glob...]>=<command>` line per formatter / fast linter for the
      detected stack (the format hook is mechanism; its policy is this data).
@@ -134,19 +144,19 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      could edit to make findings disappear.
    - `harness.conf` `SECRET_PATTERNS` / `SECRET_ALLOW_PATTERNS`: extend for
      the repo's actual secret files — this is the single source
-     (`guard-secrets.sh` enforces it, `check-harness.sh` verifies the native
+     (`guard-secrets.sh` enforces it, `check-harness` verifies the native
      deny lists against it). Mirror additions into
-     `hooks/test-guard-secrets.sh` cases.
+     `tests/test-guard-secrets.sh` cases.
    - `harness.conf` `MCP_ALLOWED_SERVERS`: one
      `<name> <identity-substring>` per line for each server approved in the
      interview — the substring is matched fixed-string against the server's
-     configured command+args or URL. `check-harness.sh` ERRORs on a
+     configured command+args or URL. `check-harness` ERRORs on a
      configured server missing from the inventory or whose identity drifted;
      leave it set-but-empty to assert "no MCP servers" strictly.
    - `harness.conf` `HOOK_WIRED_PROVIDERS` / `AGENT_PROVIDERS`: set each to the
      providers you actually wire in steps 5–6. `HOOK_WIRED_PROVIDERS` is the
      hook-wired subset (`.claude .cursor .codex`; OpenCode is descoped — no bash
-     hook shim) whose hook config `check-harness.sh` validates tuple-by-tuple;
+     hook shim) whose hook config `check-harness` validates tuple-by-tuple;
      `AGENT_PROVIDERS` is the set that receives generated agent stubs
      (`.claude .cursor .codex .opencode`). A declared provider missing its
      config/stubs is an ERROR; leaving either UNSET on an adopted harness is a
@@ -173,8 +183,8 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      template.** Implement the confirmed runtime map against
      `templates/docs/conventions/dev-runtime.md`: `up|health|seed|down`, one
      compact JSON v1 object and no other stdout for every recognized action,
-     worktree ownership under `.harness/dev/`, deterministic explicit seeding,
-     and repo-relative log/trace paths. Use `scripts/dev-instance.sh suffix`
+     worktree ownership under `.harness/var/dev/`, deterministic explicit seeding,
+     and repo-relative log/trace paths. Use `scripts/harness/lib/dev-instance.sh suffix`
      for the `^h[0-9a-f]{12}$` instance and `port <base> <span> [namespace]`
      for the candidate unless `HARNESS_DEV_PORT` is set. A foreign occupied
      port is an error — never reuse or kill its process. Mark `dev.sh`
@@ -184,8 +194,8 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    - `AGENTS.md` from `templates/AGENTS.md.tmpl`: fill every placeholder,
      delete sections that don't apply yet rather than leaving stubs.
    - `CLAUDE.md` from `templates/CLAUDE.md.tmpl` — a thin `@AGENTS.md`
-     import plus a `verify.sh` pointer; the gates themselves live only in
-     `scripts/verify.sh`.
+     import plus a `scripts/harness/verify` pointer; the gate list itself
+     lives only in `.harness/gates.conf`.
    - `docs/conventions/<topic>.md` for each interviewed convention — short,
      example-driven, written from real code in the repo.
    - `docs/conventions/untrusted-content.md` and
@@ -226,16 +236,16 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    - `docs/agents/<name>.md` personas only if a clear delegation need exists.
      `code-reviewer` is the recommended first one and **ships canonical** as
      `templates/docs/agents/code-reviewer.md` — an inferential reviewer that
-     runs after `verify.sh` passes, checks the four classes gates can't see,
-     and emits v1-compatible `hook_log` findings to `.harness/log.jsonl` (its
+     runs after `scripts/harness/verify` passes, checks the four classes gates can't see,
+     and emits v1-compatible `hook_log` findings to `.harness/var/log.jsonl` (its
      catch-rate is gated by the `seeded-defect-review` eval). Follow that
      template (or `templates/docs/agents/_example.md` for a bespoke persona) —
      give the canonical doc `name`/`description`/`tools` frontmatter; the
      provider stubs (`.claude/agents/`, `.cursor/agents/`, `.opencode/agents/`
      as Markdown, `.codex/agents/<name>.toml` as TOML) are GENERATED from it by
-     `sync-agent-skills.sh` in step 6 — never hand-authored.
+     `scripts/harness/sync` in step 6 — never hand-authored.
    - `docs/plans/README.md` from `templates/docs/plans/README.md` (AGENTS.md
-     links it, so `check-harness.sh` needs it to exist), and create the
+     links it, so `check-harness` needs it to exist), and create the
      `PLANS_DIR` (`docs/plans/active/` by default) with a `.gitkeep` so
      `session-context.sh` has a directory to announce. Copy
      `templates/docs/plans/_template.md` alongside it; seed real plans only
@@ -244,7 +254,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      + `rubrics/_example.md`) — the behavioral eval bank. Author real golden
      tasks only for the recurring success-defining work named in the interview;
      an empty bank is fine, but if you ship none, delete the AGENTS.md Evals
-     link so `check-harness.sh` doesn't dangle. Each task grades the *end state*
+     link so `check-harness` doesn't dangle. Each task grades the *end state*
      via `check.sh` and ships a `reference/apply.sh` that `test-eval.sh` proves
      scores as a pass (and, for negative tasks, a `reference/violate.sh` it
      proves scores as a fail).
@@ -254,7 +264,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      `templates/providers/claude/settings.json` into `.claude/settings.json`.
      Extend `permissions.allow` with the quality-gate
      commands and `permissions.deny` with `Read(...)` entries covering every
-     tailored `SECRET_PATTERNS` glob — `check-harness.sh` fails when the deny
+     tailored `SECRET_PATTERNS` glob — `check-harness` fails when the deny
      list misses one. When `.claude` is in `EXECUTION_PROFILE_PROVIDERS`, merge
      the template's `sandbox` object too; otherwise omit that optional subtree
      even on a fresh install. Stop if the installed Claude Code is older than
@@ -304,7 +314,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    - Gemini CLI: write `.gemini/settings.json` with
      `{ "context": { "fileName": ["AGENTS.md", "GEMINI.md"] } }` so it loads the
      shared `AGENTS.md` (default reads `GEMINI.md` only; verified 2026-07-11).
-   - Run `bash scripts/sync-agent-skills.sh` to generate all skill AND agent
+   - Run `bash scripts/harness/sync` to generate all skill AND agent
      stubs (agent stubs come from each `docs/agents/*.md` frontmatter into every
      `AGENT_PROVIDERS` dir). In app repos this generates the `verify-live`
      provider stubs only after the canonical skill and AGENTS link exist.
@@ -324,7 +334,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    its declared destination (`.github/workflows/harness-check.yml` — the
    template→destination rename map is the kit-manifest's `content` layer
    `dest=` entries, the same file step 3 installed; read renames from there,
-   don't restate them). Or add the `check-harness.sh` step
+   don't restate them). Or add the `check-harness` step
    to existing CI; translate for other CI systems. If the `code-reviewer`
    persona is wired, optionally add `templates/ci/github-actions-review.yml`
    at its declared destination (the persona as a PR reviewer — SHA-pinned,
@@ -335,13 +345,13 @@ doctor keeps WARNing on the same condition on every later run (check #10).
 8. **Write the manifest** for upgrades *and* CI integrity — do this AFTER all
    policy tailoring and conditional app authoring, so the checksums pin the
    tailored state. `harness_generate_manifest`
-   in `scripts/install-lib.sh` is the single producer; it pins the whole
-   `scripts/hooks/` tree plus the top-level files enumerated by the NEW
+   in `scripts/harness/lib/install-lib.sh` is the single producer; it pins the whole
+   `scripts/harness/hooks/` tree plus the top-level files enumerated by the NEW
    installer, including `dev-instance.sh`; in an app repo it also pins the
    authored `dev.sh`:
    ```bash
-   . scripts/install-lib.sh
-   harness_generate_manifest . <kit-version> > scripts/.harness-manifest
+   . scripts/harness/lib/install-lib.sh
+   harness_generate_manifest . <kit-version> > scripts/harness/.harness-manifest
    # Persist the pristine templates as update mode's channel-independent diff
    # base — recoverable with NO local git (plugin/copied installs need not keep
    # .git; see update.md). <src-templates-scripts> is the kit templates/scripts
@@ -349,11 +359,12 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    harness_persist_base <src-templates-scripts> . <kit-version>
    ```
    (kit version = `version` in the kit's `.claude-plugin/plugin.json`).
-   `check-harness.sh` verifies these checksums from now on, so every later
+   `check-harness` verifies these checksums from now on, so every later
    edit must re-pin its line. Append ` # tailored` to a line when the project
    deliberately forks that file (update mode then only ever diffs it, never
-   replaces it) — do this for the policy files step 4 tailors: `verify.sh`,
-   `hooks/format.sh`, `hooks/guard-project-policy.sh`, and **`harness.conf`**.
+   replaces it) — do this for the policy files step 4 tailors:
+   `.harness/gates.conf`, `.harness/hooks/guard-project-policy.sh`, and
+   **`harness.conf`**.
    In an app repo, append ` # tailored` to the `dev.sh` manifest line too; it is
    authored project policy and has no kit template to replace it from.
    Pinning `harness.conf` is load-bearing: its `SECRET_PATTERNS` is the single
@@ -361,25 +372,25 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    silently disarm the guard) must fail CI like any other policy edit — shell
    edits are unscanned by design, so this manifest is their enforcing layer.
 
-9. **Verify — do not skip**: before `verify.sh` can create the real local log,
+9. **Verify — do not skip**: before the verify runner can create the real local log,
    prove the no-data path against an explicitly absent fixture:
 
    ```bash
    [ ! -e .harness/init-no-data-check.absent.jsonl ] && \
-     bash scripts/audit-log.sh --log .harness/init-no-data-check.absent.jsonl --format table
+     bash scripts/harness/lib/audit-log.sh --log .harness/init-no-data-check.absent.jsonl --format table
    ```
 
    Confirm it reports
    `log.status: no_data`, zero parser counters, empty gate/retry/deny sections,
    and review count zero. Git/eval sections remain independently derived. Then
-   require `bash scripts/verify.sh` and `bash scripts/check-harness.sh` to pass;
-   each `scripts/hooks/test-*.sh` passes standalone; run `bash scripts/test-log.sh`,
-   `bash scripts/test-audit-log.sh`, and `bash scripts/test-doc-garden.sh`
+   require `bash scripts/harness/verify` and `bash scripts/harness/check-harness` to pass;
+   each `scripts/harness/hooks/test-*.sh` passes standalone; run `bash scripts/harness/tests/test-log.sh`,
+   `bash scripts/harness/tests/test-audit-log.sh`, and `bash scripts/harness/tests/test-doc-garden.sh`
    directly; feed `guard-secrets.sh` a real payload for the repo's
-   own `.env` and `guard-config.sh` one for `scripts/hooks/lib.sh`, confirm
+   own `.env` and `guard-config.sh` one for `scripts/harness/hooks/lib.sh`, confirm
    exit 2 for both; repeat both with Codex-shaped payloads (an apply_patch
    envelope in `tool_input.command` — crib the builders from
-   `scripts/hooks/test-affected-files.sh`) and confirm exit 2 again;
+   `scripts/harness/tests/test-affected-files.sh`) and confirm exit 2 again;
    confirm every AGENTS.md link opens. If doc-garden was adopted, run its
    default offline report and confirm it made no changes. For an app repo,
    validate every

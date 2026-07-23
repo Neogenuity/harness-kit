@@ -63,9 +63,9 @@ cat .codex/config.toml >> "$tmp"
 mv "$tmp" .codex/config.toml
 
 tmp="$(mktemp "${TMPDIR:-/tmp}/profile-conf-XXXXXX")"
-grep -v '^EXECUTION_PROFILE_PROVIDERS=' scripts/harness.conf > "$tmp" || true
+grep -v '^EXECUTION_PROFILE_PROVIDERS=' scripts/harness/harness.conf > "$tmp" || true
 printf '%s\n' 'EXECUTION_PROFILE_PROVIDERS=".claude .codex"' >> "$tmp"
-mv "$tmp" scripts/harness.conf
+mv "$tmp" scripts/harness/harness.conf
 
 cp "$source_root/plugins/harness-kit/skills/harness-kit/templates/docs/conventions/execution-profiles.md" \
     docs/conventions/execution-profiles.md

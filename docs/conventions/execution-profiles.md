@@ -4,7 +4,7 @@ Execution profiles are an explicit, provider-by-provider adoption. They set the
 strongest useful repo-local floor each provider can represent without claiming
 that four different products enforce the same boundary.
 
-Declare only adopted providers in `scripts/harness.conf`:
+Declare only adopted providers in `scripts/harness/harness.conf`:
 
 ```bash
 EXECUTION_PROFILE_PROVIDERS=".claude .cursor .codex .opencode"
@@ -224,7 +224,7 @@ instead of emitting placeholders.
 
 ## Provider observability is a separate stream
 
-`.harness/log.jsonl` records this repo's guard denials, advice, and lint
+`.harness/var/log.jsonl` records this repo's guard denials, advice, and lint
 feedback. Provider telemetry has different schemas, retention, scope, and
 privacy controls; the kit does not join the streams automatically.
 
@@ -237,14 +237,14 @@ privacy controls; the kit does not join the streams automatically.
 
 Do not ship collectors, endpoints, authorization headers, real hostnames,
 credentials, or raw-prompt opt-ins. A future correlation schema may join
-provider sessions to `.harness/log.jsonl`; until then, report them separately.
+provider sessions to `.harness/var/log.jsonl`; until then, report them separately.
 
 ## Review checklist
 
 - [ ] Only explicitly adopted providers are declared.
 - [ ] Existing provider keys, hooks, permissions, MCP servers, and secret-deny
       mirrors survived the merge.
-- [ ] `bash scripts/check-harness.sh` validates every declared tuple.
+- [ ] `bash scripts/harness/check-harness` validates every declared tuple.
 - [ ] Any temp root, network exception, external path, excluded command, or
       Windows fallback is named as a weakening.
 - [ ] Provider telemetry remains separate and does not capture raw prompts.

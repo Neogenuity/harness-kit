@@ -10,7 +10,7 @@
 Add a new `## Unreleased` section to `CHANGELOG.md`, placed above the most recent
 released version heading (currently `## 0.7.0`). Under it, add at least one
 bullet describing a hypothetical improvement, following the format of the
-existing entries. Then run `bash scripts/check-harness.sh` and confirm it passes.
+existing entries. Then run `bash scripts/harness/check-harness` and confirm it passes.
 
 ## Acceptance
 

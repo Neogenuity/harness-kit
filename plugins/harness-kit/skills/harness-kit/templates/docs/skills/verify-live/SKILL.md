@@ -30,7 +30,7 @@ The v1 object has exactly these required keys:
 - `schema_version`: integer `1`
 - `action`: `up`, `health`, `seed`, or `down`, matching the request
 - `status`: `ready`, `seeded`, `stopped`, `unhealthy`, or `error`
-- `instance`: the `scripts/dev-instance.sh suffix` output, matching
+- `instance`: the `scripts/harness/lib/dev-instance.sh suffix` output, matching
   `^h[0-9a-f]{12}$`
 - `url`: string, possibly empty only when stopped or on error
 - `logs`: nonempty repo-relative path string
@@ -91,7 +91,7 @@ successful `down` is `stopped`. `health` is the only action where `stopped` or
    matching after-change screenshot when visual tooling exists. Do not quietly
    substitute a unit test or a different happy path for the failed flow.
 
-8. **Run the repository gate.** Run `bash scripts/verify.sh` after the live
+8. **Run the repository gate.** Run `bash scripts/harness/verify` after the live
    behavior passes. Report the live flow, relevant evidence paths, test result,
    and any visual-verification limitation.
 

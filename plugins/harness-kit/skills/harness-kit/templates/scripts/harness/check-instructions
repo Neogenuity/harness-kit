@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# check-instructions — harness coherence: skills spec, stub generation, provider wiring, native deny mirrors, execution profiles
+# Thin command entry: the implementation is kit mechanism in lib/.
+exec bash "$(dirname "$0")/lib/check-instructions.sh" "$@"

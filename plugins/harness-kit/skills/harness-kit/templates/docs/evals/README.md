@@ -68,7 +68,7 @@ recurring changes your reviewers care about most.
   exempt). All six metadata fields are validated against their enum before a
   run starts; a typo dies loudly instead of silently changing scoring.
 - **grade** — `check` runs only `check.sh`; `check+verify` also runs the
-  workspace's `scripts/verify.sh`.
+  workspace's `scripts/harness/verify`.
 - **network** — declares whether a task needs to reach a localhost service
   (default `none`). For Codex, `required` enables the experimental task-scoped
   proxy with exact `localhost` and `127.0.0.1` domain rules, empty Unix-socket
@@ -110,13 +110,13 @@ any `negative_violation`, regardless of suite.
 ## Running
 
 ```bash
-bash scripts/eval.sh <slug> --provider claude --model <m> --trials 3   # live
-bash scripts/eval.sh <slug> --provider mock  --trials 1                # plumbing (no model)
-bash scripts/eval-harness.sh                    # score latest vs baseline (fails on a regression/violation)
-bash scripts/eval-harness.sh --update-baseline  # record current numbers
+bash scripts/harness/run-evals <slug> --provider claude --model <m> --trials 3   # live
+bash scripts/harness/run-evals <slug> --provider mock  --trials 1                # plumbing (no model)
+bash scripts/harness/lib/eval-harness.sh                    # score latest vs baseline (fails on a regression/violation)
+bash scripts/harness/lib/eval-harness.sh --update-baseline  # record current numbers
 ```
 
-Transcripts land under `.harness/eval-results/` (git-ignored). A full run costs
+Transcripts land under `.harness/var/eval-results/` (git-ignored). A full run costs
 real model calls — schedule it or run after a harness change, never per-PR.
 `mock` proves the pipeline and the grader; it is not a measurement of any model.
 

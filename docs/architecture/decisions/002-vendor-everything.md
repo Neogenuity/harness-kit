@@ -23,7 +23,7 @@ gates, and docs.
 
 - Teammates and CI get the full harness for free; the kit is only needed to
   *install* or *upgrade*, never to *run*.
-- Updates are no longer automatic — hence `scripts/.harness-manifest`
+- Updates are no longer automatic — hence `scripts/harness/.harness-manifest`
   (see [ADR 005](005-manifest-self-protection.md)): checksums distinguish
   "still the kit's file, safe to replace" from "locally tailored, diff only".
 - The vendored scripts must be dependency-light and portable (bash + jq,

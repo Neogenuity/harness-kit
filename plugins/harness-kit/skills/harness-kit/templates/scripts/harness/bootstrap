@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# bootstrap — the model-free half of installing or upgrading the harness
+# mechanism. The judgment half (authoring AGENTS.md, tailoring policy,
+# wiring providers) is the harness-kit SKILL's init/update flow; this
+# command exposes the deterministic primitives it drives.
+#
+#   bootstrap preflight                 # name missing runtime prerequisites
+#   bootstrap install <src> <root>      # copy the ship contract's file set
+#   bootstrap update  <src> <root>      # replace/add/remove per the contract
+#   bootstrap repin   <root> <version>  # regenerate the integrity manifest
+#                                       # (preserves ' # tailored' markers)
+set -uo pipefail
+
+# shellcheck source=/dev/null
+. "$(dirname "$0")/lib/install-lib.sh"
+
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
+
+case "${1:-}" in
+    preflight)
+        missing=$(harness_missing_prereqs)
+        if [ -n "$missing" ]; then
+            printf 'missing prerequisite: %s\n' $missing
+            exit 1
+        fi
+        echo "ok: jq, git, and a sha256 tool are available"
+        ;;
+    install)
+        [ -n "${2:-}" ] && [ -n "${3:-}" ] || { usage; exit 64; }
+        harness_install_mechanism "$2" "$3" && harness_append_gitignore "$3"
+        ;;
+    update)
+        [ -n "${2:-}" ] && [ -n "${3:-}" ] || { usage; exit 64; }
+        harness_update_apply "$2" "$3"
+        ;;
+    repin)
+        [ -n "${2:-}" ] && [ -n "${3:-}" ] || { usage; exit 64; }
+        harness_repin_manifest "$2" "$3" > "$2/scripts/harness/.hm.new" \
+            && mv "$2/scripts/harness/.hm.new" "$2/scripts/harness/.harness-manifest"
+        ;;
+    *) usage; exit 64 ;;
+esac
