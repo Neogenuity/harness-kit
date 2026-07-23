@@ -47,13 +47,112 @@ CANONICAL_SKILLS="${CANONICAL_SKILLS:-.agents/skills}"
 
 MODE="${1:-write}"
 case "$MODE" in
-    write|--check) ;;
+    write|--check|secrets) ;;
     *)
-        echo "usage: bash scripts/harness/sync [--check]" >&2
+        echo "usage: bash scripts/harness/sync [--check] | secrets [--check]" >&2
         echo "unknown argument: $MODE (a typo'd --check must not silently rewrite stubs)" >&2
         exit 64
         ;;
 esac
+
+# --- `sync secrets [--check]`: native secret-deny mirror generation ----------
+# Generate (or --check) the native provider deny lists from SECRET_PATTERNS
+# (ADR 011). A SEPARATE subcommand — plain `sync` never rewrites a provider's
+# security config — and jq is HARD-REQUIRED here (unlike the rest of sync,
+# which is jq-free) because it rewrites JSON. Reconciliation is
+# ensure-present + preserve: the SECRET_PATTERNS-derived entries are added if
+# missing, and every other key (a project's own denies, OpenCode's hand-owned
+# allow exceptions) is preserved. Over-denying a secret is safe; under-denying
+# is the risk, so nothing is ever removed. checks #8/#8b remain the independent
+# verification and point here as the fix.
+#
+# Claude gets a DENY-ONLY list (the platform resolves deny-beats-allow, so an
+# allow list would be pointless and the guard hook is the precise layer);
+# OpenCode gets deny keys under permission.read and keeps its allow exceptions.
+# This asymmetry is documented in ADR 011.
+if [ "$MODE" = "secrets" ]; then
+    secrets_mode="${2:-write}"
+    case "$secrets_mode" in
+        write|--check) ;;
+        *) echo "usage: bash scripts/harness/sync secrets [--check]" >&2; exit 64 ;;
+    esac
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "ERROR: 'sync secrets' rewrites JSON provider configs and requires jq — install jq and re-run" >&2
+        exit 65
+    fi
+    if [ -z "${SECRET_PATTERNS:-}" ]; then
+        echo "note: SECRET_PATTERNS is empty (harness.conf) — no secret-deny mirrors to generate"
+        exit 0
+    fi
+
+    # Which providers are wired: the declaration, else the explicit union.
+    if [ -n "${HARNESS_PROVIDERS+x}" ]; then
+        secrets_wired="$HARNESS_PROVIDERS"
+    else
+        secrets_wired="${PROVIDERS:-} ${AGENT_PROVIDERS:-} ${HOOK_WIRED_PROVIDERS:-}"
+    fi
+
+    # Desired deny sets from SECRET_PATTERNS (glob-safe: *.pem must not expand).
+    set -f
+    # shellcheck disable=SC2086  # intentional word-split of the pattern list
+    secrets_pats=$(printf '%s\n' $SECRET_PATTERNS | jq -Rn '[inputs | select(length > 0)]')
+    set +f
+    secrets_claude_deny=$(printf '%s' "$secrets_pats" | jq '[.[] | "Read(./\(.))", "Read(**/\(.))"]')
+    secrets_oc_deny=$(printf '%s' "$secrets_pats" | jq '[.[] | "**/\(.)"]')
+    secret_fail=0
+
+    secrets_reconcile_claude() {
+        local cfg="$ROOT/.claude/settings.json" rel=".claude/settings.json" tmp new
+        case " $secrets_wired " in *" .claude "*) ;; *) return 0 ;; esac
+        if [ ! -f "$cfg" ]; then
+            [ "$secrets_mode" = "--check" ] || echo "note: $rel absent — not created (init authors it; #8 flags a wired-but-missing config)"
+            return 0
+        fi
+        if [ "$secrets_mode" = "--check" ]; then
+            if ! jq -e --argjson d "$secrets_claude_deny" '(($d - (.permissions.deny // [])) | length) == 0' "$cfg" >/dev/null 2>&1; then
+                echo "DRIFT: $rel permissions.deny is missing SECRET_PATTERNS entries — run 'bash scripts/harness/sync secrets'"
+                secret_fail=1
+            fi
+            return 0
+        fi
+        new=$(jq --argjson d "$secrets_claude_deny" '.permissions = (.permissions // {}) | .permissions.deny = ((.permissions.deny // []) + ($d - (.permissions.deny // [])))' "$cfg")
+        if [ "$new" != "$(cat "$cfg")" ]; then
+            tmp=$(mktemp "${TMPDIR:-/tmp}/hk-secrets.XXXXXX") || return 1
+            printf '%s\n' "$new" > "$tmp" && mv "$tmp" "$cfg"
+            echo "reconciled $rel permissions.deny"
+        else
+            echo "$rel already current"
+        fi
+    }
+
+    secrets_reconcile_opencode() {
+        local cfg="$ROOT/opencode.json" rel="opencode.json" tmp new
+        case " $secrets_wired " in *" .opencode "*) ;; *) return 0 ;; esac
+        if [ ! -f "$cfg" ]; then
+            [ "$secrets_mode" = "--check" ] || echo "note: $rel absent — not created (init authors it; #8b flags a wired-but-missing config)"
+            return 0
+        fi
+        if [ "$secrets_mode" = "--check" ]; then
+            if ! jq -e --argjson d "$secrets_oc_deny" '. as $r | all($d[]; . as $k | ($r.permission.read[$k]? == "deny"))' "$cfg" >/dev/null 2>&1; then
+                echo "DRIFT: $rel permission.read is missing SECRET_PATTERNS deny entries — run 'bash scripts/harness/sync secrets'"
+                secret_fail=1
+            fi
+            return 0
+        fi
+        new=$(jq --argjson d "$secrets_oc_deny" '.permission = (.permission // {}) | .permission.read = (.permission.read // {}) | reduce $d[] as $k (.; .permission.read[$k] = "deny")' "$cfg")
+        if [ "$new" != "$(cat "$cfg")" ]; then
+            tmp=$(mktemp "${TMPDIR:-/tmp}/hk-secrets.XXXXXX") || return 1
+            printf '%s\n' "$new" > "$tmp" && mv "$tmp" "$cfg"
+            echo "reconciled $rel permission.read"
+        else
+            echo "$rel already current"
+        fi
+    }
+
+    secrets_reconcile_claude
+    secrets_reconcile_opencode
+    exit "$secret_fail"
+fi
 
 fail=0
 

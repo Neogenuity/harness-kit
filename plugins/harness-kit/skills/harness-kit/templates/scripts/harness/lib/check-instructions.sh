@@ -166,7 +166,7 @@ if command -v jq >/dev/null 2>&1 && [ -n "${SECRET_PATTERNS:-}" ]; then
             case "$deny_list" in
                 *"$pat"*) ;;
                 *)
-                    echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching Read(...) entry in .claude/settings.json permissions.deny — add one; the native deny list must mirror the guard"
+                    echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching Read(...) entry in .claude/settings.json permissions.deny — add one or run 'bash scripts/harness/sync secrets' to regenerate; the native deny list must mirror the guard"
                     ERRORS=$((ERRORS + 1)) ;;
             esac
         done
@@ -192,7 +192,7 @@ if command -v jq >/dev/null 2>&1 && [ -n "${SECRET_PATTERNS:-}" ]; then
             case "$oc_deny" in
                 *"$pat"*) ;;
                 *)
-                    echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching \"deny\" entry in opencode.json permission.read — add one; the native deny list must mirror the guard"
+                    echo "ERROR: secret pattern '$pat' (harness.conf SECRET_PATTERNS) has no matching \"deny\" entry in opencode.json permission.read — add one or run 'bash scripts/harness/sync secrets' to regenerate; the native deny list must mirror the guard"
                     ERRORS=$((ERRORS + 1)) ;;
             esac
         done
