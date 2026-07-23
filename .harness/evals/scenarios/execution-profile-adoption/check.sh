@@ -118,8 +118,9 @@ PY
 check profile_declared_once
 check grep -qx 'EXECUTION_PROFILE_PROVIDERS=".claude .codex"' scripts/harness/harness.conf
 check grep -qx 'EVAL_PROFILE_HARNESS_SENTINEL="keep-existing-harness-policy"' scripts/harness/harness.conf
-check grep -q '^HOOK_WIRED_PROVIDERS=' scripts/harness/harness.conf
-check grep -q '^AGENT_PROVIDERS=' scripts/harness/harness.conf
+# The single provider declaration (v0.25.0, ADR 011) must survive the profile
+# adoption untouched — the wiring facets derive from it.
+check grep -q '^HARNESS_PROVIDERS=' scripts/harness/harness.conf
 check grep -q '^PLANS_DIR=' scripts/harness/harness.conf
 check grep -q '^SECRET_PATTERNS=' scripts/harness/harness.conf
 check grep -q '^SECRET_ALLOW_PATTERNS=' scripts/harness/harness.conf

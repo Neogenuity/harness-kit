@@ -45,9 +45,11 @@ harness_append_gitignore "$W"
 # This is a bare mechanism fixture: no provider configs, agent personas, or
 # MCP inventories are authored (that is the model-graded half of init), so
 # reset the declarations the semantic checks would otherwise judge this
-# repo's real providers against. Robust to a conf that never had the lines.
-{ grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS|EXECUTION_PROFILE_PROVIDERS|MCP_ALLOWED_SERVERS)=' "$W/scripts/harness/harness.conf"
-  printf 'HOOK_WIRED_PROVIDERS=""\nAGENT_PROVIDERS=""\nEXECUTION_PROFILE_PROVIDERS=""\n'
+# repo's real providers against. HARNESS_PROVIDERS is neutralized to "" so the
+# derived wiring sets — and the generated adapters — validate zero providers.
+# Robust to a conf that never had the lines.
+{ grep -vE '^(HARNESS_PROVIDERS|HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS|EXECUTION_PROFILE_PROVIDERS|MCP_ALLOWED_SERVERS)=' "$W/scripts/harness/harness.conf"
+  printf 'HARNESS_PROVIDERS=""\nHOOK_WIRED_PROVIDERS=""\nAGENT_PROVIDERS=""\nEXECUTION_PROFILE_PROVIDERS=""\n'
 } > "$W/scripts/harness/harness.conf.tmp" && mv "$W/scripts/harness/harness.conf.tmp" "$W/scripts/harness/harness.conf"
 
 harness_generate_manifest "$W" "0.0.0-smoke" > "$W/scripts/harness/.harness-manifest" \
