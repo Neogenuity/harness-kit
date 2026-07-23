@@ -63,13 +63,14 @@ Phased; each phase is one minor release cut via
   configs, check #8d tuples, and provider-matrix stamps all reference the new
   paths; update-from-previous-layout fixture green; grep for old paths returns
   nothing.
-- [ ] **Phase 4 — content/IA migration**: committed `.harness/` layer
+- [x] **Phase 4 — content/IA migration** — **shipped 2026-07-22 as v0.24.0**
+  (see [completed/v0.24.0-content-ia-migration.md](completed/v0.24.0-content-ia-migration.md)): committed `.harness/` layer
   (policies, templates, schemas, evals, agents), docs IA (standards, runbooks,
   product/generated/references skeletons, PLANS.md, root ARCHITECTURE.md),
   canonical skills to `.agents/skills/` (ADR 003 amended — stubs still
-  generated for providers that don't read `.agents/`). Acceptance: link
-  checker, stub checks, and eval machinery all pass against the new tree;
-  this repo's own docs migrated identically.
+  generated for providers that don't read `.agents/`). Acceptance met: link
+  checker (widened to the new zones), stub checks, and eval machinery all
+  pass against the new tree; this repo's own docs migrated identically.
 - [ ] **Phase 5 — single provider declaration + generated adapters**: kit-owned
   provider capability table; adopters declare one `HARNESS_PROVIDERS`; `sync`
   generates per-provider adapter summaries in `.harness/adapters/` and the
@@ -113,6 +114,12 @@ fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Progress
 
+- 2026-07-22 — **Phase 4 shipped as v0.24.0**: committed `.harness/`
+  content layer (agents/policies/templates/schemas/evals), docs IA
+  (standards/runbooks/root ARCHITECTURE/PLANS/tech-debt + index skeletons),
+  canonical skills at `.agents/skills/` (ADR 003 amended), GEMINI +
+  copilot pointer templates. Phase 5 (provider declaration + generated
+  adapters) is next.
 - 2026-07-22 — **Phase 3 shipped as v0.23.0**: mechanism re-homed to
   `scripts/harness/` verb commands + decomposed check families; verify
   runner/gates.conf split; hooks split by ownership; `.harness/var/`
@@ -152,9 +159,11 @@ fresh-repo `bootstrap` is the end-to-end proof.
 
 ## Next action
 
-Execute Phase 4 per
-[active/v0.24.0-content-ia-migration.md](active/v0.24.0-content-ia-migration.md)
-(Phases 1–3 shipped — see
+Author and activate the Phase 5 plan (v0.25.0): kit-owned provider
+capability table, single `HARNESS_PROVIDERS` declaration, `sync` grows
+generated `.harness/adapters/` summaries + secret-deny mirror generation
+(ADR 011)
+(Phases 1–4 shipped — see
 [completed/v0.21.0-ship-manifest-and-retirement.md](completed/v0.21.0-ship-manifest-and-retirement.md),
 [completed/v0.22.0-adopter-test-descope.md](completed/v0.22.0-adopter-test-descope.md),
 and

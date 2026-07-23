@@ -3,6 +3,60 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.24.0 — 2026-07-22
+
+Phase 4 of the standard-consumer-layout restructure
+(`docs/plans/standard-consumer-layout.md`): the content/IA migration.
+Every knowledge zone of ADR 010's standard layout now has its final
+contents.
+
+### Changed
+
+- **Committed `.harness/` content layer:** canonical personas move to
+  `.harness/agents/` (`CANONICAL_AGENTS` default re-pointed, stubs
+  regenerated); the untrusted-content and risky-actions conventions become
+  `.harness/policies/{security,changes}.md`; doc skeletons land in
+  `.harness/templates/` (execution-plan — formerly `docs/plans/_template.md`
+  — plus new ADR and PR templates); new `.harness/schemas/` carries JSON
+  Schemas for the telemetry v2 event, the audit report, and eval TASK
+  metadata, transcribed from the existing prose/enum contracts. All copies
+  are kit-manifest `content` entries with `dest=` mappings.
+- **Eval bank moves to `.harness/evals/`:** `docs/evals/tasks` →
+  `scenarios/`, plus `rubrics/`, `parity/`, `baselines.json`, `README.md`;
+  eval-lib defaults, audit-log integration, the eval-cron CI template, and
+  the gate declarations follow.
+- **Canonical skills move to `.agents/skills/`** (ADR 003 amended): the
+  cross-vendor standard location IS the source now — Codex reads it
+  natively, `.agents` leaves the stub `PROVIDERS` set, and stubs continue
+  for `.claude`/`.cursor`/`.opencode` with re-pointed Canonical-source
+  lines.
+- **docs IA:** conventions split into `docs/standards/` (templates,
+  execution-profiles, outcome-telemetry) and `docs/runbooks/`
+  (local-development, formerly dev-runtime); `ARCHITECTURE.md` moves to the
+  repo root; `docs/plans/README.md` becomes `PLANS.md` joined by
+  `tech-debt.md`; `product/`, `generated/`, `references/` gain index
+  skeletons.
+- **New instruction pointer templates:** `GEMINI.md.tmpl` and
+  `github-copilot-instructions.md.tmpl` (content entries) give Gemini and
+  the Copilot completions surface the same thin `AGENTS.md` pointer
+  CLAUDE.md carries.
+- **check-docs widens its link scan** to root `ARCHITECTURE.md` and the
+  committed `.harness/{policies,agents}` docs (which immediately caught six
+  dangling links), and gains a shallow JSON-validity arm for
+  `.harness/schemas/`.
+- **Mechanism fix:** `harness_install_mechanism` falls back to the
+  installed repo-relative location for `src=` policy entries, so an
+  installed tree is a valid install source again (the shipped smoke test
+  installs from the repo's own `scripts/` — without this, every adopter's
+  smoke run would miss `gates.conf` and the policy hook).
+
+### Migration (pre-v0.24.0 installs)
+
+Content moves are authored, not mechanical: relocate the files per the map
+above (git mv), re-point `CANONICAL_SKILLS`/`CANONICAL_AGENTS`/`PROVIDERS`
+in `harness.conf`, re-run `bash scripts/harness/sync`, and re-pin. The
+update mode's diff flow proposes each step; nothing is auto-overwritten.
+
 ## 0.23.0 — 2026-07-22
 
 Phase 3 of the standard-consumer-layout restructure

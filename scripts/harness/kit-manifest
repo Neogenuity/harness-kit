@@ -104,6 +104,8 @@ optional-policy scripts/dev.sh
 # --- content: authored/copied by the SKILL's init flow, never by install ------
 content AGENTS.md.tmpl dest=AGENTS.md
 content CLAUDE.md.tmpl dest=CLAUDE.md
+content GEMINI.md.tmpl dest=GEMINI.md
+content github-copilot-instructions.md.tmpl dest=.github/copilot-instructions.md
 content ci/github-actions-harness-check.yml dest=.github/workflows/harness-check.yml
 content ci/github-actions-review.yml dest=.github/workflows/review.yml
 content ci/github-actions-eval-cron.yml dest=.github/workflows/eval-cron.yml

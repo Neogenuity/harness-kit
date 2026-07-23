@@ -1,4 +1,4 @@
-# harness-kit 0.23.0
+# harness-kit 0.24.0
 898ecb6c3e602099c54d98cdb9e73c4ddb536893e2c6d40d587f56bc2fa302b7  .harness/gates.conf # tailored
 a1d93676229cec8621ded630377d1c38b4292bf358029603db3e2e629500b94d  .harness/hooks/guard-project-policy.sh # tailored
 7b6f0ef248121b10a267c0a53fab98f9ad86458a5970ea3eb3ff99befe9a57e0  scripts/check-packaging.sh # tailored
@@ -14,7 +14,7 @@ dc9df0cf338aea772fea6aff8881a6b9808f8c120906a2be59c1e890ffdcdcaf  scripts/harnes
 c12e2195867ca39b7eed7097a4da7ee991cd20fe0c4a9f946b5a1840d5c06950  scripts/harness/hooks/guard-secrets.sh
 de7520a4d7363d5dc431dc93977697142f9a7f919c09649853de74e6c3246601  scripts/harness/hooks/lib.sh
 909682d9e043234230bea1e6ec6ed56d2c35efd775ee48e61a797c840c596d0d  scripts/harness/hooks/session-context.sh
-bd1dbe1e65e16418245cf9a31cf80cbcd2e6be45d6b7bfb11dfc9f55ed9a4006  scripts/harness/kit-manifest
+1845bce45d61980cd127fb968a4d7b47aad8fe7d224cb47ecc9d4c3faa2f1265  scripts/harness/kit-manifest
 ce04fd1b45508e8d5c77625e70a72b7539b4367be61128487f3e88b62f720106  scripts/harness/lib/audit-log.sh
 a6c9945aeeb4531555095dff35f22b7f21a43235a039f487f45cdebe697254a6  scripts/harness/lib/check-common.sh
 36c5ace6346476c724c5590f60d7a9afb6fca96c89866544112db061ed1c5806  scripts/harness/lib/check-docs.sh
@@ -51,7 +51,7 @@ a030888faaaf54e338a16333ca945bae713a3b2bb23e1db1bfbc933a33833391  scripts/harnes
 f126ca9721409b6283a792144e37bd7ba127c5b0b63534de8940d2bcf576f2c5  scripts/harness/validate-plan
 f61b5c28f20938947e806539e591c0087129a35491c13e99bedc1ec6b3faca1b  scripts/harness/verify
 12220bfd44b2e5f885046988c2d8df3d48616dc8e3eef1d34978d366e5562a2a  scripts/install-test-lib.sh # tailored
-bdb9fc3b1ba8c80970a625a0b7abf80ce84c11814a33b6194adae136886844cd  scripts/test-check-harness.sh # tailored
+efab21c2b4713881c60c493ffc73994c2da4e43a5e9203500e5b2e911de61784  scripts/test-check-harness.sh # tailored
 cd27ebee6571d05980a1e8f7220b8b90039179cca20c430c81e717d9c943d94c  scripts/test-eval.sh # tailored
 ca82fe50abf9986b51c23b416779ddc0a34039486157978eefa621f316a8f71a  scripts/test-fixture-isolation.sh # tailored
 806506d271610e37822a44b0d73933caa881f8b9555beeb00a6df5ef753f4298  scripts/test-install-core.sh # tailored

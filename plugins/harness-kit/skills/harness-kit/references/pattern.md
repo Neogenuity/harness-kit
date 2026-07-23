@@ -6,10 +6,13 @@ whatever ships next — without maintaining N parallel configurations.
 
 ## Design principles
 
-1. **Single source of truth in `docs/`.** All knowledge an agent needs —
-   architecture, conventions, task workflows (skills), personas (agents) —
-   lives in plain markdown under `docs/`, where humans also read and review
-   it. Provider directories never hold original content.
+1. **One canonical home per knowledge zone.** Human docs (architecture,
+   standards, runbooks, plans) live under `docs/`; agent-operational policy,
+   personas, doc templates, machine contracts, and the eval bank live in the
+   committed `.harness/`; task workflows (skills) live at `.agents/skills/`,
+   the cross-vendor standard location. Everything is plain markdown or plain
+   data, reviewed like code. Provider directories never hold original
+   content.
 
 2. **Provider shims are generated or thin.** Each harness needs files in its
    own dialect and location (`.claude/skills/`, `.cursor/rules/`, ...). Those
@@ -17,9 +20,11 @@ whatever ships next — without maintaining N parallel configurations.
    produced by `scripts/harness/sync`, in each provider's dialect:
    `.codex` agent stubs are TOML, the rest Markdown) or *hand-written thin
    pointers* (cursor rules) that carry only the harness-required frontmatter
-   plus a "Canonical source: docs/..." line. Frontmatter is copied from the
+   plus a "Canonical source: ..." line. Frontmatter is copied from the
    canonical file because the `description` is the activation/routing
-   trigger — tuning it in `docs/` must propagate to every harness.
+   trigger — tuning it at the canonical home must propagate to every
+   harness. Tools that read `.agents/skills/` natively (Codex today) need no
+   skill stubs at all.
 
 3. **Behavior lives in portable executables, not harness config.** Hooks are
    plain bash scripts in `scripts/harness/hooks/` that read the event JSON on stdin
@@ -112,19 +117,24 @@ Dockerfile, or Compose source, never a placeholder template.
 
 ```
 AGENTS.md                      # table of contents; native instructions for Codex/OpenCode
-CLAUDE.md                      # thin pointer to AGENTS.md + quality gates
-docs/
-  architecture/                # canonical architecture docs
-  conventions/                 # one doc per topic agents get wrong
-    dev-runtime.md             # app-only dev.sh JSON/lifecycle contract [tailored]
+CLAUDE.md  GEMINI.md           # thin pointers to AGENTS.md + quality gates
+ARCHITECTURE.md                # root entry page; deep pages under docs/architecture/
+.github/copilot-instructions.md  # the same thin pointer, Copilot's location
+docs/                          # HUMAN knowledge base
+  architecture/decisions/      # ADRs (root ARCHITECTURE.md is the entry page)
+  standards/                   # one doc per topic agents get wrong
     execution-profiles.md      # adopted provider floors + limits [tailored]
     outcome-telemetry.md       # mixed local-event schema + privacy/trend contract
-  skills/                      # canonical task workflows (frontmatter = trigger)
-    <slug>/SKILL.md
-    doc-garden/SKILL.md        # optional offline doc-health workflow
-    verify-live/SKILL.md       # app-only reproduce/observe/rerun workflow [tailored]
-  agents/<name>.md             # canonical persona docs
-  plans/                       # execution plans (surfaced by session-context.sh)
+  runbooks/
+    local-development.md       # app-only dev.sh JSON/lifecycle contract [tailored]
+  plans/                       # PLANS.md lifecycle + active/ completed/ tech-debt.md
+                               #   (active/ surfaced by session-context.sh)
+  product/  generated/  references/   # index skeletons: product pages, build
+                               #   output (edit the producer), external sources
+.agents/
+  skills/<slug>/SKILL.md       # CANONICAL task workflows (frontmatter = trigger);
+    doc-garden/  verify-live/  #   Codex reads this dir natively; other providers
+                               #   get generated stubs (ADR 003 as amended)
 scripts/
   dev.sh                       # app-only runtime adapter: up/health/seed/down
                                #   (authored per repo; no generic template) [tailored]
@@ -151,6 +161,13 @@ scripts/
 .harness/                      # AGENT-OPERATIONAL layer (committed, repo-owned)
   gates.conf                   # THE quality-gate list the verify runner executes
                                #   (--fast subset for the stop-hook)  [tailored]
+  policies/                    # agent policy docs: security.md (untrusted
+                               #   content), changes.md (risky actions) [tailored]
+  agents/<name>.md             # canonical persona docs (stubs generated per provider)
+  templates/                   # execution-plan, ADR, PR description skeletons
+  schemas/                     # JSON Schemas: telemetry v2 event, audit report,
+                               #   eval TASK metadata
+  evals/                       # golden-task bank: scenarios/ rubrics/ baselines.json
   hooks/
     guard-project-policy.sh    # advisory stop-hook invariants        [tailored]
   var/                         # runtime state (git-ignored)
@@ -161,7 +178,7 @@ scripts/
 .cursor/   hooks.json, sandbox.json (optional declared profile), rules/, skills/, agents/, mcp.json
 .codex/    config.toml (optional declared profile + MCP), hooks.json, agents/*.toml   # skills from .agents/
 .opencode/ skills/, agents/ + opencode.json (MCP + native denies + optional declared permission profile)
-.agents/   skills/ (stubs)          # cross-vendor standard; also read by Codex + OpenCode
+
 ```
 
 ## The three layers (what to copy vs. generate)

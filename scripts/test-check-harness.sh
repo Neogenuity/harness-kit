@@ -377,8 +377,8 @@ assert_ok "a pre-adoption repo with no manifest still passes" "$W"
 # --- check #1: strict Agent Skills spec validation (ERRORs) ---
 # One fixture per failure class the spec makes a hard requirement.
 W=$(new_fixture)
-mkdir -p "$W/docs/skills/good-skill"
-cat > "$W/docs/skills/good-skill/SKILL.md" <<'EOF'
+mkdir -p "$W/.agents/skills/good-skill"
+cat > "$W/.agents/skills/good-skill/SKILL.md" <<'EOF'
 ---
 name: good-skill
 description: Does a thing. Use when the user asks to do the thing.
@@ -391,8 +391,8 @@ EOF
 assert_ok "a spec-conformant skill passes" "$W"
 
 W=$(new_fixture)
-mkdir -p "$W/docs/skills/good-skill"
-cat > "$W/docs/skills/good-skill/SKILL.md" <<'EOF'
+mkdir -p "$W/.agents/skills/good-skill"
+cat > "$W/.agents/skills/good-skill/SKILL.md" <<'EOF'
 ---
 name: wrong-name
 description: Does a thing.
@@ -402,8 +402,8 @@ EOF
 assert_flags "skill name not matching its directory is flagged" "$W" "must equal its parent directory"
 
 W=$(new_fixture)
-mkdir -p "$W/docs/skills/bad--name"
-cat > "$W/docs/skills/bad--name/SKILL.md" <<'EOF'
+mkdir -p "$W/.agents/skills/bad--name"
+cat > "$W/.agents/skills/bad--name/SKILL.md" <<'EOF'
 ---
 name: bad--name
 description: Does a thing.
@@ -413,8 +413,8 @@ EOF
 assert_flags "consecutive hyphens in a skill name are flagged" "$W" "consecutive hyphens"
 
 W=$(new_fixture)
-mkdir -p "$W/docs/skills/empty-desc"
-cat > "$W/docs/skills/empty-desc/SKILL.md" <<'EOF'
+mkdir -p "$W/.agents/skills/empty-desc"
+cat > "$W/.agents/skills/empty-desc/SKILL.md" <<'EOF'
 ---
 name: empty-desc
 description:
@@ -424,8 +424,8 @@ EOF
 assert_flags "an empty description is flagged" "$W" "description:' is empty"
 
 W=$(new_fixture)
-mkdir -p "$W/docs/skills/no-close"
-cat > "$W/docs/skills/no-close/SKILL.md" <<'EOF'
+mkdir -p "$W/.agents/skills/no-close"
+cat > "$W/.agents/skills/no-close/SKILL.md" <<'EOF'
 ---
 name: no-close
 description: Does a thing.

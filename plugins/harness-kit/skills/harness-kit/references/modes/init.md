@@ -308,10 +308,13 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      these native permissions + CI — the intended backstop, not a gap to fill
      by hand.
    - GitHub Copilot coding agent: nothing to wire — it reads `AGENTS.md`
-     natively, including nested files (verified 2026-07-11). Optionally add a
-     thin `.github/copilot-instructions.md` pointing at `AGENTS.md` for the
-     completions surface. No skill/hook/agent dirs (see provider matrix).
-   - Gemini CLI: write `.gemini/settings.json` with
+     natively, including nested files (verified 2026-07-11). Copy
+     `templates/github-copilot-instructions.md.tmpl` to
+     `.github/copilot-instructions.md` (kit-manifest content entry) so the
+     completions surface gets the same thin pointer. No skill/hook/agent
+     dirs (see provider matrix).
+   - Gemini CLI: copy `templates/GEMINI.md.tmpl` to `GEMINI.md` (content
+     entry), and write `.gemini/settings.json` with
      `{ "context": { "fileName": ["AGENTS.md", "GEMINI.md"] } }` so it loads the
      shared `AGENTS.md` (default reads `GEMINI.md` only; verified 2026-07-11).
    - Run `bash scripts/harness/sync` to generate all skill AND agent
