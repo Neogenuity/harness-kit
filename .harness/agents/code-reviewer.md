@@ -121,7 +121,7 @@ A consumer reads the structured fields back with
 `grep -c '"event":"review-finding"'` or
 `jq -s 'map(select(.event=="review-finding")) | length'`.
 
-The seeded-defect eval (`docs/evals/tasks/seeded-defect-review/`) is the
+The seeded-defect eval (`.harness/evals/scenarios/seeded-defect-review/`) is the
 executable proof of this schema: its grader consumes exactly these lines with
 the audit `group_by`, and `scripts/harness/tests/test-eval.sh` pins the schema offline.
 

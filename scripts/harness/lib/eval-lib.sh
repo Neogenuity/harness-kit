@@ -18,11 +18,11 @@
 # eval.sh / eval-harness.sh); the other pure functions do not need it.
 
 # shellcheck disable=SC2034  # consumed by the sourcing scripts (eval.sh, eval-harness.sh, test-eval.sh)
-EVAL_TASKS_DIR_DEFAULT="docs/evals/tasks"
+EVAL_TASKS_DIR_DEFAULT=".harness/evals/scenarios"
 # shellcheck disable=SC2034
 EVAL_RESULTS_DIR_DEFAULT=".harness/var/eval-results"
 # shellcheck disable=SC2034
-EVAL_BASELINE_DEFAULT="docs/evals/baselines.json"
+EVAL_BASELINE_DEFAULT=".harness/evals/baselines.json"
 
 # eval_task_meta <task_dir> <key>
 # Reads "- <key>: <value>" from the TASK.md metadata bullet list (suite,

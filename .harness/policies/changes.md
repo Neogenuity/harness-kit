@@ -82,7 +82,7 @@ one-way on a shared branch:
 
 ## Deleting recorded artifacts
 
-Recorded eval baselines (`docs/evals/baselines.json`) and completed plans
+Recorded eval baselines (`.harness/evals/baselines.json`) and completed plans
 (`docs/plans/completed/`) are the repo's memory of what shipped and how the
 harness measured. Deleting one is silent data loss:
 

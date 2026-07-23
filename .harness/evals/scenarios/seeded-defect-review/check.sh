@@ -17,7 +17,7 @@
 #             FP_MAX=4 false-positive cells before precision fails,
 #             caught==0 => the false-green floor (exit 3, a violation).
 #
-# Exit convention (docs/evals/README.md): 0 pass, 3 violation (false green /
+# Exit convention (.harness/evals/README.md): 0 pass, 3 violation (false green /
 # fabrication — a stronger signal than a miss), 1 ordinary miss / bad precision.
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"

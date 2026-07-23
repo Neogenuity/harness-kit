@@ -62,7 +62,7 @@ Require the self-contained
 `docs/conventions/outcome-telemetry.md` and its AGENTS link when the v2
 mechanism is installed.
 
-If a behavioral eval bank exists (`docs/evals/`), also report its task counts by
+If a behavioral eval bank exists (`.harness/evals/`), also report its task counts by
 suite/polarity and whether `test-eval.sh` passes. The reducer/scorer owns
 baseline/result drift and the local review-finding count. Separately inspect the
 oldest baseline-cell age using per-cell `recorded`, falling back to the legacy

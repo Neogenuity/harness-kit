@@ -39,7 +39,7 @@
 #     --run-id ID       results subdir name (default: UTC timestamp + provider +
 #                       model, so two providers launched the same second never
 #                       collide on a results dir)
-#     --tasks-dir DIR   task bank (default docs/evals/tasks)
+#     --tasks-dir DIR   task bank (default .harness/evals/scenarios)
 #     --results-dir DIR output root (default .harness/var/eval-results)
 #     --timeout SECS    per-trial wall-clock cap (default 900; 0 disables). Uses
 #                       `timeout`/`gtimeout` if present, else a portable
@@ -57,7 +57,7 @@
 #                       execution-variant dimension: tags every recorded row
 #                       so a plugin-activated run of the same task/provider/
 #                       model coexists with its bare counterpart in
-#                       results.jsonl and docs/evals/baselines.json instead of
+#                       results.jsonl and .harness/evals/baselines.json instead of
 #                       silently overwriting it (see eval-harness.sh). eval.sh
 #                       only tags the row — activating the plugin in the
 #                       trial workspace/environment is the caller's job.

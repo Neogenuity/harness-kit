@@ -22,7 +22,7 @@ cd "$ROOT" || exit 1
 # shellcheck source=/dev/null
 . "$ROOT/scripts/harness/lib/eval-lib.sh"
 
-TASKS_DIR="${EVAL_TASKS_DIR:-docs/evals/tasks}"
+TASKS_DIR="${EVAL_TASKS_DIR:-.harness/evals/scenarios}"
 fails=0
 ok()   { printf 'ok:   %s\n' "$1"; }
 bad()  { printf 'FAIL: %s\n' "$1"; fails=$((fails+1)); }
@@ -659,7 +659,7 @@ else
         bl="$htmp/baselines.json"
         # Pre-seed a RETAINED bare cell (2 trials — mismatched vs the default
         # --expected-trials=3), shaped like a real legacy entry (no "variant"
-        # key of its own — see docs/evals/baselines.json). This update only
+        # key of its own — see .harness/evals/baselines.json). This update only
         # touches the plugin-activated variant of the same task/provider/model.
         printf '%s\n' '{"recorded":"1999-01-01","tasks":{"touched-variant-demo":{"suite":"capability","polarity":"positive","runs":{"claude/haiku":{"trials":2,"passes":2,"pass_at_k":1,"pass_hat_k":1,"pass_rate":1,"recorded":"1999-01-01"}}}}}' > "$bl"
         _harness --results-dir "$htmp/results" --baseline "$bl" --update-baseline >"$htmp/out.log" 2>&1
@@ -695,7 +695,7 @@ fi
 # `bash "$R/scripts/harness/run-evals"` makes R — not this repo — eval.sh's source
 # repo: R's dirty/clean state is what the dirty-tree guard sees, and
 # eval_prepare_workspace clones R, not $ROOT. R's own synthetic tasks live
-# under R/tasks, entirely separate from $TASKS_DIR (the real docs/evals/tasks
+# under R/tasks, entirely separate from $TASKS_DIR (the real .harness/evals/scenarios
 # bank), so they are never subject to the bank-wide grader-validity checks
 # above — a task here is free to have its reference "solution" deliberately
 # take the forbidden shortcut (neg-violate) without that leaking into the

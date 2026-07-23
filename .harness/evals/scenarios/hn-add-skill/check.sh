@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Grader copied semantically from docs/evals/tasks/add-skill-sync/check.sh
+# Grader copied semantically from .harness/evals/scenarios/add-skill-sync/check.sh
 # (temporary audit variant — do not edit the tracked original).
 set -uo pipefail
 skill="docs/skills/changelog/SKILL.md"

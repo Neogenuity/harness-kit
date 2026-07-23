@@ -21,7 +21,7 @@ done
 case "$FORMAT" in table|json) ;; *) echo "audit-log.sh: --format must be table or json" >&2; exit 64 ;; esac
 [ -n "$LOG" ] || LOG="$ROOT/.harness/var/log.jsonl"
 [ -n "$RESULTS_DIR" ] || RESULTS_DIR="$ROOT/.harness/var/eval-results"
-[ -n "$BASELINE" ] || BASELINE="$ROOT/docs/evals/baselines.json"
+[ -n "$BASELINE" ] || BASELINE="$ROOT/.harness/evals/baselines.json"
 command -v jq >/dev/null 2>&1 || { echo "audit-log.sh: jq is required" >&2; exit 1; }
 LOG_STATUS=available
 if [ ! -e "$LOG" ]; then

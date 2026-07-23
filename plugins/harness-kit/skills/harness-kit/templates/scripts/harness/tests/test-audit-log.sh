@@ -78,10 +78,10 @@ else
     printf '%s\n' "$report"
 fi
 
-mkdir -p "$WORK/alternate/scripts/harness/lib" "$WORK/alternate/.harness/var/eval-results" "$WORK/alternate/docs/evals"
+mkdir -p "$WORK/alternate/scripts/harness/lib" "$WORK/alternate/.harness/var/eval-results" "$WORK/alternate/.harness/evals"
 printf '%s\n' '{"ts":"2026-07-15T11:00:00Z","hook":"code-reviewer","event":"review-finding","file":"alt","detail":"{}"}' \
     > "$WORK/alternate/.harness/var/log.jsonl"
-printf '{}\n' > "$WORK/alternate/docs/evals/baselines.json"
+printf '{}\n' > "$WORK/alternate/.harness/evals/baselines.json"
 cat > "$WORK/alternate/scripts/harness/lib/eval-harness.sh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' '{"version":1,"status":"pass","regressions":0,"violations":0,"cells":[]}'
@@ -134,8 +134,8 @@ else
     fail "shallow-history attribution state drifted"
 fi
 
-mkdir -p "$WORK/repo/.harness/var/eval-results" "$WORK/repo/docs/evals"
-printf '{}\n' > "$WORK/repo/docs/evals/baselines.json"
+mkdir -p "$WORK/repo/.harness/var/eval-results" "$WORK/repo/.harness/evals"
+printf '{}\n' > "$WORK/repo/.harness/evals/baselines.json"
 cat > "$WORK/repo/scripts/harness/lib/eval-harness.sh" <<'EOF'
 #!/usr/bin/env bash
 case " $* " in *' --format json '*) ;; *) exit 2 ;; esac

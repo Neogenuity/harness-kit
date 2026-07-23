@@ -17,7 +17,7 @@ workspace**, and is scored by **pass rate**, not a lucky single result
 ## Layout
 
 ```
-docs/evals/
+.harness/evals/
   README.md              # this file
   baselines.json         # recorded pass@k / pass^k per task+provider+model
   tasks/<slug>/

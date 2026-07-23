@@ -64,7 +64,7 @@ stubs drift from the generator output.
   deterministic gates can't see (misunderstood scope, over-engineering,
   brute-force cause-masking, missing/weak tests) and emits machine-parseable
   findings to `.harness/var/log.jsonl`. Its catch-rate is the seeded-defect eval
-  (`docs/evals/tasks/seeded-defect-review/`).
+  (`.harness/evals/scenarios/seeded-defect-review/`).
 
 Provider agent stubs (`.claude/agents/`, `.cursor/agents/`, `.codex/agents/`
 as TOML, `.opencode/agents/`) are **generated** pointer stubs, like the skill
@@ -81,7 +81,7 @@ a deleted persona.
 
 ## Evals
 
-- [docs/evals/README.md](docs/evals/README.md) — behavioral golden tasks that measure whether the harness changes agent behavior: multi-trial pass@k/pass^k over isolated workspaces (`scripts/harness/run-evals`), regression scoring vs recorded baselines (`scripts/harness/lib/eval-harness.sh`), grader validity pinned offline by the maintainer-only `scripts/test-eval.sh`
+- [.harness/evals/README.md](.harness/evals/README.md) — behavioral golden tasks that measure whether the harness changes agent behavior: multi-trial pass@k/pass^k over isolated workspaces (`scripts/harness/run-evals`), regression scoring vs recorded baselines (`scripts/harness/lib/eval-harness.sh`), grader validity pinned offline by the maintainer-only `scripts/test-eval.sh`
 
 ## Quality Gates
 

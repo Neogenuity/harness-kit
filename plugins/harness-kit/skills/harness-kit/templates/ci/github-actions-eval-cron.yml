@@ -81,7 +81,7 @@ jobs:
           model_arg=()
           if [ -n "$MODEL" ]; then model_arg=(--model "$MODEL"); fi
           ran=0; failed=0
-          for d in docs/evals/tasks/*/; do
+          for d in .harness/evals/scenarios/*/; do
             slug="$(basename "$d")"
             case "$slug" in _*) continue ;; esac
             [ -f "$d/TASK.md" ] || continue
@@ -100,7 +100,7 @@ jobs:
             echo "::endgroup::"
             ran=1
           done
-          [ "$ran" = 1 ] || { echo "no tasks under docs/evals/tasks/"; exit 1; }
+          [ "$ran" = 1 ] || { echo "no tasks under .harness/evals/scenarios/"; exit 1; }
           # A real failure means the bank is incomplete — fail the step so the
           # scoring step below does not report a partial run as a clean success.
           [ "$failed" = 0 ] || { echo "one or more evals failed unexpectedly"; exit 1; }

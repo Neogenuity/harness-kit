@@ -2,7 +2,7 @@
 # eval-harness.sh — the regression view over eval.sh's results. Reads the
 # per-trial JSON lines, computes pass@k / pass^k / pass-rate per
 # (task, provider, model, variant) from the *latest* run of each, compares
-# against the recorded baseline (docs/evals/baselines.json), and reports
+# against the recorded baseline (.harness/evals/baselines.json), and reports
 # deltas.
 #
 # Execution-variant dimension (v0.14.0 item 6): a row's `variant` (default
@@ -33,7 +33,7 @@
 #   bash scripts/harness/lib/eval-harness.sh                 # score latest results vs baseline
 #   bash scripts/harness/lib/eval-harness.sh --update-baseline   # record current as the new baseline
 #     --results-dir DIR   default .harness/var/eval-results
-#     --baseline FILE     default docs/evals/baselines.json
+#     --baseline FILE     default .harness/evals/baselines.json
 #     --format table|json default table; JSON is the machine-readable scoring
 #                         view consumed by audit-log.sh
 #     --no-fail           report regressions/violations but exit 0 (for dashboards)
