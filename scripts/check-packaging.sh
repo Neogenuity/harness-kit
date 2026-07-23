@@ -107,6 +107,29 @@ cres=$(jq -r '.version // empty' "$csrc/.claude-plugin/plugin.json" 2>/dev/null)
 ares=$(jq -r '.version // empty' "$asrc/.codex-plugin/plugin.json" 2>/dev/null)
 [ "$ares" = "$ver" ] || fail "Codex marketplace source resolves to version '$ares' != '$ver'"
 
+# 9. shipped eval docs point at the runner's ACTUAL discovery dir. The runtime
+# default (eval-lib.sh EVAL_TASKS_DIR_DEFAULT) and the docs that tell adopters
+# where to author tasks must name the same directory, or an adopter creates
+# evals the runner never discovers — a silently empty measurement bank.
+# Regression guard for the v0.25.1 tasks/ -> scenarios/ rename. Substring test
+# is pipe-free `case`, not `grep -q` (the SIGPIPE phantom-failure class).
+SKILL="$PLUGIN_DIR/skills/harness-kit"
+eval_lib="$SKILL/templates/scripts/harness/lib/eval-lib.sh"
+if [ -f "$eval_lib" ]; then
+    evaldir=$(awk -F'"' '/^EVAL_TASKS_DIR_DEFAULT=/{print $2; exit}' "$eval_lib")
+    evalbase=${evaldir##*/}   # e.g. scenarios
+    if [ -n "$evalbase" ]; then
+        [ -d "$SKILL/templates/docs/evals/$evalbase/_template" ] \
+            || fail "eval template ships no docs/evals/$evalbase/_template (EVAL_TASKS_DIR_DEFAULT=$evaldir)"
+        for d in "$SKILL/templates/docs/evals/README.md" "$SKILL/references/modes/init.md"; do
+            [ -f "$d" ] || continue
+            case "$(cat "$d")" in
+                *tasks/_template*) fail "$d documents tasks/_template but the runner discovers $evaldir" ;;
+            esac
+        done
+    fi
+fi
+
 if [ "$errs" -gt 0 ]; then
     echo "FAILED: $errs packaging issue(s)"
     exit 1

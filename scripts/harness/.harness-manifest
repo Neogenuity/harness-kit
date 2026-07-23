@@ -1,7 +1,7 @@
-# harness-kit 0.25.0
+# harness-kit 0.25.1
 898ecb6c3e602099c54d98cdb9e73c4ddb536893e2c6d40d587f56bc2fa302b7  .harness/gates.conf # tailored
 a1d93676229cec8621ded630377d1c38b4292bf358029603db3e2e629500b94d  .harness/hooks/guard-project-policy.sh # tailored
-7b6f0ef248121b10a267c0a53fab98f9ad86458a5970ea3eb3ff99befe9a57e0  scripts/check-packaging.sh # tailored
+245079626615bdc1545e362c236472cd763ff649496f8b0d9d8d3540d37c8882  scripts/check-packaging.sh # tailored
 2c3615b3f0155821c95cd48b764f7049fb19ef849a540a132c0e30ee2b5c9ed4  scripts/harness/bootstrap
 72889820e98644c033bc6370623e04fe9485e4ef62fee5877a24aa063c74ba68  scripts/harness/check-docs
 8f06f1f3165d1bca309751ce1629ff1bd7d66086f9370716201385fccc79cc05  scripts/harness/check-harness
@@ -28,7 +28,7 @@ a5ccc5bcb855208fc7dd762a1269f0d4557579d873ebfa49b373d5e8aaa78aed  scripts/harnes
 fc8f9301a56cd6bedf6bdc84bb7b19a9cdcb2b3f6de0b0b2a7807b9ddf2d5b4f  scripts/harness/lib/eval-harness.sh
 d670ec2353974fa69fbfcba5b77bae06ba10f00d69d11dfc841d7270d8c8d4c5  scripts/harness/lib/eval-lib.sh
 7382a2b29093f5acce8e7a936db7a8690edfd030597272d34c5ab34795512a67  scripts/harness/lib/eval.sh
-e7a9ccaf022348c661b649b9d42378afea52cc7d0c5591d8d6b192f46cf06160  scripts/harness/lib/install-lib.sh
+1530e403232706e0371f8828b7da3601ab1ee80f248c3923343d0f6733288698  scripts/harness/lib/install-lib.sh
 95726a956ba91d1aafb8b50fd9e0aa74a1f252c6494b9aadd82c0792b5ea58cd  scripts/harness/lib/log-lib.sh
 c7ed295e659223a0cda1a3bb3eb42a75a6c6392cd7fbd7059ceeaee5609eb03f  scripts/harness/lib/provider-caps
 9ae27b5240ab821d556d41ccf8c6ff86154fca0999b9a03eb7f16f03fff4e550  scripts/harness/lib/provider-lib.sh
@@ -59,6 +59,6 @@ cd27ebee6571d05980a1e8f7220b8b90039179cca20c430c81e717d9c943d94c  scripts/test-e
 ca82fe50abf9986b51c23b416779ddc0a34039486157978eefa621f316a8f71a  scripts/test-fixture-isolation.sh # tailored
 6ff4025a6e03b9b411891f31b3639b7a1a587a457c910c86cdb577d90d2bf9f7  scripts/test-install-core.sh # tailored
 c2d3e3d7435a5f455f520e87217793206eee8e1137d5c89d15585d2a3c5f07b7  scripts/test-install-recovery.sh # tailored
-c7d6e517b1eacf1491d64172e4c2666344aff7723a100686039bb2a1aa72c49f  scripts/test-install-update.sh # tailored
+1aaf4c16ca1dfeba464fea46d56a0091abcf3e332c21a6efd0738422c8dc9e50  scripts/test-install-update.sh # tailored
 c173f6c6174e5e214a1fd992834be4176ab4c6e3aa795ace879a119564dd2cd5  scripts/test-provider-templates.sh # tailored
 5ae6a67e2a203d3f7cc62e88b6317a1433c563509c16af65a74b1d49551757be  scripts/test-template-sync.sh # tailored

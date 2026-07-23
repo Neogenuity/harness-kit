@@ -2,7 +2,7 @@
 
 **Preflight — runtime prerequisites (before touching the install).** Resolve
 `<new_src_scripts>` to the NEW kit's `templates/scripts/` directory, source
-`<new_src_scripts>/install-lib.sh`, and run `harness_missing_prereqs`; surface
+`<new_src_scripts>/harness/lib/install-lib.sh`, and run `harness_missing_prereqs`; surface
 anything it prints. Do **not** source the target repo's old
 `scripts/harness/lib/install-lib.sh` for update decisions: it cannot enumerate mechanism
 files introduced after that version. `jq` is the critical prerequisite —

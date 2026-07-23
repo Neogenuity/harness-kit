@@ -20,7 +20,7 @@ workspace**, and is scored by **pass rate**, not a lucky single result
 .harness/evals/
   README.md              # this file
   baselines.json         # recorded pass@k / pass^k per task+provider+model
-  tasks/<slug>/
+  scenarios/<slug>/
     TASK.md              # prompt + metadata (suite, polarity, provider, grade, network, execution)
     setup.sh             # optional: seed workspace state before the agent runs
     check.sh             # REQUIRED grader: post-agent workspace, exit 0/1/3 (see below)

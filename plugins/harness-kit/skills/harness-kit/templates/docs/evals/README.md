@@ -15,10 +15,10 @@ workspace**, scored by **pass rate**:
 ## Layout
 
 ```
-docs/evals/
+.harness/evals/
   README.md              # this file
   baselines.json         # recorded pass@k / pass^k per task+provider+model
-  tasks/<slug>/
+  scenarios/<slug>/
     TASK.md              # prompt + metadata (suite, polarity, provider, grade, network, execution)
     setup.sh             # optional: seed workspace state before the agent runs
     check.sh             # REQUIRED grader: post-agent workspace, exit 0/1/3 (see below)
@@ -28,7 +28,7 @@ docs/evals/
   rubrics/<slug>.md      # optional: semantic (LLM-judge) criteria + a dated calibration note
 ```
 
-Copy `tasks/_template/` to `tasks/<your-slug>/` and fill it in. Pick 1–3 tasks
+Copy `scenarios/_template/` to `scenarios/<your-slug>/` and fill it in. Pick 1–3 tasks
 that capture what "the agent did the job right" means *in this repo* — the
 recurring changes your reviewers care about most.
 

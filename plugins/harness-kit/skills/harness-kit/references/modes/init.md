@@ -256,7 +256,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      `session-context.sh` has a directory to announce. Copy
      `templates/docs/templates/execution-plan.md` to `.harness/templates/`; seed real plans only
      when there's long-horizon work to track (an empty queue is fine).
-   - `.harness/evals/` from `templates/docs/evals/` (`README.md` + `tasks/_template/`
+   - `.harness/evals/` from `templates/docs/evals/` (`README.md` + `scenarios/_template/`
      + `rubrics/_example.md`) — the behavioral eval bank. Author real golden
      tasks only for the recurring success-defining work named in the interview;
      an empty bank is fine, but if you ship none, delete the AGENTS.md Evals

@@ -3,6 +3,38 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.25.1 — 2026-07-23
+
+A post-launch adversarial review (Codex) of the standard-consumer-layout
+restructure surfaced three defects on adopter-facing paths — the ones the
+deterministic gates structurally can't see. All three are fixed; none change
+the shipped mechanism's happy-path behavior.
+
+### Fixed
+
+- **Update preflight sourced a moved library.** `references/modes/update.md`
+  told the agent to source `<new_src_scripts>/install-lib.sh`, but Phase 3
+  (v0.23.0) moved that library to `<new_src_scripts>/harness/lib/install-lib.sh`.
+  Corrected (`init.md` was already right).
+- **Eval docs pointed at a directory the runner ignores.** The shipped eval
+  guide (`templates/docs/evals/README.md`, `references/modes/init.md`, and the
+  dogfood `.harness/evals/README.md`) still said `tasks/_template`, but Phase 4
+  (v0.24.0) renamed the bank to `scenarios/` and the runner defaults to
+  `.harness/evals/scenarios` — so an adopter following the docs would author
+  evals that `run-evals` never discovers (a silently empty measurement bank).
+  Docs corrected; `check-packaging.sh` now asserts the shipped eval docs name
+  the same directory as `EVAL_TASKS_DIR_DEFAULT`.
+- **A failed copy could be reported as a successful upgrade.**
+  `harness_update_apply` (and `harness_install_mechanism`) did not check `cp`
+  results and returned 0 unconditionally, with the one destructive pass
+  (retirement) running *between* the replace and add passes — so a
+  disk-full/permission copy failure could leave a partial migration that the
+  caller then re-pinned as green. Copies now go through a shared checked
+  `_harness_copy_shipped` helper (a failure returns non-zero), the add pass
+  uses process substitution so the failure escapes its loop subshell, and
+  retirement is deferred to LAST so the destructive step never runs on a failed
+  upgrade. `test-install-update.sh` gains a deterministic failure-path case.
+
 ## 0.25.0 — 2026-07-23
 
 Phase 5 of the standard-consumer-layout restructure

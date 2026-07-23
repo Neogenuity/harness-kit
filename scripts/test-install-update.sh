@@ -442,4 +442,37 @@ else
 fi
 rm -rf "$F"
 
+# --- (n) failure path: a failed copy aborts non-zero BEFORE the destructive
+# retire pass ------------------------------------------------------------------
+# harness_update_apply must never re-pin a partial upgrade as a success: a copy
+# failure returns non-zero, and because retirement is deferred to the LAST pass,
+# the destructive rm never runs on a failed upgrade. Failure is injected WITHOUT
+# file permissions (root-independent, deterministic): a new shipped file's
+# parent dir is pre-occupied by a regular FILE in the target, so the add pass's
+# `mkdir -p` fails. A pristine retirement is also pending, so we prove it stays.
+F=$(make_fixture) || exit 1
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+mkdir -p "$NEWKIT/scripts/harness/blocked"
+printf '#!/usr/bin/env bash\necho blocked\n' > "$NEWKIT/scripts/harness/blocked/newmech.sh"
+printf 'mechanism scripts/harness/blocked/newmech.sh\n' >> "$NEWKIT/scripts/harness/kit-manifest"
+retire_in_newkit "$NEWKIT/scripts" "scripts/harness/tests/test-log.sh"
+# Occupy the add path's parent with a regular file so its `mkdir -p` fails.
+printf 'not a dir\n' > "$F/scripts/harness/blocked"
+out=$(
+    # shellcheck source=/dev/null
+    . "$NEWKIT/scripts/harness/lib/install-lib.sh"
+    harness_update_apply "$NEWKIT/scripts" "$F"
+); rc=$?
+if [ "$rc" -ne 0 ]; then
+    pass "cp-failure: a failed copy makes harness_update_apply return non-zero (no false-green upgrade)"
+else
+    fail "cp-failure: update_apply returned 0 despite a failed copy" "$out"
+fi
+if [ -f "$F/scripts/harness/tests/test-log.sh" ] && ! has_line "$out" "remove scripts/harness/tests/test-log.sh"; then
+    pass "cp-failure: retire-last leaves the pending retirement intact when a copy fails"
+else
+    fail "cp-failure: a pending retirement was removed despite the failed copy" "$out"
+fi
+rm -rf "$F" "$NEWKIT"
+
 finish "install-update"

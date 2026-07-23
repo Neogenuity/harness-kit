@@ -269,11 +269,38 @@ harness_conf_declare() {
 # caller's authoring/merge step, so the "never clobber hand-written files"
 # floor holds by construction. Returns 1 when the source has no kit-manifest
 # (a pre-v0.21.0 template dir — not a valid install source for this library).
+# _harness_copy_shipped <srcfile> <path> <root>
+# Copy one shipped file into the tree and set its executable bit by the rule
+# install and update both use (every *.sh, and any scripts/harness/ top-level
+# command whose first bytes are a shebang). Returns non-zero — with an ERROR on
+# stderr — on a copy OR chmod failure, so the caller can ABORT instead of
+# reporting a false success. A silently-failed copy that still returned 0 was
+# the defect behind the "partial upgrade re-pinned as success" hazard.
+_harness_copy_shipped() {
+    local srcfile="$1" p="$2" root="$3"
+    mkdir -p "$root/$(dirname "$p")" || return 1
+    if ! cp "$srcfile" "$root/$p"; then
+        printf 'ERROR: harness: failed to copy %s -> %s\n' "$srcfile" "$root/$p" >&2
+        return 1
+    fi
+    case "$p" in
+        *.sh) chmod +x "$root/$p" || return 1 ;;
+        scripts/harness/*/*) ;;
+        scripts/harness/*)
+            # extensionless command entries are executable too
+            case "$(head -c2 "$root/$p" 2>/dev/null)" in '#!') chmod +x "$root/$p" || return 1 ;; esac ;;
+    esac
+    return 0
+}
+
 harness_install_mechanism() {
     local src="$1" root="$2" kmf="$1/harness/kit-manifest" p srcfile
+    local failed=0
     [ -f "$kmf" ] || return 1
     mkdir -p "$root/scripts/harness"
-    harness_kit_shipped_paths "$kmf" | while IFS= read -r p; do
+    # Process substitution (not `... | while`) so a copy failure inside the
+    # loop reaches `failed` in THIS shell instead of dying in a pipe subshell.
+    while IFS= read -r p; do
         srcfile="$src/$(_harness_kit_src_rel "$kmf" "$p")"
         # An INSTALLED tree is a valid source too (the smoke test installs
         # from the repo's own scripts/, and so would a self-heal re-install),
@@ -282,18 +309,10 @@ harness_install_mechanism() {
         # to the installed location under the source tree's parent.
         [ -f "$srcfile" ] || srcfile="$src/../$p"
         if [ -f "$srcfile" ]; then
-            mkdir -p "$root/$(dirname "$p")"
-            cp "$srcfile" "$root/$p"
-            case "$p" in
-                *.sh) chmod +x "$root/$p" ;;
-                scripts/harness/*/*) ;;
-                scripts/harness/*)
-                    # extensionless command entries are executable too
-                    case "$(head -c2 "$root/$p" 2>/dev/null)" in '#!') chmod +x "$root/$p" ;; esac ;;
-            esac
+            _harness_copy_shipped "$srcfile" "$p" "$root" || failed=1
         fi
-    done
-    return 0
+    done < <(harness_kit_shipped_paths "$kmf")
+    return "$failed"
 }
 
 # --- old-template recovery for update's tailored-file diff --------------------
@@ -424,15 +443,24 @@ harness_update_decision() {
 harness_update_apply() {
     local src="$1" root="$2" mf="$2/scripts/harness/.harness-manifest" kmf="$1/harness/kit-manifest"
     local line path decision srcfile p retired pinline want have
+    local failed=0
     # Pre-v0.23.0 installs keep the integrity manifest at the old flat
     # location; migrate it (content unchanged — the caller's repin rewrites
     # it at the new path afterward) so the replace loop sees the old pins.
     if [ ! -f "$mf" ] && [ -f "$root/scripts/.harness-manifest" ]; then
         mkdir -p "$root/scripts/harness"
-        mv "$root/scripts/.harness-manifest" "$mf"
+        if ! mv "$root/scripts/.harness-manifest" "$mf"; then
+            printf 'ERROR: harness_update_apply: failed to migrate the integrity manifest\n' >&2
+            return 1
+        fi
         printf 'migrate scripts/harness/.harness-manifest\n'
     fi
     retired=" $(harness_kit_manifest_paths "$kmf" retired 2>/dev/null | tr '\n' ' ') "
+    # --- Replace pass. Every copy is CHECKED; a failure sets `failed`, and with
+    # the one destructive pass (retirement) deferred to LAST, the function then
+    # returns non-zero BEFORE deleting anything — so a partial upgrade is never
+    # re-pinned as a success. The old defect: a failed cp still printed
+    # 'replace' and the function returned 0 unconditionally.
     if [ -f "$mf" ]; then
         while IFS= read -r line; do
             case "$line" in \#*|"") continue ;; esac
@@ -443,14 +471,39 @@ harness_update_apply() {
             decision=$(harness_update_decision "$root" "$line" "$kmf")
             srcfile="$src/$(_harness_kit_src_rel "$kmf" "$path")"
             if [ "$decision" = "replace" ] && [ -f "$srcfile" ]; then
-                cp "$srcfile" "$root/$path"
-                printf 'replace %s\n' "$path"
+                if cp "$srcfile" "$root/$path"; then
+                    printf 'replace %s\n' "$path"
+                else
+                    printf 'ERROR: harness_update_apply: failed to replace %s\n' "$path" >&2
+                    failed=1
+                fi
             else
                 printf 'keep %s\n' "$path"
             fi
         done < "$mf"
     fi
-    # Remove retired files (pristine + unmarked only — see the contract above).
+    # --- Add newly-shipped files absent from the target (one pass covers
+    # commands, libraries, hooks, and tests alike — the kit-manifest enumerates
+    # them all). Process substitution (not `... | while`) keeps `failed` in
+    # THIS shell; every copy is checked via _harness_copy_shipped.
+    mkdir -p "$root/scripts/harness"
+    while IFS= read -r p; do
+        srcfile="$src/$(_harness_kit_src_rel "$kmf" "$p")"
+        if [ -f "$srcfile" ] && [ ! -f "$root/$p" ]; then
+            if _harness_copy_shipped "$srcfile" "$p" "$root"; then
+                printf 'add %s\n' "$p"
+            else
+                failed=1
+            fi
+        fi
+    done < <(harness_kit_shipped_paths "$kmf" 2>/dev/null)
+    # A failed copy above aborts BEFORE the one destructive pass, so an
+    # interrupted or failed upgrade never also deletes files; the caller sees
+    # non-zero and must not re-pin the mixed state.
+    [ "$failed" -eq 0 ] || return 1
+    # --- Remove retired files (pristine + unmarked only — see the contract
+    # above). LAST, so the single destructive step runs only after every copy
+    # above has succeeded.
     for path in $retired; do
         [ -f "$root/$path" ] || continue
         pinline=""
@@ -468,24 +521,6 @@ harness_update_apply() {
             printf 'remove %s\n' "$path"
         else
             printf 'retire-keep %s\n' "$path"
-        fi
-    done
-    # Add newly-shipped files absent from the target (one pass covers
-    # commands, libraries, hooks, and tests alike — the kit-manifest
-    # enumerates them all).
-    mkdir -p "$root/scripts/harness"
-    harness_kit_shipped_paths "$kmf" 2>/dev/null | while IFS= read -r p; do
-        srcfile="$src/$(_harness_kit_src_rel "$kmf" "$p")"
-        if [ -f "$srcfile" ] && [ ! -f "$root/$p" ]; then
-            mkdir -p "$root/$(dirname "$p")"
-            cp "$srcfile" "$root/$p"
-            case "$p" in
-                *.sh) chmod +x "$root/$p" ;;
-                scripts/harness/*/*) ;;
-                scripts/harness/*)
-                    case "$(head -c2 "$root/$p" 2>/dev/null)" in '#!') chmod +x "$root/$p" ;; esac ;;
-            esac
-            printf 'add %s\n' "$p"
         fi
     done
     return 0
