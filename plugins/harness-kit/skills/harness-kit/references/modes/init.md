@@ -123,9 +123,11 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    `harness_install_mechanism` copies exactly the set the kit-manifest
    declares, and step 8's `harness_generate_manifest` and `update` mode both
    flow through the same contract; the kit repo's maintainer-only
-   `test-install-*.sh` suites are its fixture coverage, and the shipped
-   `tests/test-harness-smoke.sh` is the adopter-side proof. Tailor
-   `harness.conf` (providers, plans dir, secret patterns). Append
+   `test-install-*.sh` suites (including `test-install-smoke.sh`) are its
+   fixture coverage — adopters no longer ship a smoke test; their
+   post-install proof is `check-harness` (check-drift/manifest integrity)
+   plus the shipped hook behavioral tests. Tailor `harness.conf` (providers,
+   plans dir, secret patterns). Append
    `.harness/var/` to the repo's `.gitignore` — runtime state (the
    observability log, update baselines, eval results) lives there; the rest
    of `.harness/` (gates.conf, the project-policy hook) is committed.

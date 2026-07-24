@@ -3,6 +3,27 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.29.0 — 2026-07-24
+
+Trims the adopter `verify` floor further by making the install-mechanics smoke
+test maintainer-only again.
+
+### Changed
+
+- **`test-harness-smoke.sh` descoped from the shipped floor to a maintainer-only
+  gate** (moved to `scripts/test-install-smoke.sh`, run here as
+  `install-suite-smoke`, installing from the template ship artifact). On every
+  adopter `verify` it re-installed the mechanism into a throwaway fixture and ran
+  that fixture's checker (~30s — the shipped floor's pole), which is redundant
+  with the manifest-integrity check (`check-drift`), the mechanism guard, and the
+  shipped hook behavioral tests. Adopters' post-install proof is now those three.
+  **Net adopter harness floor: ~35–50s → ~10–15s** (the new pole is the ~6s guard
+  tests). **Migration:** the shipped-floor path is `retired` (update mode removes
+  a pristine copy); the `kit-manifest` + `gates.conf` change is delivered as an
+  update diff, so new installs get it by default and existing installs approve the
+  diff. This reverses the v0.22.0 promotion of the smoke test into the shipped
+  floor — adopters trade an end-to-end install check for the lighter floor.
+
 ## 0.28.0 — 2026-07-24
 
 A `verify`-runtime optimization grounded in a two-model review (a gpt-5.6-sol

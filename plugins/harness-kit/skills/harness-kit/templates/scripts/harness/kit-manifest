@@ -76,7 +76,6 @@ mechanism scripts/harness/hooks/format.sh
 mechanism scripts/harness/hooks/session-context.sh
 
 # --- mechanism: shipped test floor (scripts/harness/tests/) -------------------
-mechanism scripts/harness/tests/test-harness-smoke.sh
 mechanism scripts/harness/tests/test-advise-once.sh
 mechanism scripts/harness/tests/test-affected-files.sh
 mechanism scripts/harness/tests/test-codex-hooks-cwd.sh
@@ -177,3 +176,5 @@ retired scripts/hooks/test-guard-config.sh
 retired scripts/hooks/test-guard-project-policy.sh
 retired scripts/hooks/test-guard-secrets.sh
 retired scripts/hooks/test-session-context.sh
+# v0.29.0: install-mechanics smoke is maintainer-only again (redundant with check-drift + guards).
+retired scripts/harness/tests/test-harness-smoke.sh

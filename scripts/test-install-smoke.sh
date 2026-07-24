@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Post-init / post-update smoke test — the one install-mechanics check that
-# SHIPS to adopters (the kit's exhaustive install/update/recovery and checker
-# conformance suites are maintainer-only since v0.22.0). It answers the only
-# question an adopter needs answered after an install or upgrade: does THIS
-# repo's installed mechanism, installed fresh into a throwaway fixture,
-# produce a harness whose own checker comes back green?
+# Post-init / post-update smoke test — this is a MAINTAINER-ONLY
+# install-mechanics smoke (descoped from the shipped floor — adopters'
+# install proof is now check-drift + the guard hook + the shipped hook
+# behavioral tests). It installs the SHIPPED artifact (templates/scripts)
+# into a throwaway fixture and asserts the fixture's checker is green.
 #
 # Self-contained on purpose: it sources only the shipped install-lib.sh (no
 # test library), owns its scratch fixture, and runs with no model in the
-# loop. Runnable standalone and picked up by check-harness.sh check #6 and
-# verify.sh's test glob by its scripts/test-*.sh name.
+# loop. Runnable standalone and picked up by verify's install-suite-smoke
+# gate (.harness/gates.conf) by its scripts/test-*.sh name.
 set -uo pipefail
 
 # Recursion guard: this test installs the mechanism into a fixture and runs
@@ -23,7 +22,7 @@ if [ -n "${HARNESS_NESTED_FIXTURE:-}" ]; then
 fi
 export HARNESS_NESTED_FIXTURE=1
 
-SCRIPTS_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+SCRIPTS_DIR="$(cd "$(dirname "$0")/../plugins/harness-kit/skills/harness-kit/templates/scripts" && pwd)"
 # shellcheck source=/dev/null
 . "$SCRIPTS_DIR/harness/lib/install-lib.sh"
 

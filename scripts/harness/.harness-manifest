@@ -1,5 +1,5 @@
-# harness-kit 0.28.0
-e5f3fb6a34b440692785b9a7314e5705769bf66d57826009192160c3f6b1ab1c  .harness/gates.conf # tailored
+# harness-kit 0.29.0
+31f552e1c56047173cc11283d4b24904a609ef1977e49b7d74207493a2a3f789  .harness/gates.conf # tailored
 057be35a8c971db90ddb76eefb8bbb21d3fac14c9073b7137c00c1805d24c4f0  .harness/hooks/guard-project-policy.sh # tailored
 245079626615bdc1545e362c236472cd763ff649496f8b0d9d8d3540d37c8882  scripts/check-packaging.sh # tailored
 4c2bfe95c6f0f1cf62e0e5d427f7c88a2cc756a1fd11f99d0993485f9ba24529  scripts/harness/bootstrap
@@ -14,7 +14,7 @@ e24f93c1411035a460d6cd701964b28b85619cd6450692c6458a1113f5e29c6d  scripts/harnes
 c12e2195867ca39b7eed7097a4da7ee991cd20fe0c4a9f946b5a1840d5c06950  scripts/harness/hooks/guard-secrets.sh
 de7520a4d7363d5dc431dc93977697142f9a7f919c09649853de74e6c3246601  scripts/harness/hooks/lib.sh
 909682d9e043234230bea1e6ec6ed56d2c35efd775ee48e61a797c840c596d0d  scripts/harness/hooks/session-context.sh
-34472e2c0eb0169b4b14dd10c10f96ac253a9293ca5d0c5b9e0e39f5c54165ed  scripts/harness/kit-manifest
+01dc963995af96df2bd6aad371532895b7224ff7149f83327a77589fbd101261  scripts/harness/kit-manifest
 ce04fd1b45508e8d5c77625e70a72b7539b4367be61128487f3e88b62f720106  scripts/harness/lib/audit-log.sh
 704ab3eb07ac34c4d6dacc6a22d6b0f73f14d5767c17fd986c1d39d15ff56a7c  scripts/harness/lib/check-common.sh
 4784ace9f03f788e3d952839542a22492849397fdebce98d0a6b547d5d4d8512  scripts/harness/lib/check-docs.sh
@@ -46,7 +46,6 @@ a18265ea73d3d93c642c5e8b0d3cda5fc908366f707f09fac040b6f5a9b064fe  scripts/harnes
 af696546f7a28d0fe1251c11cda0ff55d839aa0379c222a008195f14d613b418  scripts/harness/tests/test-guard-config.sh
 a70197144cde96bb1bd1bc0d498586edcf8f283734e16be2704c6f7dfc8d8cd9  scripts/harness/tests/test-guard-project-policy.sh
 17f8f67bd7256fd35fd0a98eadbc93e32e5b772fed734e93d964164aea33657a  scripts/harness/tests/test-guard-secrets.sh
-46fb61874868dc3d997d2849af5419fc27bd3fa1be06c53300e4e945316a804a  scripts/harness/tests/test-harness-smoke.sh
 16647932389bb9bc8d29322db234aaed5889e0ed8240a81d097c887314b54223  scripts/harness/tests/test-log.sh
 72691d77f02a926865ba60183fceb612d922b60b326eff1c7b130cb79fab30de  scripts/harness/tests/test-session-context.sh
 11860239c84527e390d33aff803c75bed7d81d8a6410ad30a14c89e77c7db4ab  scripts/harness/tests/test-skip-tests-family.sh
@@ -61,6 +60,7 @@ bc61cb85fdc967f4136e87e3367888447ece5d21ac38081152139d04b7df4b63  scripts/test-f
 5a525a954aa69caca5a31fbdedc9cb59ae7355e020c8fa70a9232d7426247167  scripts/test-install-core.sh # tailored
 38a6de01efd2b67e247227076bcad6a724af6126ab83da20954e37c1aaa544ee  scripts/test-install-migrate.sh # tailored
 c2d3e3d7435a5f455f520e87217793206eee8e1137d5c89d15585d2a3c5f07b7  scripts/test-install-recovery.sh # tailored
+6d67b785a5cc77d9af135bc44f35c6065bd11f1559a94d530d9e146dcda6c5b1  scripts/test-install-smoke.sh # tailored
 67da5249977253b5f28c7e38d1bb71335655d4dae4b83f2294f5cf2f6bab5daa  scripts/test-install-update.sh # tailored
 c173f6c6174e5e214a1fd992834be4176ab4c6e3aa795ace879a119564dd2cd5  scripts/test-provider-templates.sh # tailored
 5ae6a67e2a203d3f7cc62e88b6317a1433c563509c16af65a74b1d49551757be  scripts/test-template-sync.sh # tailored
