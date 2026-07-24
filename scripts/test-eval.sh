@@ -1293,6 +1293,13 @@ else
     elif ! command -v git >/dev/null 2>&1; then
         ok "grader validity (skipped: git absent)"
     else
+        # Offline grader validity re-proves the SAME test floor ~8 times via the
+        # nested check-harness calls in the scenario graders. That floor already
+        # ran once as verify's parallel-each gate; skip it here (check #6 only).
+        # This affects ONLY this offline validity loop — real model eval runs go
+        # through scripts/harness/run-evals and never set this, so live grading
+        # is unchanged.
+        export HARNESS_SKIP_TESTS_FAMILY=1
         for slug in $BANK_TASKS; do
             td="$TASKS_DIR/$slug"
             if ! base="$(mktemp -d "${TMPDIR:-/tmp}/test-eval-XXXXXX")" || [ -z "$base" ]; then

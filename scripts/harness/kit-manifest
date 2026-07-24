@@ -92,6 +92,7 @@ mechanism scripts/harness/tests/test-audit-log.sh
 mechanism scripts/harness/tests/test-doc-garden.sh
 mechanism scripts/harness/tests/test-verify.sh
 mechanism scripts/harness/tests/test-sync-secrets.sh
+mechanism scripts/harness/tests/test-skip-tests-family.sh
 
 # --- policy: repo-owned after init; update diffs, never replaces --------------
 # (guard-secrets.sh is mechanism since v0.21.0, format.sh since v0.23.0:

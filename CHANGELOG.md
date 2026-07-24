@@ -3,6 +3,43 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.28.0 — 2026-07-24
+
+A `verify`-runtime optimization grounded in a two-model review (a gpt-5.6-sol
+second opinion plus adversarial Codex passes over the diff, every claim
+reproduced before acting). The `evals` gate — the dominant cost, and one that
+grew ~8× with every test added to the floor — is cut by ~80% by removing
+redundant re-execution of the test floor, and the update-mechanics suite is
+split for parallelism. No coverage is dropped: the floor still runs once per
+context, and two adversarial-review passes confirmed the skip preserves it.
+
+### Changed
+
+- **`check-tests.sh` gains an opt-in `HARNESS_SKIP_TESTS_FAMILY` skip.** When
+  set to exactly `1`, check #6 (running every `scripts/harness/tests/test-*.sh`)
+  is skipped while the cheap static checks #5 (exec-bit) and #5b (mktemp-hygiene)
+  still run. The offline eval grader-validity loop (`test-eval.sh`) and the
+  shipped harness gate set it, because the `parallel-each` gate already runs the
+  floor once — eliminating the ~8 redundant nested re-runs of the whole floor per
+  eval pass. Default unset = unchanged behavior, so a bare `check-harness` audit
+  still runs everything. **Migration:** `check-tests.sh` is a mechanism file — a
+  pristine copy is auto-replaced by update mode; the `gates.conf` harness-gate
+  change is repo-owned policy, delivered as an update diff (new installs get the
+  corrected default).
+- **`evals` gate ~340–620s → ~58s** (measured on a committed tree) and it no
+  longer grows with floor size. The skip takes effect only on committed code
+  (eval workspaces `git clone` HEAD).
+- **`test-install-update.sh` split into `test-install-update.sh` +
+  `test-install-migrate.sh`**, run as two concurrent gates (the v0.20.0
+  pattern): a ~105s serial suite becomes two ~50s halves.
+
+### Added
+
+- **`test-skip-tests-family.sh`** — a shipped regression test proving the skip
+  flag skips check #6 while #5b still fires, and that it honors exactly `1`
+  (isolated from an inherited value via `env -u`). Registered in `kit-manifest`
+  so adopters receive it.
+
 ## 0.27.0 — 2026-07-23
 
 A second principal-level architecture review (with three adversarial Codex

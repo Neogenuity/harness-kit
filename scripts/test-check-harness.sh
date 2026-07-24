@@ -1552,6 +1552,70 @@ printf '#!/usr/bin/env bash\nWORK=$(%s -d)\n' "$MK" > "$W/scripts/deploy.sh"
 chmod +x "$W/scripts/deploy.sh"
 assert_ok "check #5b: a non-test script the harness never runs is out of scope" "$W"
 
+# --- HARNESS_SKIP_TESTS_FAMILY: check #6 opt-out, #5b unaffected -------------
+# verify-speedup WP1: a caller whose own parallel-each gate has already run
+# the byte-identical scripts/harness/tests/test-*.sh floor can set
+# HARNESS_SKIP_TESTS_FAMILY=1 to skip check #6's redundant re-run of it. The
+# static checks (#5, #5b) are not part of that floor and must keep running
+# regardless of the flag. One fixture proves both halves: the flag skips #6
+# (and only #6), and #5b's static coverage survives the skip. Reuses
+# new_fixture, same pattern as the check #5b block above; $MK is that block's
+# indirection (avoids a literal command-position mktemp here).
+#
+# One file gives the fixture both properties at once: a floor test that
+# always exits 1 (so #6, when it runs, catches it), and — in that same
+# file — a bare, unsafe `mktemp -d` (so #5b flags it regardless of whether #6
+# ever runs it). Check #5 does not reach here at all — it scans root
+# scripts/*.sh and the hooks dir, not scripts/harness/tests/ — so only a #5b
+# violation can prove "the static check survives the skip"; a non-executable
+# test would prove nothing.
+W=$(new_fixture)
+printf '#!/usr/bin/env bash\nWORK=$(%s -d)\nexit 1\n' "$MK" > "$W/scripts/harness/tests/test-zz-willfail.sh"
+chmod +x "$W/scripts/harness/tests/test-zz-willfail.sh"
+
+# 1. Unset (default): #6 runs the floor and catches the failing test.
+unset HARNESS_SKIP_TESTS_FAMILY
+out=$(bash "$W/scripts/harness/check-harness" 2>&1); rc=$?
+if [ "$rc" = "1" ] && has "$out" "test-zz-willfail.sh failed"; then
+    echo "ok:   HARNESS_SKIP_TESTS_FAMILY unset: check #6 runs the floor and catches the failing test"
+else
+    echo "FAIL: HARNESS_SKIP_TESTS_FAMILY unset — expected exit 1 mentioning 'test-zz-willfail.sh failed', got exit $rc"
+    printf '%s\n' "$out" | sed 's/^/        /'
+    fails=$((fails + 1))
+fi
+
+# 2. =1: #6 is skipped — the failing test is NOT caught, and the skip note
+#    appears — but #5b still reports the unsafe mktemp: its static coverage
+#    does not depend on #6 actually executing.
+export HARNESS_SKIP_TESTS_FAMILY=1
+out=$(bash "$W/scripts/harness/check-harness" 2>&1); rc=$?
+if [ "$rc" = "1" ] && has "$out" "check #6 skipped" && has "$out" "creates a scratch path unsafely" \
+    && ! has "$out" "test-zz-willfail.sh failed"; then
+    echo "ok:   HARNESS_SKIP_TESTS_FAMILY=1: check #6 is skipped (failing test not caught) but #5b still flags the unsafe mktemp"
+else
+    echo "FAIL: HARNESS_SKIP_TESTS_FAMILY=1 — expected exit 1 with the skip note and the mktemp ERROR but no floor-test failure, got exit $rc"
+    printf '%s\n' "$out" | sed 's/^/        /'
+    fails=$((fails + 1))
+fi
+unset HARNESS_SKIP_TESTS_FAMILY
+
+# 3. =0 and =garbage behave as unset — only the exact string "1" skips #6.
+#    Both must still catch the failing floor test.
+for v in 0 garbage; do
+    export HARNESS_SKIP_TESTS_FAMILY="$v"
+    out=$(bash "$W/scripts/harness/check-harness" 2>&1); rc=$?
+    if [ "$rc" = "1" ] && has "$out" "test-zz-willfail.sh failed"; then
+        echo "ok:   HARNESS_SKIP_TESTS_FAMILY=$v behaves as unset: check #6 still runs and catches the failing test"
+    else
+        echo "FAIL: HARNESS_SKIP_TESTS_FAMILY=$v — expected exit 1 mentioning 'test-zz-willfail.sh failed', got exit $rc"
+        printf '%s\n' "$out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    unset HARNESS_SKIP_TESTS_FAMILY
+done
+
+rm -rf "$W"
+
 
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails check-harness case(s)"

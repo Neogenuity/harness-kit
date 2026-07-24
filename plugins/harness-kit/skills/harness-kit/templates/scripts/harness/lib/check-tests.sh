@@ -34,11 +34,14 @@ done
 #     beside the target so the `mv` is a same-filesystem rename) is equally fine —
 #     what is pinned is an explicit XXXXXX template, not a literal $TMPDIR.
 #
-#     This check runs BEFORE #6 because #6 executes exactly this file set: a
-#     static safety gate on those scripts must come before the gate that launches
-#     them, or the defect runs before anything can see it.
+#     This check runs BEFORE #6 because #6 — when it runs — executes exactly
+#     this file set: a static safety gate on those scripts must come before the
+#     gate that launches them, or the defect runs before anything can see it.
+#     #6 may be skipped entirely via HARNESS_SKIP_TESTS_FAMILY=1 (see its own
+#     comment below); #5b never skips, so this static coverage holds regardless
+#     of whether #6 actually executes.
 #
-#     SCOPE is deliberately exactly the set #6 executes — the shipped floor at
+#     SCOPE is deliberately exactly the set #6 executes when it runs — the shipped floor at
 #     scripts/harness/tests/test-*.sh — not all of scripts/. The kit ships into
 #     other people's repos: their scripts/deploy.sh is theirs to write, and a
 #     build gate that fails their build over a scratch file it never runs is
@@ -140,20 +143,32 @@ done < <(
 #    Recursion control lives in the one test that needs it:
 #    test-harness-smoke.sh installs a throwaway fixture and runs ITS checker,
 #    so it exports HARNESS_NESTED_FIXTURE and skips itself inside nested runs.
-#    No skip list here, and no env var switches off the guard behavioral
-#    tests (test-guard-*.sh, the catch for a re-pinned guard weakening).
-for test in "$ROOT"/scripts/harness/tests/test-*.sh; do
-    [ -f "$test" ] || continue
-    # Capture output instead of discarding it: when the failure happens inside
-    # a throwaway fixture (a nested checker run), "run it directly" is advice
-    # nobody can follow — the fixture is gone by the time the message is read.
-    test_out=$(bash "$test" 2>&1)
-    if [ $? -ne 0 ]; then
-        echo "ERROR: ${test#"$ROOT"/} failed — last lines of its output:"
-        printf '%s\n' "$test_out" | tail -15 | sed 's/^/        /'
-        ERRORS=$((ERRORS + 1))
-    fi
-done
+#    No skip list here, and no env var selectively switches off just the
+#    guard behavioral tests (test-guard-*.sh, the catch for a re-pinned guard
+#    weakening) — the one whole-loop exception is HARNESS_SKIP_TESTS_FAMILY=1,
+#    which skips this entire loop below (never a subset of it), for a caller
+#    that has already run this exact floor itself via its own parallel-each
+#    gate, so no coverage is lost — it moved, not vanished. That equivalence
+#    is on the caller: this skip assumes the floor it already ran is
+#    byte-identical to scripts/harness/tests/test-*.sh as shipped here. Set it
+#    only under that guarantee, never as a general speed knob; unset (the
+#    default) runs the loop exactly as before.
+if [ "${HARNESS_SKIP_TESTS_FAMILY:-}" = 1 ]; then
+    echo "note: tests family check #6 skipped (HARNESS_SKIP_TESTS_FAMILY=1) — the floor is run by the parallel-each gate"
+else
+    for test in "$ROOT"/scripts/harness/tests/test-*.sh; do
+        [ -f "$test" ] || continue
+        # Capture output instead of discarding it: when the failure happens inside
+        # a throwaway fixture (a nested checker run), "run it directly" is advice
+        # nobody can follow — the fixture is gone by the time the message is read.
+        test_out=$(bash "$test" 2>&1)
+        if [ $? -ne 0 ]; then
+            echo "ERROR: ${test#"$ROOT"/} failed — last lines of its output:"
+            printf '%s\n' "$test_out" | tail -15 | sed 's/^/        /'
+            ERRORS=$((ERRORS + 1))
+        fi
+    done
+fi
 
 
 check_trailer "tests"
