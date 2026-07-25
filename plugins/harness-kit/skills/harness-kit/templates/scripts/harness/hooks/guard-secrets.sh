@@ -7,9 +7,16 @@
 # `tool_input.path` for Grep), and Codex (`tool_input.command` — apply_patch
 # envelopes and shell commands) layouts via lib.sh:hook_affected_files. On
 # Codex this also denies apply_patch WRITES to secret files (an agent
-# shouldn't touch them at all), and adds a best-effort token scan of shell
-# command strings — Codex reads files through the shell, so that scan is the
-# only live secret layer there. Exit code 2 denies; anything else fails open.
+# shouldn't touch them at all). The best-effort token scan of shell command
+# strings runs for BOTH Codex (where reads are shell commands, so it is the
+# only live secret layer) and Claude Code, whose matcher includes `Bash`
+# because the native deny list is `Read(...)`-scoped and would let `cat .env`
+# through. That scan matches on BASENAME and does not check whether the token
+# is a path that exists, so any command whose TEXT names a secret file is
+# refused — including ones that read nothing, like
+# `git commit -m "clarify .env handling"`. Deliberate: over-denying a shell
+# command is cheaper than missing a read. Exit code 2 denies; anything else
+# fails open.
 #
 # Scope: defense-in-depth, not a complete boundary. Codex's own docs call
 # PreToolUse "a guardrail rather than a complete enforcement boundary", and
@@ -19,7 +26,7 @@
 # .harness/var/log.jsonl so a noisy or bypassed pattern surfaces in the audit
 # loop.
 #
-# SEARCH COVERAGE IS NARROWER THAN THE `Read|Grep` WIRING SUGGESTS. This hook
+# SEARCH COVERAGE IS NARROWER THAN THE `Read|Grep|Bash` WIRING SUGGESTS. This hook
 # can only deny a call that NAMES a secret file. A search scoped to a directory
 # — or one that omits its path entirely, which means "search the project" —
 # names no file, so it is ALLOWED BY DESIGN and pinned that way in
@@ -54,7 +61,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 # shellcheck source=/dev/null
 [ -f "$ROOT/scripts/harness/harness.conf" ] && . "$ROOT/scripts/harness/harness.conf"
 SECRET_ALLOW_PATTERNS="${SECRET_ALLOW_PATTERNS:-.env.example .env.sample .env.dist .env.testing *.example}"
-SECRET_PATTERNS="${SECRET_PATTERNS:-.env .env.* auth.json credentials.json *.pem id_rsa id_ed25519}"
+SECRET_PATTERNS="${SECRET_PATTERNS:-.env .env.* auth.json credentials.json *.pem id_rsa id_ed25519 id_ecdsa id_dsa .git-credentials *.ppk *.jks}"
 
 # Globs in the pattern lists must reach `case` verbatim — without noglob the
 # unquoted `for pat in $SECRET_PATTERNS` would expand `*.pem` against the CWD.
@@ -90,15 +97,36 @@ classify() {
 # literal path when it isn't a symlink or can't be resolved. An allow-listed
 # *target* opts out; the literal check still catches a dangling link named
 # `.env` whose target can't be resolved.
+# This runs once per shell token, so every subshell here is multiplied by the
+# length of the command line. Basenames are taken with parameter expansion
+# rather than `basename`, `readlink` runs only for an actual symlink (for
+# anything else it returns a normalized path with the SAME basename, so it
+# cannot change the verdict), and the literal is classified only when it
+# differs from the target. Symlink laundering stays covered; this is a cost
+# change, not a coverage change.
 check_path() {
-    local file="$1" resolved target_verdict literal_verdict
-    resolved=$(readlink -f "$file" 2>/dev/null || true)
-    [ -n "$resolved" ] || resolved="$file"
-    target_verdict=$(classify "$(basename "$resolved")")
-    literal_verdict=$(classify "$(basename "$file")")
+    local file="$1" trimmed resolved literal_name target_name
+    local target_verdict literal_verdict
+    trimmed="$file"
+    while [ "${trimmed%/}" != "$trimmed" ]; do trimmed="${trimmed%/}"; done
+    literal_name="${trimmed##*/}"
+    if [ -L "$file" ]; then
+        resolved=$(readlink -f "$file" 2>/dev/null || true)
+        [ -n "$resolved" ] || resolved="$file"
+        target_name="${resolved##*/}"
+    else
+        target_name="$literal_name"
+    fi
+    target_verdict=$(classify "$target_name")
     [ "$target_verdict" = allow ] && return 0
-    if [ "$target_verdict" = secret ] || [ "$literal_verdict" = secret ]; then
-        hook_deny "Blocked by scripts/harness/hooks/guard-secrets.sh: '$(basename "$file")' may contain real secrets. Use an .example/.testing variant instead."
+    if [ "$target_verdict" = secret ]; then
+        hook_deny "Blocked by scripts/harness/hooks/guard-secrets.sh: '$literal_name' may contain real secrets. Use an .example/.testing variant instead."
+    fi
+    if [ "$target_name" != "$literal_name" ]; then
+        literal_verdict=$(classify "$literal_name")
+        if [ "$literal_verdict" = secret ]; then
+            hook_deny "Blocked by scripts/harness/hooks/guard-secrets.sh: '$literal_name' may contain real secrets. Use an .example/.testing variant instead."
+        fi
     fi
     return 0
 }

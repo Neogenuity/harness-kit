@@ -16,7 +16,12 @@
             "**/credentials.json": "deny",
             "**/*.pem": "deny",
             "**/id_rsa": "deny",
-            "**/id_ed25519": "deny"
+            "**/id_ed25519": "deny",
+            "**/id_ecdsa": "deny",
+            "**/id_dsa": "deny",
+            "**/.git-credentials": "deny",
+            "**/*.ppk": "deny",
+            "**/*.jks": "deny"
         }
     },
     "mcp": {}

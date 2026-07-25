@@ -40,7 +40,10 @@ nobody mistakes a warning for a wall:
 ## Default posture
 
 <!-- TAILOR: keep these bullets only for profiles the repo actually declares.
-     Unset/empty EXECUTION_PROFILE_PROVIDERS means unadopted, not enforced. -->
+     Unset/empty EXECUTION_PROFILE_PROVIDERS means unadopted, not enforced.
+     If nothing is declared, delete this section's closing pointer to
+     docs/standards/execution-profiles.md too — that doc is installed only
+     with the profiles, so an unadopted repo would ship a dead link. -->
 
 When explicitly adopted, the safe profile is provider-specific and loosened
 only deliberately:

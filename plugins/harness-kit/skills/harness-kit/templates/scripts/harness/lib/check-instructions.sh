@@ -448,7 +448,7 @@ hook_check_provider() {
             # @any = event pinned, matcher not pinned (the contract for .codex
             # and .cursor, whose matchers the provider matrix leaves open).
             tuples='session-context.sh SessionStart
-guard-secrets.sh PreToolUse Read|Grep
+guard-secrets.sh PreToolUse Read|Grep|Bash
 guard-config.sh PreToolUse Edit|Write
 format.sh PostToolUse Edit|Write
 guard-project-policy.sh Stop' ;;

@@ -1,6 +1,6 @@
 # Optional PR reviewer: runs the canonical code-reviewer persona
 # (.harness/agents/code-reviewer.md) against a pull request, with this repo's
-# AGENTS.md in context, and posts advisory findings. Add as
+# AGENTS.md in context, and posts advisory findings. Installed as
 # .github/workflows/review.yml.
 #
 # ============================ OPT-IN AND COST-AWARE ============================

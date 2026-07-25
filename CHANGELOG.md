@@ -3,6 +3,75 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.31.0 — 2026-07-25
+
+Closes a secret-read gap on Claude Code's most-used tool, widens the default
+secret patterns, and corrects a batch of shipped-template claims that
+contradicted the code they described.
+
+### Added
+
+- **`Bash` joins the Claude Code `guard-secrets.sh` matcher** (`Read|Grep` →
+  `Read|Grep|Bash`). The native deny list is `Read(...)`-scoped, so `cat .env`
+  passed both the permission layer and the hook; the guard's shell-command
+  token scan already existed (it is the live secret layer on Codex) but nothing
+  routed Claude's `Bash` calls into it. **Migration:** the matcher lives in
+  `.claude/settings.json`, which update mode DIFFS rather than replaces —
+  approve the diff to adopt. Expect new denials: the scan matches on basename
+  and never checks whether a token is a real path, so any command whose *text*
+  names a secret file is refused, including commands that read nothing
+  (`git commit -m "clarify .env handling"`). Rephrase, or leave `Bash` out of
+  the matcher if your repo discusses secret filenames constantly.
+- **Five more default `SECRET_PATTERNS`**: `id_ecdsa`, `id_dsa`,
+  `.git-credentials`, `*.ppk`, `*.jks`. **Migration:** `harness.conf` is
+  policy-layer, so update mode diffs it; after adopting, run
+  `bash scripts/harness/sync secrets` to regenerate the native provider deny
+  lists — `check-harness` #8/#8b flags the gap until you do.
+
+### Fixed
+
+- **`guard-secrets.sh` is ~4x faster per shell token** (~24ms → ~5.7ms; a
+  124-token command went 3005ms → 787ms). It spawned `readlink`, two
+  `basename`s and two `classify` subshells for every token on the command line
+  — a cost Codex always paid and Claude Code would now pay too. Basenames use
+  parameter expansion, `readlink` runs only for an actual symlink (for anything
+  else it returns a normalized path with the same basename, so it cannot change
+  the verdict), and the literal is classified only when it differs from the
+  target. Coverage is unchanged: symlink laundering is still denied and the
+  full case bank still passes.
+- **The shipped provider templates now carry the full deny list.** Adding
+  patterns updated the installed root configs but not
+  `templates/providers/{claude,opencode}/`, so a *fresh* install began with a
+  failing `check-harness`, and fresh OpenCode installs silently lacked the new
+  native denies.
+- **`harness.conf` told you to edit a sha256-pinned file, at a path that no
+  longer exists.** It named `hooks/test-guard-secrets.sh` (the file moved to
+  `tests/` in the v0.23.0 re-home) and omitted that editing it needs
+  `HARNESS_ALLOW_MECHANISM_EDITS=1` plus a manifest re-pin.
+
+### Changed
+
+- **The `.env.example` contradiction is now documented rather than papered
+  over.** `harness.conf` claimed allow patterns beat secret patterns; that
+  holds in the hook, but the Claude mirror is deny-only by design (ADR 011), so
+  the default `.env.*` pattern denies `.env.example` natively there.
+  `harness.conf`, `hooks/README.md`, ADR 011 and the affected test labels now
+  say so, and `test-sync-secrets.sh` pins the deny-only invariant executably
+  instead of leaving it as prose in four files.
+- `hooks/README.md` no longer calls the manifest "the backstop" unqualified
+  where pre-edit hooks are absent: it pins kit mechanism files only, never
+  `GUARD_PROTECTED_EXTRA` entries.
+- `docs/policies/security.md`'s TAILOR block carries an explicit exemption from
+  its own keep-verbatim rule for the `execution-profiles.md` pointers, which
+  are dead links in a repo that declares no profile.
+- Installed-path corrections in shipped templates: the evals README and all
+  three CI workflow headers named kit-repo paths instead of their installed
+  destinations, and the reviewer persona's untrusted-content link carried a
+  label naming a file that does not exist.
+- `provider-matrix.md`'s hook row records the `Read|Grep|Bash` tuple, and
+  `guard-secrets.sh`'s own header no longer describes the token scan as
+  Codex-only.
+
 ## 0.30.0 — 2026-07-25
 
 Closes a false-pass hole in eval grading and corrects two guard/sandbox scope

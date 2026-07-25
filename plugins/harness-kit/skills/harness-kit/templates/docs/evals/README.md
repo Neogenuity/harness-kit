@@ -124,9 +124,9 @@ Transcripts land under `.harness/var/eval-results/` (git-ignored). A full run co
 real model calls — schedule it or run after a harness change, never per-PR.
 `mock` proves the pipeline and the grader; it is not a measurement of any model.
 
-A ready-made **opt-in scheduled workflow** ships with the kit as
-`ci/github-actions-eval-cron.yml` (copy to `.github/workflows/`): a weekly cron
-plus a manual dispatch that DEFAULTS to the free `mock` provider, scoring-only
+A ready-made **opt-in scheduled workflow** ships with the kit and installs as
+`.github/workflows/eval-cron.yml`: a weekly cron plus a manual dispatch that
+DEFAULTS to the free `mock` provider, scoring-only
 (it never runs `--update-baseline`), with transcripts uploaded as an artifact.
 Wire your provider CLI + credential secret and scope the matrix before enabling
 live runs — the header comment walks through it.

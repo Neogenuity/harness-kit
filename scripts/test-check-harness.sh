@@ -887,7 +887,7 @@ if command -v jq >/dev/null 2>&1 && { command -v shasum >/dev/null 2>&1 || comma
   "hooks": {
     "SessionStart": [ { "hooks": [ { "type": "command", "command": "scripts/harness/hooks/session-context.sh" } ] } ],
     "PreToolUse": [
-      { "matcher": "Read|Grep", "hooks": [ { "type": "command", "command": "scripts/harness/hooks/guard-secrets.sh" } ] },
+      { "matcher": "Read|Grep|Bash", "hooks": [ { "type": "command", "command": "scripts/harness/hooks/guard-secrets.sh" } ] },
       { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "scripts/harness/hooks/guard-config.sh" } ] } ],
     "PostToolUse": [ { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "scripts/harness/hooks/format.sh" } ] } ],
     "Stop": [ { "hooks": [ { "type": "command", "command": ".harness/hooks/guard-project-policy.sh" } ] } ] } }
@@ -927,13 +927,13 @@ JSON
     assert_flags "8d: a guard on the wrong event is flagged" "$W" "guard-secrets.sh is wired on event 'Stop'"
 
     W=$(new_hookwired_fixture)
-    jq '(.hooks.PreToolUse[] | select(.matcher=="Read|Grep") | .matcher) = "Read"' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
-    assert_flags "8d: a weakened matcher is flagged" "$W" "which does not cover the required 'Read|Grep'"
+    jq '(.hooks.PreToolUse[] | select(.matcher=="Read|Grep|Bash") | .matcher) = "Read"' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
+    assert_flags "8d: a weakened matcher is flagged" "$W" "which does not cover the required 'Read|Grep|Bash'"
 
     # A WIDENED or reordered matcher fires on at least every required event, so it
     # is not a weakening and must pass (config matcher is tailored, not pinned).
     W=$(new_hookwired_fixture)
-    jq '(.hooks.PreToolUse[] | select(.matcher=="Read|Grep") | .matcher) = "Grep|Read|Fetch"' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
+    jq '(.hooks.PreToolUse[] | select(.matcher=="Read|Grep|Bash") | .matcher) = "Grep|Read|Bash|Fetch"' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
     assert_ok "8d: a widened/reordered matcher (superset of required) still passes" "$W"
 
     W=$(new_hookwired_fixture)

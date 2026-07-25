@@ -58,7 +58,12 @@ secret-deny mirrors from `SECRET_PATTERNS`: `.claude/settings.json` gets a
 **deny-only** list (`Read(./P)` + `Read(**/P)`; the platform resolves
 deny-beats-allow, so an allow list would be pointless and the guard hook is the
 precise layer), `opencode.json` gets `**/P: "deny"` under `permission.read` and
-keeps its hand-owned allow exceptions. Reconciliation is ensure-present +
+keeps its hand-owned allow exceptions. The user-visible consequence of that
+asymmetry: `SECRET_ALLOW_PATTERNS` reopens a file in the hook, and the kit
+emits allow keys for OpenCode, but nothing can reopen it in Claude Code — so
+the default `.env.*` pattern denies `.env.example` natively there. Accepted
+deliberately under the same over-denying-is-safe rule; `harness.conf` states
+it where the patterns are set. Reconciliation is ensure-present +
 preserve (over-denying a secret is safe, under-denying is the risk, so nothing is
 removed); checks `#8`/`#8b` remain the independent verification and point at
 `sync secrets` as the fix.

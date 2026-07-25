@@ -54,6 +54,11 @@ run 2 "credentials.json denied"      "$(payload "$WORK/credentials.json")"
 run 2 "server.pem denied"            "$(payload "$WORK/server.pem")"
 run 2 "id_rsa denied"                "$(payload "$WORK/id_rsa")"
 run 2 "id_ed25519 denied"            "$(payload "$WORK/id_ed25519")"
+run 2 "id_ecdsa denied"              "$(payload "$WORK/id_ecdsa")"
+run 2 "id_dsa denied"                "$(payload "$WORK/id_dsa")"
+run 2 ".git-credentials denied"      "$(payload "$WORK/.git-credentials")"
+run 2 "putty key.ppk denied"         "$(payload "$WORK/key.ppk")"
+run 2 "java keystore.jks denied"     "$(payload "$WORK/keystore.jks")"
 run 2 "Cursor layout .env denied"    "$(cursor_payload "$WORK/.env")"
 run 2 "Grep path at .env denied"     "$(grep_payload "$WORK/.env")"
 
@@ -61,8 +66,12 @@ run 2 "Grep path at .env denied"     "$(grep_payload "$WORK/.env")"
 run 2 "symlink notes.md->.env denied"          "$(payload "$WORK/notes.md")"
 run 2 "symlink .env.example.link->.env denied" "$(payload "$WORK/.env.example.link")"
 
-# --- allow: safe files ---
-run 0 ".env.example allowed"         "$(payload "$WORK/.env.example")"
+# --- allow: safe files (HOOK LAYER ONLY) ---
+# These pin the hook's allow-precedence, NOT whole-system readability. The
+# generated Claude Code deny list is deny-only (ADR 011), so the default
+# `.env.*` pattern denies `.env.example` natively there no matter what passes
+# here. Do not read a green run as "the allow list works everywhere".
+run 0 ".env.example allowed (hook)"  "$(payload "$WORK/.env.example")"
 run 0 ".env.sample allowed"          "$(payload "$WORK/.env.sample")"
 run 0 ".env.testing allowed"         "$(payload "$WORK/.env.testing")"
 run 0 ".env.mcp.example allowed"     "$(payload "$WORK/.env.mcp.example")"
@@ -104,6 +113,24 @@ run 2 "Codex shell: symlink token resolved and denied" "$(codex_shell "cat $WORK
 run 2 "Codex shell: argv-array command denied"   "$(jq -cn --arg c "cat $WORK/.env" '{tool_input: {command: ["bash", "-lc", $c]}}')"
 run 0 "Codex shell: .env.example allowed"        "$(codex_shell "cat $WORK/.env.example")"
 run 0 "Codex shell: innocent command allowed"    "$(codex_shell "git status && ls src/")"
+
+# --- Claude Code layout: Bash commands ---
+# WHAT THESE DO AND DO NOT PIN. `hook_command_string` (lib.sh) reads
+# `tool_input.command` without consulting `tool_name`, so these traverse the
+# SAME path as the Codex shell cases above: they do NOT prove `Bash` is in the
+# Claude matcher and would still pass if it were removed. That wiring is pinned
+# by check #8d in lib/check-instructions.sh, whose tuple requires every token of
+# `Read|Grep|Bash`. Kept here are only the two cases that add signal over the
+# Codex block — a SECRET_PATTERNS entry reached through a command, and the
+# documented false positive.
+claude_bash() {
+    jq -cn --arg c "$1" '{tool_name: "Bash", tool_input: {command: $c}}'
+}
+
+run 2 "Claude Bash: keystore behind a flag denied" "$(claude_bash "keytool -list -keystore $WORK/keystore.jks")"
+run 2 "Claude Bash: a command that only NAMES a secret is denied (documented false positive)" \
+    "$(claude_bash "git commit -m 'clarify .env handling'")"
+run 0 "Claude Bash: innocent command allowed"    "$(claude_bash "git status && ls src/")"
 
 # --- Codex layout: apply_patch envelopes (write-side denial) ---
 run 2 "Codex patch: Update File .env denied"     "$(codex_patch "*** Update File: $WORK/.env

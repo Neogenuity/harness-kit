@@ -1,5 +1,6 @@
-# Drift gate for the agent harness. Add as .github/workflows/harness-check.yml
-# (or fold the run step into an existing CI workflow).
+# Drift gate for the agent harness, installed as
+# .github/workflows/harness-check.yml (or fold the run step into an existing
+# CI workflow).
 name: harness-check
 
 on:

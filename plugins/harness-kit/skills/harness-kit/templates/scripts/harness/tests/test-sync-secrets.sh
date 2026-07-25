@@ -72,6 +72,16 @@ if jq -e '
     and (.permissions.deny | index("Read(./id_ed25519)") != null)
 ' "$W/.claude/settings.json" >/dev/null 2>&1; then
     pass "claude: secret denies added, non-secret deny + unrelated key preserved"
+    # The Claude mirror is DENY-ONLY (ADR 011) — the platform resolves
+    # deny-beats-allow, so an allow entry would be inert and misleading. The
+    # harness.conf comment, hooks/README.md, and ADR 011 all rest on this
+    # invariant; pin it executably so a future generator change cannot quietly
+    # start emitting SECRET_ALLOW_PATTERNS here.
+    if jq -e '(.permissions.allow // []) | length == 0' "$W/.claude/settings.json" >/dev/null 2>&1; then
+        pass "claude: mirror stays deny-only (no allow entries generated)"
+    else
+        fail "claude: mirror stays deny-only (no allow entries generated)"
+    fi
 else
     fail "claude: secret denies added, non-secret deny + unrelated key preserved"
 fi

@@ -1,4 +1,4 @@
-# Scheduled behavioral-eval run for the agent harness. Add as
+# Scheduled behavioral-eval run for the agent harness, installed as
 # .github/workflows/eval-cron.yml. OPT-IN and COST-AWARE:
 #
 #   * A live run spends REAL model credits (tasks x trials x providers) —

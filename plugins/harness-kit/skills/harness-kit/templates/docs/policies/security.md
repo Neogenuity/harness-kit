@@ -12,8 +12,12 @@ commands, production writes, the safe-default posture — see
 `.harness/policies/changes.md`.
 
 <!-- TAILOR: keep "The rule" and "Which layers hold" verbatim — they encode
-     which provider layers actually enforce. When execution profiles are
-     adopted, keep the provider-specific facts aligned with the self-contained
+     which provider layers actually enforce. ONE EXEMPTION from verbatim: the
+     sentences pointing at docs/standards/execution-profiles.md. That doc is
+     installed only when execution profiles are adopted, so if this repo has no
+     profile declaration, delete those pointers rather than shipping a link to
+     a file that does not exist. When profiles ARE adopted, keep the
+     provider-specific facts aligned with the self-contained
      docs/standards/execution-profiles.md; do not point an installed repo back
      into the kit's provider matrix. Customize the untrusted-clone list for
      your stack's auto-run surfaces (Gradle init scripts, composer scripts, npm
@@ -56,9 +60,10 @@ or tests an unfamiliar clone:
 Not every safety layer survives a determined injection. Know which is which:
 
 - **Hold** — enforced by an actually adopted and effective OS sandbox, network
-  policy, or native approval layer regardless of what the model was told. The
-  exact adopted boundary and compatibility claims are in
-  `docs/standards/execution-profiles.md`. Cursor's
+  policy, or native approval layer regardless of what the model was told. When
+  this repo declares an execution profile, the exact adopted boundary and
+  compatibility claims are in `docs/standards/execution-profiles.md`; if the
+  declaration is unset, treat no boundary as proven. Cursor's
   repo file alone does not prove its effective UI/admin policy; OpenCode has no
   OS or shell-network boundary, so only its permission prompts/denials hold.
 - **Do not hold** — advisory, so an injection can talk the model past them or
