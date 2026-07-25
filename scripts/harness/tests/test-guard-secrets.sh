@@ -69,6 +69,13 @@ run 0 ".env.mcp.example allowed"     "$(payload "$WORK/.env.mcp.example")"
 run 0 "symlink safe.link->example allowed" "$(payload "$WORK/safe.link")"
 run 0 "ordinary source file allowed" "$(payload "$WORK/config.php")"
 run 0 "Grep on directory allowed"    "$(grep_payload "$WORK")"
+# A Grep whose optional `path` is omitted means "search the project". Like the
+# directory case above it names no file, so it is allowed BY DESIGN, not by
+# oversight — denying it would deny nearly every search the agent makes. These
+# two cases are the documented edge of this hook's search coverage (see the
+# guard-secrets.sh header); pin them so a future "tighten Grep" change has to
+# confront the trade-off deliberately instead of shipping an unusable agent.
+run 0 "Grep with no path allowed"    '{"tool_name":"Grep","tool_input":{"pattern":"BEGIN PRIVATE KEY"}}'
 run 0 "empty payload fails open"     '{}'
 
 # --- Codex layout: shell commands (best-effort token scan) ---

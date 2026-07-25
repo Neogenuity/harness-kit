@@ -68,7 +68,11 @@ recurring changes your reviewers care about most.
   exempt). All six metadata fields are validated against their enum before a
   run starts; a typo dies loudly instead of silently changing scoring.
 - **grade** — `check` runs only `check.sh`; `check+verify` also runs the
-  workspace's `scripts/harness/verify`.
+  workspace's `scripts/harness/verify`. If a `check+verify` task's workspace has
+  no `scripts/harness/verify`, that is a **grader error** that aborts the run —
+  not a skip and never a pass. The task declared that `check.sh` alone does not
+  score it, so grading on `check.sh` alone would record a false success for
+  exactly the trial that deleted or renamed the gate it was meant to satisfy.
 - **network** — declares whether a task needs to reach a localhost service
   (default `none`). For Codex, `required` enables the experimental task-scoped
   proxy with exact `localhost` and `127.0.0.1` domain rules, empty Unix-socket

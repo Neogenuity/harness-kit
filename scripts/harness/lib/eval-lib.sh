@@ -114,7 +114,9 @@ eval_apply_violation() {
 #   other   -> prints "fail",      returns 1  (ordinary unmet goal)
 # The check+verify path's verify.sh failure always prints "fail" (verify.sh
 # has no violation concept). A missing check.sh is a hard error (return 2): a
-# task with no grader cannot be scored.
+# task with no grader cannot be scored. A `check+verify` task whose workspace
+# has no scripts/harness/verify is the same hard error, for the same reason —
+# see the check+verify branch below.
 eval_grade() {
     local task_dir ws="$2" log_dir="$3" grade rc
     task_dir="$(cd "$1" && pwd)"
@@ -129,10 +131,19 @@ eval_grade() {
     fi
     grade="$(eval_task_meta "$1" grade)"
     if [ "$grade" = "check+verify" ]; then
-        if [ -f "$ws/scripts/harness/verify" ]; then
-            if ! ( cd "$ws" && bash scripts/harness/verify ) >"$log_dir/verify.log" 2>&1; then
-                echo fail; return 1
-            fi
+        # A missing verifier is a grader ERROR, never a silent skip. The task
+        # declared that check.sh alone does not score it, so scoring it on
+        # check.sh alone would record a false success for precisely the trial
+        # that deleted or renamed the gate it was supposed to satisfy — and
+        # that success could then be written to a baseline. Same reasoning as
+        # the missing-check.sh hard error above: a task whose promised grader
+        # is absent cannot be scored, so refuse rather than guess.
+        if [ ! -f "$ws/scripts/harness/verify" ]; then
+            echo "eval-lib: grade is check+verify but $ws/scripts/harness/verify is missing (deleted or renamed by the trial?)" >&2
+            return 2
+        fi
+        if ! ( cd "$ws" && bash scripts/harness/verify ) >"$log_dir/verify.log" 2>&1; then
+            echo fail; return 1
         fi
     fi
     echo pass; return 0

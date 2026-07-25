@@ -24,11 +24,33 @@
 #                             -c features.network_proxy.dangerously_allow_all_unix_sockets=false
 # Network access is opt-in per task. The Codex override is an explicit task-only
 # broad local/private weakening; its exact domain map still excludes public
-# hosts. The default remains the workspace-write sandbox with network disabled.
+# hosts. On Codex the default remains the workspace-write sandbox with network
+# disabled.
+#
+# CONTAINMENT IS ASYMMETRIC ACROSS PROVIDERS — read this before treating a
+# default trial as confined:
+#   - Codex trials get an OS-enforced boundary (`--sandbox workspace-write`),
+#     so a default trial genuinely cannot write outside the workspace.
+#   - Claude trials get NO equivalent. The CLI has no workspace-write flag, and
+#     `--dangerously-skip-permissions` is on BOTH branches because a headless
+#     trial cannot answer prompts. `cd`-ing into the workspace sets the cwd; it
+#     is not a boundary. A Claude trial can therefore read or write outside the
+#     workspace — including this repo — so treat host containment for Claude as
+#     absent, and run the eval in a container or VM whenever it matters. (The
+#     v0.18.0 fixture leak is the precedent: escaped writes land in the host
+#     repo and are invisible to CI.)
+#
+# What the `provider-config-write` branch actually changes for Claude is
+# therefore NOT the sandbox — it is `HARNESS_ALLOW_MECHANISM_EDITS=1`, which
+# disarms the guard-config.sh PreToolUse hook. That hook runs regardless of
+# permission mode, so ordinary trials keep the mechanism guard live and only an
+# acknowledged task can edit harness mechanism. It is a guard, not a boundary
+# (see .harness/policies/security.md) — do not read it as containment.
 # A task declaring `execution: provider-config-write` additionally requires the
-# caller's `--allow-provider-config-write` acknowledgment. That maintenance mode
-# gives the provider unrestricted host filesystem and public network access; the
-# disposable workspace does not contain effects elsewhere on the host.
+# caller's `--allow-provider-config-write` acknowledgment. On Codex that
+# maintenance mode is what grants unrestricted host filesystem and public
+# network access; the disposable workspace does not contain effects elsewhere
+# on the host.
 #
 #   bash scripts/harness/run-evals <task-slug> [options]
 #     --trials N        independent trials (default 3)
@@ -93,7 +115,11 @@ while [ $# -gt 0 ]; do
         --allow-dirty-head) ALLOW_DIRTY_HEAD=1; shift ;;
         --allow-provider-config-write) ALLOW_PROVIDER_CONFIG_WRITE=1; shift ;;
         --variant) VARIANT="$2"; shift 2 ;;
-        -h|--help) sed -n '2,66p' "$0"; exit 0 ;;
+        # Line range ends at the last header comment line (the one before
+        # `set -uo pipefail`). Editing the header above means updating this
+        # number — test-eval.sh's --help completeness check fails when the
+        # range no longer reaches the end of the options block.
+        -h|--help) sed -n '2,88p' "$0"; exit 0 ;;
         -*) die "unknown option: $1" ;;
         *) [ -z "$TASK" ] && TASK="$1" || die "unexpected arg: $1"; shift ;;
     esac
@@ -356,7 +382,11 @@ while [ "$i" -le "$TRIALS" ]; do
     verdict="$(eval_grade "$TASK_DIR" "$WS" "$TRIAL_DIR")"; grade_rc=$?
     end=$(date +%s)
     dur=$((end - start))
-    if [ "$grade_rc" -eq 2 ]; then rm -rf "$WS_BASE"; die "grader error on trial $i (no check.sh?)"; fi
+    # rc 2 is eval_grade's "this task cannot be scored" — a missing check.sh,
+    # or a check+verify task whose scripts/harness/verify is gone. Never
+    # downgrade it to a fail: an unscoreable trial must not reach results.jsonl
+    # or a baseline. eval_grade already said which on stderr.
+    if [ "$grade_rc" -eq 2 ]; then rm -rf "$WS_BASE"; die "grader error on trial $i (see message above)"; fi
     passed=false; [ "$verdict" = pass ] && { passed=true; passes=$((passes+1)); }
     # Map eval_grade's verdict to the recorded outcome: pass stays pass;
     # violation (exit 3 — the shortcut was caught) becomes negative_violation;

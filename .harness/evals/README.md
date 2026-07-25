@@ -75,7 +75,11 @@ this prose documents it>
   naming the offending value on a typo.
 - **grade** — `check` runs only `check.sh`; `check+verify` additionally runs the
   workspace's `scripts/harness/verify`. Most tasks put the exact subset they need
-  inside `check.sh` (faster than the full gate).
+  inside `check.sh` (faster than the full gate). A `check+verify` task whose
+  workspace has no `scripts/harness/verify` is a **grader error** that aborts the
+  run — not a skip and never a pass. The task declared that `check.sh` alone does
+  not score it, so grading on `check.sh` alone would record a false success for
+  exactly the trial that deleted or renamed the gate it was meant to satisfy.
 - **network** — declares whether the task needs provider network access, such
   as reaching a localhost HTTP server (default `none`). For Codex, `required`
   enables the experimental task-scoped proxy with exact `localhost` and
@@ -127,6 +131,11 @@ can't catch the shortcut is false-green).
 - **any other non-zero** — an ordinary unmet goal (including a `check+verify`
   task whose `scripts/harness/verify` failed — that path has no violation concept
   and always reports this way). Recorded outcome: `task_failure`.
+
+A grader that cannot score the task at all is separate from all three: a missing
+`check.sh`, or a `check+verify` task whose `scripts/harness/verify` is absent,
+aborts the run and records nothing. An unscoreable trial must never reach
+`results.jsonl` or a baseline.
 
 Every `results.jsonl` line carries the mapped `outcome`, and `eval-harness.sh`
 fails the run whenever it sees `negative_violation` — **regardless of

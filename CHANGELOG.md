@@ -3,6 +3,53 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.30.0 — 2026-07-25
+
+Closes a false-pass hole in eval grading and corrects two guard/sandbox scope
+claims that overstated what the harness actually enforces.
+
+### Fixed
+
+- **A `check+verify` eval task whose workspace lost `scripts/harness/verify` now
+  fails as a grader error instead of silently scoring `pass`.** The verifier
+  presence was guarded by a bare `[ -f ]` that skipped verification when the file
+  was absent, so a trial that deleted or renamed the very gate it was supposed to
+  satisfy could record a false success — and that success could be written to a
+  baseline. `eval_grade` now returns 2 (grader error, aborts the run) in that
+  case, matching the existing missing-`check.sh` behavior: a task whose promised
+  grader is absent cannot be scored. No task in the shipped bank uses
+  `check+verify`, so this was latent here but live for any adopter authoring one.
+  **Migration:** update mode replaces `eval-lib.sh` and `eval.sh` outright
+  (mechanism, not tailored). If you author `check+verify` tasks, a run that
+  previously reported `pass` with a missing verifier will now abort and name the
+  missing path.
+
+### Changed
+
+- **`guard-secrets.sh` now documents that its search coverage is narrower than
+  its `Read|Grep` wiring implies.** Only a call that *names* a secret file is
+  denied; a directory-scoped search — or one omitting its path, meaning "search
+  the project" — is allowed by design, because denying those denies nearly every
+  search an agent makes. The native deny list is `Read(...)`-scoped and does not
+  close that path either, so a content-mode search can surface lines from a
+  secret file it walked into. Behavior is unchanged; the pathless case now has a
+  regression test alongside the directory case, so both edges are pinned as
+  deliberate rather than one being accidental.
+- **`eval.sh`'s header no longer implies default Claude trials are contained.**
+  Containment is asymmetric: Codex default trials get an OS-enforced
+  `--sandbox workspace-write` boundary, Claude trials get no equivalent, and
+  `cd`-ing into the workspace is a cwd, not a boundary. The header now states
+  this and records what the `provider-config-write` branch actually changes for
+  Claude — `HARNESS_ALLOW_MECHANISM_EDITS=1` disarming the `guard-config.sh`
+  PreToolUse hook, which runs regardless of permission mode — so the acknowledgement
+  is not mistaken for a sandbox. Run Claude evals in a container or VM when host
+  containment matters (see the v0.18.0 fixture-leak precedent).
+- Eval-authoring docs (`docs/evals/README.md`) state the missing-verifier
+  contract alongside the existing three-way `check.sh` exit-code convention.
+- This repo's own `guard-project-policy.sh` pointed at `docs/skills/release/SKILL.md`,
+  a path retired by the standard-consumer-layout restructure; corrected to
+  `.agents/skills/release/SKILL.md`. Repo-local policy only — not shipped.
+
 ## 0.29.0 — 2026-07-24
 
 Trims the adopter `verify` floor further by making the install-mechanics smoke

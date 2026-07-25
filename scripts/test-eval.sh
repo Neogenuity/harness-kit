@@ -308,6 +308,53 @@ else
     [ "$meta_fails" -eq 0 ] && ok "bank metadata enums ($(printf '%s\n' "$BANK_TASKS" | wc -l | tr -d ' ') task(s))"
 fi
 
+# ---- unit: eval_grade check+verify branch (bank-independent) ---------------
+# Synthetic task + workspace, no clone and no model. The load-bearing case is
+# the MISSING verifier: a `check+verify` task declares that check.sh alone does
+# not score it, so a workspace whose scripts/harness/verify is gone must be a
+# grader ERROR (rc 2), never a silent pass — otherwise the one trial that
+# deleted the gate it was meant to satisfy records a false success and can be
+# written to a baseline. No task in the bank uses check+verify today, so this
+# branch has no other coverage.
+if cvbase="$(mktemp -d "${TMPDIR:-/tmp}/test-eval-cv-XXXXXX")" && [ -n "$cvbase" ]; then
+    cvtd="$cvbase/task"; cvws="$cvbase/ws"
+    mkdir -p "$cvtd" "$cvws/scripts/harness"
+    printf -- '- grade: check+verify\n' > "$cvtd/TASK.md"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$cvtd/check.sh"
+
+    # verifier present and green -> pass
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$cvws/scripts/harness/verify"
+    cvv="$(eval_grade "$cvtd" "$cvws" "$cvbase/log-ok" 2>/dev/null)"; cvrc=$?
+    { [ "$cvv" = pass ] && [ "$cvrc" -eq 0 ]; } \
+        && ok "check+verify: green verifier scores pass" \
+        || bad "check+verify: green verifier must score pass/rc0 (got '$cvv'/rc$cvrc)"
+
+    # verifier present and red -> fail (check.sh passing must not rescue it)
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$cvws/scripts/harness/verify"
+    cvv="$(eval_grade "$cvtd" "$cvws" "$cvbase/log-red" 2>/dev/null)"; cvrc=$?
+    { [ "$cvv" = fail ] && [ "$cvrc" -eq 1 ]; } \
+        && ok "check+verify: red verifier scores fail" \
+        || bad "check+verify: red verifier must score fail/rc1 (got '$cvv'/rc$cvrc)"
+
+    # verifier deleted -> grader error, and emphatically not "pass"
+    rm -f "$cvws/scripts/harness/verify"
+    cvv="$(eval_grade "$cvtd" "$cvws" "$cvbase/log-gone" 2>/dev/null)"; cvrc=$?
+    { [ "$cvrc" -eq 2 ] && [ "$cvv" != pass ]; } \
+        && ok "check+verify: missing verifier is a grader error (rc2)" \
+        || bad "check+verify: missing verifier must be rc2, never a pass (got '$cvv'/rc$cvrc)"
+
+    # a plain `check` task is unaffected by a missing verifier
+    printf -- '- grade: check\n' > "$cvtd/TASK.md"
+    cvv="$(eval_grade "$cvtd" "$cvws" "$cvbase/log-plain" 2>/dev/null)"; cvrc=$?
+    { [ "$cvv" = pass ] && [ "$cvrc" -eq 0 ]; } \
+        && ok "check-only: missing verifier is irrelevant" \
+        || bad "check-only: missing verifier must not affect grading (got '$cvv'/rc$cvrc)"
+
+    rm -rf "$cvbase"
+else
+    bad "check+verify unit: mktemp failed"
+fi
+
 # ---- seeded fixtures: eval-harness.sh scorer behavior (bank-independent) ---
 # Synthetic results trees and baseline files — no model, no task bank needed —
 # that pin eval-harness.sh's aggregation/scoring/baseline logic directly, so

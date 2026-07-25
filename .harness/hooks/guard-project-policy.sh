@@ -48,7 +48,7 @@ if [ -n "$changed" ]; then
     cur_ver=$(cat plugins/harness-kit/VERSION 2>/dev/null | tr -d '[:space:]')
     head_ver=$(git show HEAD:plugins/harness-kit/VERSION 2>/dev/null | tr -d '[:space:]')
     if [ -n "$cur_ver" ] && [ -n "$head_ver" ] && [ "$cur_ver" = "$head_ver" ]; then
-        append "POLICY WARNING: shipped mechanism templates changed but the version is still $cur_ver. Bump plugins/harness-kit/VERSION (and both plugin.json versions) before release — see docs/skills/release/SKILL.md."
+        append "POLICY WARNING: shipped mechanism templates changed but the version is still $cur_ver. Bump plugins/harness-kit/VERSION (and both plugin.json versions) before release — see .agents/skills/release/SKILL.md."
     fi
 fi
 

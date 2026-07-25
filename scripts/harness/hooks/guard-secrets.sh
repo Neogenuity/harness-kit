@@ -19,6 +19,23 @@
 # .harness/var/log.jsonl so a noisy or bypassed pattern surfaces in the audit
 # loop.
 #
+# SEARCH COVERAGE IS NARROWER THAN THE `Read|Grep` WIRING SUGGESTS. This hook
+# can only deny a call that NAMES a secret file. A search scoped to a directory
+# — or one that omits its path entirely, which means "search the project" —
+# names no file, so it is ALLOWED BY DESIGN and pinned that way in
+# test-guard-secrets.sh. The alternative denies nearly every search the agent
+# makes, which trades a real boundary it never had for an unusable agent.
+# Consequences to be honest about:
+#   - A content-mode search can surface matching LINES from a secret file it
+#     walked into, without ever naming that file.
+#   - The native deny list is `Read(...)`-scoped, so it does not close this
+#     path either — neither layer covers directory-wide search.
+#   - Search tools skip hidden and gitignored files by default, which usually
+#     covers `.env` but NOT a committed `credentials.json`, `*.pem`, or
+#     `id_rsa`.
+# The controls that actually hold here are keeping real secrets out of the
+# worktree and an OS sandbox — not this hook.
+#
 # Matching is case-insensitive because dev filesystems are case-insensitive on
 # macOS/Windows (`.ENV` reads the same bytes as `.env`), and it follows
 # symlinks so a link named `notes.md` pointing at `.env` is still blocked. The
