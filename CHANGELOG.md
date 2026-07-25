@@ -3,6 +3,33 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.31.1 — 2026-07-25
+
+Stops `sync secrets` from reformatting the provider config it edits.
+
+### Fixed
+
+- **`sync secrets` preserves the target file's existing indentation.** It wrote
+  jq's output straight back, and jq renders 2-space by default, so any change to
+  `SECRET_PATTERNS` reindented the whole document — adding five patterns in
+  v0.31.0 produced a 47-line diff in `opencode.json` of which only ~10 lines
+  were the new deny keys. The kit installs into other people's repos, so that
+  churn lands in an adopter's hand-formatted config, buries the
+  security-relevant delta in review, and manufactures merge conflicts. The
+  reconcile now reads the target's layout and matches it (`--indent N` for
+  widths 1–7, `--tab`, `-c` for a single-line document; jq's default when there
+  is no indented line to learn from, unchanged from before). Ensure-present +
+  preserve semantics are untouched — nothing is ever removed, and the deny
+  additions are asserted to still land.
+- **`sync secrets` is now genuinely idempotent on a non-2-space file.** The
+  write path decides whether to rewrite by comparing jq's rendering against the
+  file's bytes, so a 4-space config never matched: every run rewrote it and
+  reported `reconciled`. It now reports `already current` and leaves the file
+  alone. **Migration:** none — but the first run after upgrading may still
+  rewrite a config that v0.31.0 flattened, once, to restore your layout.
+- This repo's own `opencode.json` is restored to the 4-space style v0.31.0
+  flattened.
+
 ## 0.31.0 — 2026-07-25
 
 Closes a secret-read gap on Claude Code's most-used tool, widens the default
