@@ -270,9 +270,10 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      tasks only for the recurring success-defining work named in the interview;
      an empty bank is fine, but if you ship none, delete the AGENTS.md Evals
      link so `check-harness` doesn't dangle. Each task grades the *end state*
-     via `check.sh` and ships a `reference/apply.sh` that `test-eval.sh` proves
-     scores as a pass (and, for negative tasks, a `reference/violate.sh` it
-     proves scores as a fail).
+     via `check.sh` and ships a `reference/apply.sh` that
+     `scripts/harness/tests/test-eval-graders.sh` proves scores as a pass (and,
+     for negative tasks, a `reference/violate.sh` it proves scores `violation`,
+     exit 3).
 
 6. **Wire providers** (for each provider chosen in the interview):
    - Claude Code: merge the `permissions` and `hooks` subtrees from

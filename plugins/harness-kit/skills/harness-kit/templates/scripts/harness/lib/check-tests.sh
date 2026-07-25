@@ -45,7 +45,8 @@ done
 #     scripts/harness/tests/test-*.sh — not all of scripts/. The kit ships into
 #     other people's repos: their scripts/deploy.sh is theirs to write, and a
 #     build gate that fails their build over a scratch file it never runs is
-#     overreach. What check-harness RUNS, check-harness may demand hygiene
+#     overreach. (doc-ref-ok: scripts/deploy.sh — a hypothetical adopter file,
+#     not a kit mechanism.) What check-harness RUNS, check-harness may demand hygiene
 #     from; that is the whole claim, and it is also the blast radius (these are
 #     the scripts that `git init` throwaway repos and `rm -rf` scratch trees).
 #     The kit repo's maintainer-only conformance suites (root scripts/test-*.sh,

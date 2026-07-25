@@ -101,9 +101,12 @@ The grader is `check.sh`, run against the workspace after the agent finishes. It
 must grade the end state (files present, links live, markers gone), never "the
 agent's own tests passed." Every task ships a reference solution
 (`reference/apply.sh`); applying it to a fresh workspace and running `check.sh`
-**must pass** — proof the task is solvable and the grader valid. `test-eval.sh`
-enforces this offline for every task, and additionally proves each negative
-task's `reference/violate*.sh` **scores `violation`**.
+**must pass** — proof the task is solvable and the grader valid.
+`scripts/harness/tests/test-eval-graders.sh` enforces this offline for every task
+in the bank, and additionally proves each negative task's
+`reference/violate*.sh` **scores `violation`** and each `reference/wrongplace*.sh`
+is rejected. It runs in the shipped floor (the `harness-test` gate), and no-ops
+when the bank is empty — so the cost appears only once this repo authors tasks.
 
 `check.sh`'s exit code is a three-way convention: **0** = pass; **3** = a
 negative task's grader caught the forbidden shortcut itself (recorded outcome

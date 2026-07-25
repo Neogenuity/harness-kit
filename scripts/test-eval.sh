@@ -3,18 +3,18 @@
 # No model in the loop, so it belongs in verify.sh: it pins the pure functions
 # (pass@k / pass^k / rate, TASK.md parsing), the results-JSON schema, the
 # eval-harness.sh scorer (run selection, regression/violation exit codes,
-# --update-baseline), bank-wide metadata hygiene, and — the load-bearing part —
-# GRADER VALIDITY for the whole task bank:
-#   * every task's reference solution scores as a PASS (the task is solvable and
-#     the grader is valid), and
-#   * every negative task's violation scores as a VIOLATION (exit 3 — the
-#     grader actually catches the forbidden shortcut, not merely "some
-#     non-pass" — a grader that can't is false-green).
+# --update-baseline), and bank-wide metadata hygiene.
+#
+# GRADER VALIDITY for the task bank — every reference solution scores a PASS,
+# every negative task's violation scores a VIOLATION (exit 3), every
+# wrongplace fixture is rejected — is NOT here. It lives in the shipped
+# scripts/harness/tests/test-eval-graders.sh, which this repo installs and runs
+# like any adopter (check-harness check #6). It was maintainer-only here from
+# v0.22.0 while seven adopter-facing docs still promised it; issue #13.
+# This file keeps the kit-machinery half: what adopters have no use for.
+#
 # This is the offline half of the behavioral-evals plan; live pass-rate
 # baselines come from scripts/harness/run-evals against a real provider.
-#
-# Set EVAL_TEST_QUICK=1 to skip the per-task workspace clones (unit + schema
-# checks only) for a fast local loop; verify.sh runs the full suite.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -1334,79 +1334,13 @@ else
     [ -n "$(eval_task_meta "$td" suite)" ] && ok "meta parse (suite)" || bad "meta parse (suite)"
     [ -n "$(eval_task_prompt "$td")" ] && ok "prompt parse (non-empty)" || bad "prompt parse (non-empty)"
 
-    # ---- grader validity: reference passes, violation scores "violation" ---
-    if [ "${EVAL_TEST_QUICK:-0}" = 1 ]; then
-        ok "grader validity (skipped: EVAL_TEST_QUICK=1)"
-    elif ! command -v git >/dev/null 2>&1; then
-        ok "grader validity (skipped: git absent)"
-    else
-        # Offline grader validity re-proves the SAME test floor ~8 times via the
-        # nested check-harness calls in the scenario graders. That floor already
-        # ran once as verify's parallel-each gate; skip it here (check #6 only).
-        # This affects ONLY this offline validity loop — real model eval runs go
-        # through scripts/harness/run-evals and never set this, so live grading
-        # is unchanged.
-        export HARNESS_SKIP_TESTS_FAMILY=1
-        for slug in $BANK_TASKS; do
-            td="$TASKS_DIR/$slug"
-            if ! base="$(mktemp -d "${TMPDIR:-/tmp}/test-eval-XXXXXX")" || [ -z "$base" ]; then
-                bad "$slug: mktemp failed"; continue
-            fi
-            ws="$base/repo"; logd="$base/log"
-            if ! eval_prepare_workspace "$ROOT" "$ws" "$td"; then
-                bad "$slug: workspace prep"; rm -rf "$base"; continue
-            fi
-            eval_apply_reference "$td" "$ws" >"$base/apply.log" 2>&1 || bad "$slug: reference/apply.sh errored"
-            v="$(eval_grade "$td" "$ws" "$logd")"
-            if [ "$v" = pass ]; then ok "$slug: reference scores pass"
-            else bad "$slug: reference must pass (grader invalid) — see $logd/check.log"; sed 's/^/    /' "$logd/check.log" 2>/dev/null; fi
-
-            # Every negative task's forbidden shortcuts (reference/violate*.sh)
-            # must each score "violation" (check.sh exit 3) — not merely
-            # "some non-pass" — proving the grader adopted the exit-3
-            # convention for every reward-hacking vector it ships a fixture for.
-            if [ "$(eval_task_meta "$td" polarity)" = negative ]; then
-                for vs in "$td"/reference/violate*.sh; do
-                    [ -f "$vs" ] || continue
-                    vname="$(basename "$vs")"
-                    ws2="$base/repo-$vname"; logd2="$base/log-$vname"
-                    if ! eval_prepare_workspace "$ROOT" "$ws2" "$td"; then
-                        bad "$slug: workspace prep ($vname)"; continue
-                    fi
-                    if eval_apply_violation "$td" "$ws2" "$vname" >"$base/$vname.log" 2>&1; then
-                        v2="$(eval_grade "$td" "$ws2" "$logd2")"
-                        [ "$v2" = violation ] && ok "$slug: $vname scores violation" \
-                            || bad "$slug: $vname must score 'violation' (exit 3) — grader hasn't adopted the exit-3 convention (got '$v2')"
-                    else
-                        bad "$slug: reference/$vname errored"
-                    fi
-                done
-            fi
-
-            # Any reference/wrongplace*.sh fixture (the template-first "edited
-            # the installed root copy instead of the shipped template" shortcut)
-            # must be REJECTED by check.sh — a non-'pass' outcome. NOT
-            # polarity-gated: a positive task can ship a wrong-place fixture, and
-            # only violate*.sh on negative tasks is exercised above — so without
-            # this that grader branch is never run and could silently rot.
-            for wp in "$td"/reference/wrongplace*.sh; do
-                [ -f "$wp" ] || continue
-                wpname="$(basename "$wp")"
-                ws3="$base/repo-$wpname"; logd3="$base/log-$wpname"
-                if ! eval_prepare_workspace "$ROOT" "$ws3" "$td"; then
-                    bad "$slug: workspace prep ($wpname)"; continue
-                fi
-                if eval_apply_violation "$td" "$ws3" "$wpname" >"$base/$wpname.log" 2>&1; then
-                    v3="$(eval_grade "$td" "$ws3" "$logd3")"
-                    [ "$v3" != pass ] && ok "$slug: $wpname rejected by grader (scored '$v3')" \
-                        || bad "$slug: $wpname must be rejected (wrong-place edit) but scored 'pass' — grader branch unproven"
-                else
-                    bad "$slug: reference/$wpname errored"
-                fi
-            done
-            rm -rf "$base"
-        done
-    fi
+    # ---- grader validity: OWNED BY scripts/harness/tests/test-eval-graders.sh -
+    # The reference-passes / violation-scores-`violation` / wrongplace-rejected
+    # proof moved into the SHIPPED floor so adopters get it too (it was
+    # maintainer-only here from v0.22.0, while seven adopter-facing docs still
+    # promised it — issue #13). This repo installs that test like any adopter,
+    # and check-harness check #6 runs it against this same bank, so re-running
+    # the loop here would only duplicate ~48s of workspace clones per verify.
 fi
 
 echo "----"

@@ -117,8 +117,8 @@ while [ $# -gt 0 ]; do
         --variant) VARIANT="$2"; shift 2 ;;
         # Line range ends at the last header comment line (the one before
         # `set -uo pipefail`). Editing the header above means updating this
-        # number — test-eval.sh's --help completeness check fails when the
-        # range no longer reaches the end of the options block.
+        # number — the kit's maintainer-only --help completeness check fails
+        # when the range no longer reaches the end of the options block.
         -h|--help) sed -n '2,88p' "$0"; exit 0 ;;
         -*) die "unknown option: $1" ;;
         *) [ -z "$TASK" ] && TASK="$1" || die "unexpected arg: $1"; shift ;;

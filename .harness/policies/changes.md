@@ -17,20 +17,36 @@ nobody mistakes a warning for a wall:
 
 - **pre-action enforcement** — native permission denies, approval policies,
   sandbox / network settings. *Holds* until the user loosens the native config,
-  and it is the only layer that stops a shell command before it runs. Cite the
+  and it is the only layer that stops a shell command **as a boundary** — but
+  it is not the only one that stops one *at all*, and for reads it is often not
+  the one that fires: the native deny lists are `Read(...)`-scoped and never see
+  `Bash`. Cite the
   [Execution-containment row of the provider matrix](../../plugins/harness-kit/skills/harness-kit/references/provider-matrix.md).
 - **in-turn advisory feedback** — the portable hooks. `guard-config.sh` denies
   mechanism / lint-config *file edits* (exit 2, mid-turn) — the protected set
   also covers `harness.conf`, the Claude Code local-settings override, and
   the per-provider MCP configs; `guard-project-policy.sh` warns once at stop
-  time. Advisory: file-edit scope only, the model can reach the same effect
+  time. `guard-secrets.sh` is **not** file-edit-scoped: it also token-scans
+  shell command *text* and denies before the command runs — wired to `Bash` on
+  Claude Code and to every Codex command, where reads *are* shell commands. So
+  this layer, not the native one, is what actually refuses `cat <secret-file>`
+  — and it is the fail-open, trivially bypassable one (indirection, globs,
+  encodings). Advisory all the same: the model can reach the same effect
   another way, and every hook fails open. Never a boundary — see
   [pattern.md](../../plugins/harness-kit/skills/harness-kit/references/pattern.md).
-  The kit wires no Cursor pre-edit hook (Cursor's generic `preToolUse` is
-  pre-edit-capable but not yet wired — see the provider-matrix Cursor-hooks
-  note), so these denials fire on Claude Code and Codex only — the CI
-  detection layer (`check-harness` manifest integrity) is the backstop
-  there.
+  Expect false positives: that scan matches on **basename** and never checks
+  whether the token is a path that exists, so any command whose text merely
+  *names* a secret file is refused even when it reads nothing — `grep -rn .env
+  docs/` and `git commit -m "clarify .env handling"` are both denied. That is
+  the deliberate trade (over-denying a shell command is cheaper than missing
+  `cat .env`); rephrase the command, or drop `Bash` from the matcher if this
+  repo talks about secret filenames constantly. The kit wires no Cursor
+  pre-edit hook (Cursor's generic `preToolUse` is pre-edit-capable but not yet
+  wired — see the provider-matrix Cursor-hooks note), and OpenCode has no shell
+  hooks at all, so these denials fire on Claude Code and Codex only — elsewhere
+  the CI detection layer (`check-harness` manifest integrity) is the backstop,
+  **for kit mechanism files only**: the manifest pins what the kit installed,
+  so `GUARD_PROTECTED_EXTRA` entries have no integrity check there.
 - **CI detection** — `check-harness` manifest integrity + drift checks.
   Catches an edit that slipped past the other two, *after* the fact: prevents
   merge, not the action in the turn.

@@ -6,8 +6,8 @@
 #
 # The *model* half — actually invoking a provider CLI over N trials and
 # capturing transcripts — lives in eval.sh, which sources this. eval-harness.sh
-# (the pass-rate/regression comparator) and test-eval.sh (the deterministic
-# fixture suite wired into verify.sh) source it too. Same split as
+# (the pass-rate/regression comparator) and test-eval-graders.sh (the offline
+# grader-validity suite in the shipped floor) source it too. Same split as
 # install-lib.sh / the test-install-*.sh suites: the pure functions here are
 # unit-testable, so the machinery that measures the harness is itself measured.
 #
@@ -17,7 +17,7 @@
 # isolation). jq is required by eval_result_json / eval_usage_json here (and by
 # eval.sh / eval-harness.sh); the other pure functions do not need it.
 
-# shellcheck disable=SC2034  # consumed by the sourcing scripts (eval.sh, eval-harness.sh, test-eval.sh)
+# shellcheck disable=SC2034  # consumed by the sourcing scripts (eval.sh, eval-harness.sh, test-eval-graders.sh)
 EVAL_TASKS_DIR_DEFAULT=".harness/evals/scenarios"
 # shellcheck disable=SC2034
 EVAL_RESULTS_DIR_DEFAULT=".harness/var/eval-results"
@@ -89,7 +89,8 @@ eval_apply_reference() {
 # Applies one of a negative task's *forbidden* changes (reference/<script>,
 # default violate.sh) inside <workspace>. A task may ship several — one per
 # reward-hacking vector (neuter the gate, delete the evidence, …) — and
-# test-eval.sh runs check.sh against each to prove the grader catches them all.
+# test-eval-graders.sh runs check.sh against each to prove the grader catches
+# them all.
 # Returns 2 if the named violation fixture is absent.
 eval_apply_violation() {
     local task_dir ws="$2" script="${3:-violate.sh}"
@@ -251,7 +252,7 @@ eval_usage_json() {
 #                  <trial> <pass:true|false> <duration_s> <agent_rc> <transcript> \
 #                  <run_started_at> <outcome> [usage_json] [variant]
 # Emits one compact JSON object — the results.jsonl schema. The single source for
-# that shape, so eval.sh (writer) and test-eval.sh (shape assertion) can never
+# that shape, so eval.sh (writer) and every reader of results.jsonl can never
 # disagree. Requires jq (the only jq-dependent function in this lib).
 #   arg 12  run_started_at  integer epoch seconds, the SAME value for every
 #                           row of one eval.sh invocation (see eval.sh's

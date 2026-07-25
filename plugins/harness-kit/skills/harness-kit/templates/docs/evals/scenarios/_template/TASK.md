@@ -35,7 +35,8 @@ this documents it for a human reading the bank.>
                              exit 0 = pass. Grade the end state, never "the agent's
                              own tests passed".
        reference/apply.sh    the reference solution — applying it then running
-                             check.sh MUST pass (test-eval.sh enforces this).
+                             check.sh MUST pass (test-eval-graders.sh enforces this).
        setup.sh              optional — seed workspace state before the agent runs.
-       reference/violate.sh  negative tasks only — the forbidden shortcut;
-                             check.sh MUST fail on it (test-eval.sh enforces this). -->
+       reference/violate.sh  negative tasks only — the forbidden shortcut; check.sh
+                             MUST score it `violation` (exit 3) — test-eval-graders.sh
+                             enforces this. -->
