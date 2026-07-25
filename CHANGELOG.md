@@ -3,6 +3,76 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.32.0 — 2026-07-25
+
+Adopters now receive the grader-validity proof their eval docs already promised
+them, and the destructive-change policy stops describing a layer taxonomy that
+0.31.0 made false. Resolves issues #13 and #14.
+
+### Added
+
+- **`scripts/harness/tests/test-eval-graders.sh` — grader validity now ships.**
+  For every task in the repo's bank it proves, offline and with no model: the
+  reference solution scores `pass`; every negative task's `reference/violate*.sh`
+  scores `violation` (exit 3, not merely "some non-pass"); every
+  `reference/wrongplace*.sh` is rejected. This was maintainer-only from 0.22.0
+  while seven adopter-facing references still described it as active
+  enforcement, so an adopter authoring a task got the documentation and not the
+  mechanism — a grader that silently scores a violation as an ordinary miss
+  stayed false-green forever. It runs in the shipped floor via the existing
+  `parallel-each harness-test` glob, needs no `gates.conf` change, and gives
+  `eval_apply_violation` a shipped caller for the first time.
+
+  **Cost:** none on a fresh install. `eval_list_tasks` skips `_*` directories
+  and the kit ships only `scenarios/_template`, so the bank is empty and the
+  test no-ops. Once a repo authors tasks it is roughly 3.7s per task
+  (measured: 13 tasks, 23 assertions, 48s), and `EVAL_TEST_QUICK=1` skips it.
+
+- **`scripts/test-shipped-doc-refs.sh` (maintainer-only) — a gate for the
+  failure class behind #13.** Shipped prose must not cite a script the kit does
+  not ship, and this repo's own prose must not cite one that does not exist. The
+  class is silent by construction: the kit repo keeps descoped suites at root,
+  so a template citing one passes every check that looks at this tree. On its
+  first run it found a fourth instance in `references/fixture-recipe.md`, which
+  claimed the descoped install suites still ship.
+
+### Fixed
+
+- **`docs/policies/changes.md`: the three-layer taxonomy matched 0.30.x, not
+  0.31.0.** Wiring `guard-secrets.sh` to `Bash` made two of its core claims
+  false in the same release — that hooks are "file-edit scope only", and that
+  native pre-action enforcement "is the only layer that stops a shell command".
+  Neither held: the hook token-scans shell command text and denies before
+  execution, while the native deny lists are `Read(...)`-scoped and never see
+  `Bash`. A reader following the old text concluded that a native deny stops
+  `cat <secret-file>` (it does not) and that the layer which *does* stop it
+  needs no scrutiny — when in fact that layer is the fail-open, bypassable one.
+  That inversion is exactly what the document exists to prevent. The template
+  now also documents the basename false positive (an ordinary `grep -rn` or a
+  `git commit -m` mentioning a secret filename is refused), scopes the CI
+  backstop to kit mechanism files, and names OpenCode as having no hooks at all.
+  Its TAILOR block now exempts **every** `execution-profiles.md` pointer, not
+  just the closing one, matching `security.md`.
+
+- **Seven shipped references to the retired `test-eval.sh` now point at the
+  shipped test**, including `AGENTS.md.tmpl`, which cited
+  `scripts/harness/tests/test-eval.sh` — a path that never existed anywhere —
+  and wrote that claim into every adopting repo's canonical index.
+
+### Changed
+
+- **Grader validity runs once, not twice.** The loop was removed from the
+  maintainer-only `scripts/test-eval.sh` (which keeps the eval-machinery
+  conformance half) and given its own parallel gate, off `check-harness`'s
+  serial path. Adopters are unaffected; the shipped `gates.conf` already sets
+  `HARNESS_SKIP_TESTS_FAMILY=1` on its harness gate.
+
+**Migration:** `test-eval-graders.sh` is a mechanism file — update mode installs
+it automatically, and the shipped `gates.conf` glob picks it up with no edit. If
+your repo has no golden tasks it does nothing. `docs/policies/changes.md` is a
+`content` file authored at init and repo-owned afterward, so update mode will
+not overwrite your copy: apply the taxonomy correction by hand if you want it.
+
 ## 0.31.1 — 2026-07-25
 
 Stops `sync secrets` from reformatting the provider config it edits.

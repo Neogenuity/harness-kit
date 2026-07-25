@@ -1,4 +1,4 @@
-# harness-kit 0.31.1
+# harness-kit 0.32.0
 45b20976f30121a8db28e9a076271be6ab54eb1f56113e5b4c26df9ccb292989  .harness/gates.conf # tailored
 b5980e35ca5d6e36d27fc0010d4ab0c0cb4a018902b98c2f40edf69b1a004e7f  .harness/hooks/guard-project-policy.sh # tailored
 245079626615bdc1545e362c236472cd763ff649496f8b0d9d8d3540d37c8882  scripts/check-packaging.sh # tailored
