@@ -88,7 +88,7 @@ a deleted persona.
 
 ## Evals
 
-- [.harness/evals/README.md](.harness/evals/README.md) — behavioral golden tasks that measure whether the harness changes agent behavior: multi-trial pass@k/pass^k over isolated workspaces (`scripts/harness/run-evals`), regression scoring vs recorded baselines (`scripts/harness/lib/eval-harness.sh`), grader validity pinned offline by the maintainer-only `scripts/test-eval.sh`
+- [.harness/evals/README.md](.harness/evals/README.md) — behavioral golden tasks that measure whether the harness changes agent behavior: multi-trial pass@k/pass^k over isolated workspaces (`scripts/harness/run-evals`), regression scoring vs recorded baselines (`scripts/harness/lib/eval-harness.sh`), grader validity pinned offline by the shipped `scripts/harness/tests/test-eval-graders.sh`, eval-machinery conformance by the maintainer-only `scripts/test-eval.sh`
 
 ## Quality Gates
 

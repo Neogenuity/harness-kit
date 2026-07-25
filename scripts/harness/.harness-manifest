@@ -64,5 +64,5 @@ c2d3e3d7435a5f455f520e87217793206eee8e1137d5c89d15585d2a3c5f07b7  scripts/test-i
 6d67b785a5cc77d9af135bc44f35c6065bd11f1559a94d530d9e146dcda6c5b1  scripts/test-install-smoke.sh # tailored
 67da5249977253b5f28c7e38d1bb71335655d4dae4b83f2294f5cf2f6bab5daa  scripts/test-install-update.sh # tailored
 c173f6c6174e5e214a1fd992834be4176ab4c6e3aa795ace879a119564dd2cd5  scripts/test-provider-templates.sh # tailored
-6096cfee5c9a9b0e03a45fe760eeec711156ff0609132955d87d9ded87b0b7bd  scripts/test-shipped-doc-refs.sh # tailored
+69f5c79b2a159d995e74b865338fdbacdfc5dcbb359640f3121c84d4d2e1bc4e  scripts/test-shipped-doc-refs.sh # tailored
 5ae6a67e2a203d3f7cc62e88b6317a1433c563509c16af65a74b1d49551757be  scripts/test-template-sync.sh # tailored

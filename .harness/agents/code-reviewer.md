@@ -123,7 +123,8 @@ A consumer reads the structured fields back with
 
 The seeded-defect eval (`.harness/evals/scenarios/seeded-defect-review/`) is the
 executable proof of this schema: its grader consumes exactly these lines with
-the audit `group_by`, and `scripts/harness/tests/test-eval.sh` pins the schema offline.
+the audit `group_by`, and `scripts/harness/tests/test-eval-graders.sh` pins the
+schema offline by proving that grader.
 
 ## Output Format
 
@@ -143,7 +144,7 @@ Two parts, in this order:
 
 - **`verify` already covers** (never re-report): shell style
   (`shellcheck -x`), the dual-provider packaging manifests, the shipped-template
-  regression tests, behavioral-eval grader validity (`test-eval.sh`), and harness
+  regression tests, behavioral-eval grader validity (`test-eval-graders.sh`), and harness
   coherence (`check-harness`: skill-stub sync, doc-link resolution, hook
   regression tests, secret-pattern mirrors, and `.harness-manifest` integrity).
   A finding is only useful if it lies *outside* that set.

@@ -5,7 +5,7 @@
 # green — check.sh scores it a `violation` (exit 3). This proves the grader's
 # false-positive handling: fabricated findings never count as catches, and a
 # review with zero REAL catches fails no matter how many lines it printed.
-# test-eval.sh enforces this offline.
+# test-eval-graders.sh enforces this offline.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 

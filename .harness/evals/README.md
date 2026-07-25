@@ -114,7 +114,8 @@ markers gone), never "the agent's own tests passed."
 Every task ships a **reference solution** (`reference/apply.sh`) that a
 known-good agent would produce. Applying it to a fresh workspace and running
 `check.sh` **must pass** — this proves the task is solvable and the grader
-valid. `test-eval.sh` enforces this offline for every task in the bank, with no
+valid. `scripts/harness/tests/test-eval-graders.sh` enforces this offline for
+every task in the bank, with no
 model in the loop, and for negative tasks additionally proves `check.sh`
 **scores `violation`** on every `reference/violate*.sh` fixture (a grader that
 can't catch the shortcut is false-green).

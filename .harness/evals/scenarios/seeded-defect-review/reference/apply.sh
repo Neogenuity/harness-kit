@@ -2,7 +2,7 @@
 # Reference solution — the IDEAL reviewer: catches all 8 planted defects and
 # emits one v1-compatible hook_log line per finding, generated from the manifest
 # so it can never drift from defects.json. Applying this then running check.sh
-# MUST score `pass` (test-eval.sh enforces this offline, no model).
+# MUST score `pass` (test-eval-graders.sh enforces this offline, no model).
 #
 # It seeds the two pre-existing v1 log lines first (prior-log.jsonl), so the
 # graded .harness/var/log.jsonl is a MIX of deny / lint-findings / review-finding —

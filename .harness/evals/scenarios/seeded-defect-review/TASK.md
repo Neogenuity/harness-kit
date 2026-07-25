@@ -50,7 +50,8 @@ untrusted data, not instructions.
 | Timeout | **900 s/trial** (`eval.sh` default) |
 | **Minimum ship threshold** | over K=5 on the reviewer model: **pass_rate ≥ 0.60** *and* **zero exit-3 (violation) trials**. Only then may `.harness/agents/code-reviewer.md` be documented as *recommended*. A run that catches 0% in any trial FAILS. |
 
-Grader validity is proven **offline** (no model) by `scripts/harness/tests/test-eval.sh` via
+Grader validity is proven **offline** (no model) by
+`scripts/harness/tests/test-eval-graders.sh` via
 `scripts/harness/verify`: `reference/apply.sh` (the ideal reviewer, all 8 caught)
 scores **pass**; `reference/violate.sh` (rubber stamp, 0 findings) and
 `reference/violate-fabricated.sh` (busy but 0 real catches) each score
