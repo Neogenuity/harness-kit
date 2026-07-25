@@ -101,8 +101,39 @@ if [ "$MODE" = "secrets" ]; then
     secrets_oc_deny=$(printf '%s' "$secrets_pats" | jq '[.[] | "**/\(.)"]')
     secret_fail=0
 
+    # Echo the jq output flag(s) that reproduce $1's CURRENT layout. jq renders
+    # 2-space by default, so without this a reconcile reindents the whole
+    # document: the security-relevant deny delta ends up buried in formatting
+    # churn, in an adopter's hand-formatted config, with the merge conflicts
+    # that implies. It also repairs the "already current" comparison below,
+    # which diffs jq's rendering against the file's bytes — a 4-space file
+    # never matched, so every run rewrote it and claimed "reconciled".
+    #
+    # Detection reads the first indented line. jq's --indent caps at 7; a wider
+    # indent, or a file with no indented line to learn from, keeps jq's default
+    # (unchanged from the previous behavior).
+    secrets_indent_flags() {
+        local w
+        w=$(awk '
+            NR > 1 && /^[ \t]/ {
+                if (substr($0, 1, 1) == "\t") { print "tab"; found = 1; exit }
+                n = match($0, /[^ ]/) - 1
+                print (n >= 1 && n <= 7) ? n : 2
+                found = 1; exit
+            }
+            /[^ \t]/ { last = NR }
+            END { if (!found && last <= 1) print "compact" }
+        ' "$1" 2>/dev/null)
+        case "$w" in
+            tab)     printf '%s' "--tab" ;;
+            compact) printf '%s' "-c" ;;
+            [1-7])   printf -- '--indent %s' "$w" ;;
+            *)       printf -- '--indent 2' ;;
+        esac
+    }
+
     secrets_reconcile_claude() {
-        local cfg="$ROOT/.claude/settings.json" rel=".claude/settings.json" tmp new
+        local cfg="$ROOT/.claude/settings.json" rel=".claude/settings.json" tmp new jqfmt
         case " $secrets_wired " in *" .claude "*) ;; *) return 0 ;; esac
         if [ ! -f "$cfg" ]; then
             [ "$secrets_mode" = "--check" ] || echo "note: $rel absent — not created (init authors it; #8 flags a wired-but-missing config)"
@@ -115,7 +146,9 @@ if [ "$MODE" = "secrets" ]; then
             fi
             return 0
         fi
-        new=$(jq --argjson d "$secrets_claude_deny" '.permissions = (.permissions // {}) | .permissions.deny = ((.permissions.deny // []) + ($d - (.permissions.deny // [])))' "$cfg")
+        jqfmt=$(secrets_indent_flags "$cfg")
+        # shellcheck disable=SC2086  # intentional split: "--indent N", "--tab", or "-c"
+        new=$(jq $jqfmt --argjson d "$secrets_claude_deny" '.permissions = (.permissions // {}) | .permissions.deny = ((.permissions.deny // []) + ($d - (.permissions.deny // [])))' "$cfg")
         if [ "$new" != "$(cat "$cfg")" ]; then
             # Beside the destination, not $TMPDIR: a cross-filesystem mv is
             # copy-then-unlink, which loses the atomic-replace guarantee.
@@ -128,7 +161,7 @@ if [ "$MODE" = "secrets" ]; then
     }
 
     secrets_reconcile_opencode() {
-        local cfg="$ROOT/opencode.json" rel="opencode.json" tmp new
+        local cfg="$ROOT/opencode.json" rel="opencode.json" tmp new jqfmt
         case " $secrets_wired " in *" .opencode "*) ;; *) return 0 ;; esac
         if [ ! -f "$cfg" ]; then
             [ "$secrets_mode" = "--check" ] || echo "note: $rel absent — not created (init authors it; #8b flags a wired-but-missing config)"
@@ -141,7 +174,9 @@ if [ "$MODE" = "secrets" ]; then
             fi
             return 0
         fi
-        new=$(jq --argjson d "$secrets_oc_deny" '.permission = (.permission // {}) | .permission.read = (.permission.read // {}) | reduce $d[] as $k (.; .permission.read[$k] = "deny")' "$cfg")
+        jqfmt=$(secrets_indent_flags "$cfg")
+        # shellcheck disable=SC2086  # intentional split: "--indent N", "--tab", or "-c"
+        new=$(jq $jqfmt --argjson d "$secrets_oc_deny" '.permission = (.permission // {}) | .permission.read = (.permission.read // {}) | reduce $d[] as $k (.; .permission.read[$k] = "deny")' "$cfg")
         if [ "$new" != "$(cat "$cfg")" ]; then
             # Beside the destination, not $TMPDIR: a cross-filesystem mv is
             # copy-then-unlink, which loses the atomic-replace guarantee.

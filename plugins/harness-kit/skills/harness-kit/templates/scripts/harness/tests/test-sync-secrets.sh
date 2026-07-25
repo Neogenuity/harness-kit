@@ -124,6 +124,76 @@ else
     fail "an unwired provider's config is left untouched"
 fi
 
+# --- the target file's existing layout survives a reconcile ------------------
+# jq renders 2-space by default, so writing its output back reindented the
+# WHOLE document: the deny delta got buried in formatting churn in an adopter's
+# hand-formatted config. Indentation is a property of the file we are editing,
+# not of the tool doing the edit.
+#
+# indent_of <file> — leading-space count of the first indented line, or `tab`.
+indent_of() {
+    awk 'NR > 1 && /^[ \t]/ {
+            if (substr($0, 1, 1) == "\t") { print "tab"; exit }
+            print match($0, /[^ ]/) - 1; exit
+         }' "$1"
+}
+
+W3=$(new_fixture ".claude .opencode")
+# Re-render both configs 4-space, the style jq would otherwise flatten to 2.
+for f in "$W3/.claude/settings.json" "$W3/opencode.json"; do
+    jq --indent 4 . "$f" > "$f.4sp" && mv "$f.4sp" "$f"
+done
+bash "$W3/scripts/harness/sync" secrets >/dev/null 2>&1
+for f in "$W3/.claude/settings.json" "$W3/opencode.json"; do
+    got=$(indent_of "$f")
+    if [ "$got" = 4 ]; then
+        pass "$(basename "$f"): 4-space indentation survives reconcile"
+    else
+        fail "$(basename "$f"): 4-space indentation survives reconcile (got '$got')"
+    fi
+done
+
+# The denies must still have landed — preserving layout must not cost content.
+if jq -e '(.permissions.deny | index("Read(**/auth.json)")) != null' "$W3/.claude/settings.json" >/dev/null 2>&1; then
+    pass "layout preservation does not skip the deny additions"
+else
+    fail "layout preservation does not skip the deny additions"
+fi
+
+# Idempotency: the write path compares jq's rendering against the file bytes,
+# so before this fix a 4-space file NEVER matched and every run rewrote it and
+# reported "reconciled". A second run must now be a no-op.
+# Re-render 4-space FIRST: the reconcile above already normalized the file, so
+# without this the second run would trivially match under either behavior and
+# this case would pin nothing.
+for f in "$W3/.claude/settings.json" "$W3/opencode.json"; do
+    jq --indent 4 . "$f" > "$f.4sp" && mv "$f.4sp" "$f"
+done
+before=$(cat "$W3/.claude/settings.json")
+out=$(bash "$W3/scripts/harness/sync" secrets 2>&1)
+if [ "$before" = "$(cat "$W3/.claude/settings.json")" ]; then
+    pass "a second reconcile of an already-current 4-space file is a no-op"
+else
+    fail "a second reconcile of an already-current 4-space file is a no-op"
+fi
+# Name the FILE in the pattern: a bare "already current" match is satisfied by
+# whichever provider happens to be clean, and would pass under either behavior.
+case "$out" in
+    *".claude/settings.json already current"*)
+        pass "an already-current 4-space file reports 'already current'" ;;
+    *)  fail "an already-current 4-space file reports 'already current' (got: $out)" ;;
+esac
+
+# Tabs are a layout too.
+W4=$(new_fixture ".claude .opencode")
+jq --tab . "$W4/.claude/settings.json" > "$W4/.claude/s" && mv "$W4/.claude/s" "$W4/.claude/settings.json"
+bash "$W4/scripts/harness/sync" secrets >/dev/null 2>&1
+if [ "$(indent_of "$W4/.claude/settings.json")" = tab ]; then
+    pass "tab indentation survives reconcile"
+else
+    fail "tab indentation survives reconcile"
+fi
+
 if [ "$fails" -eq 0 ]; then
     echo "PASSED: sync secrets mirror generation"
     exit 0
