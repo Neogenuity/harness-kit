@@ -86,6 +86,14 @@ apply_rules() {
             "$runner" $cmd "$file"
             return 0
         fi
+    # DELIBERATELY still a here-doc. The check families converted their loops to
+    # process substitution because a here-doc's temp file can fail to be created
+    # and silently skip the loop (see assert_loop_ran in
+    # scripts/harness/lib/check-common.sh) — but this loop returns on the first
+    # matching rule, and process substitution would leave the `printf` writer
+    # taking an EPIPE under an inherited-ignored SIGPIPE. A hook must fail OPEN
+    # anyway: losing this loop means "no formatter ran", which is the same
+    # outcome as an unconfigured repo, never a false assurance.
     done <<EOF
 $rules
 EOF

@@ -137,13 +137,19 @@ if [ -d "$ROOT/.cursor/rules" ]; then
         if [ -z "$refs" ]; then
             echo "WARNING: $rule_rel cites no docs/*.md file — cursor rules should point at the canonical doc they summarize"
         fi
+        # Process substitution + a consumption counter, not a here-string: see
+        # assert_loop_ran in check-common.sh for why a here-doc-backed loop can
+        # silently not run and leave this family printing OK.
+        _c7_read=0
         while IFS= read -r ref; do
+            _c7_read=$((_c7_read + 1))
             [ -z "$ref" ] && continue
             if [ ! -f "$ROOT/$ref" ]; then
                 echo "ERROR: $rule_rel references '$ref' but that file does not exist"
                 ERRORS=$((ERRORS + 1))
             fi
-        done <<< "$refs"
+        done < <(printf '%s\n' "$refs")
+        assert_loop_ran "$_c7_read" "cursor-rule doc-reference check #7 for $rule_rel"
     done
 fi
 
@@ -235,7 +241,9 @@ mcp_tab=$(printf '\t')
 # declared line with no identity substring is itself an ERROR, whether or not
 # that server is currently configured anywhere.
 if [ "$mcp_inventory_declared" -eq 1 ] && [ -n "$mcp_inventory" ]; then
+    _mcp_pins_read=0
     while IFS= read -r mcp_line; do
+        _mcp_pins_read=$((_mcp_pins_read + 1))
         mcp_line=${mcp_line#"${mcp_line%%[![:space:]]*}"}
         case "$mcp_line" in ''|\#*) continue ;; esac
         mcp_lname=${mcp_line%%[[:space:]]*}
@@ -246,9 +254,8 @@ if [ "$mcp_inventory_declared" -eq 1 ] && [ -n "$mcp_inventory" ]; then
             echo "ERROR: MCP_ALLOWED_SERVERS line '$mcp_lname' has no identity substring — a name-only line pins nothing (any identity would pass); add the expected command/args or URL fragment after the name (harness.conf)"
             ERRORS=$((ERRORS + 1))
         fi
-    done <<EOF
-$mcp_inventory
-EOF
+    done < <(printf '%s\n' "$mcp_inventory")
+    assert_loop_ran "$_mcp_pins_read" "MCP inventory pin validation #8c"
 fi
 
 # name -> pinned identity substring: prints the pin and returns 0 when the name
@@ -271,6 +278,12 @@ mcp_inventory_lookup() {
         [ "$lname" = "$want" ] || continue
         printf '%s' "$lpin"
         return 0
+    # DELIBERATELY still a here-doc (see assert_loop_ran in check-common.sh):
+    # this loop returns on the first hit, and process substitution would leave
+    # the `printf` writer taking an EPIPE under an inherited-ignored SIGPIPE.
+    # Losing this loop fails CLOSED — the lookup reports "name not in the
+    # inventory", which its caller raises as an ERROR — so the fail-open class
+    # this file's other loops carry does not apply here.
     done <<EOF
 $mcp_inventory
 EOF
@@ -280,9 +293,10 @@ EOF
 # Apply the split-severity policy to a batch of "<name>\t<identity>" lines from
 # one config file ($2 = its repo-relative path, named in every message).
 mcp_apply_severity() {
-    local servers="$1" file="$2" name identity pin matched
+    local servers="$1" file="$2" name identity pin matched read_rows=0
     [ -n "$servers" ] || return 0
     while IFS="$mcp_tab" read -r name identity; do
+        read_rows=$((read_rows + 1))
         [ -n "$name" ] || continue
         mcp_saw_enabled_server=1
         [ "$mcp_inventory_declared" -eq 1 ] || continue   # no inventory: WARN once, later
@@ -302,9 +316,11 @@ mcp_apply_severity() {
             echo "ERROR: MCP server '$name' in $file is not covered by the MCP trust inventory (harness.conf MCP_ALLOWED_SERVERS) — add a '$name <expected-identity-substring>' line after verifying what it runs, or remove the server."
             ERRORS=$((ERRORS + 1))
         fi
-    done <<EOF
-$servers
-EOF
+    done < <(printf '%s\n' "$servers")
+    # Not just the per-server verdicts: this loop is also the only place
+    # mcp_saw_enabled_server is set, so losing it would additionally silence the
+    # "servers configured but no inventory declared" WARNING below.
+    assert_loop_ran "$read_rows" "MCP server audit #8c for $file"
 }
 
 # Extract + audit a JSON MCP config ($1 = repo-relative path, $2 = the
@@ -440,7 +456,7 @@ hook_tab=$(printf '\t')
 # richer contract than a table cell).
 hook_check_provider() {
     local prov="$1" cfg shape tuples rows rc script event matcher info path
-    local scriptpath wrongev badm
+    local scriptpath wrongev badm hook_paths tuple_rows=0 path_rows=0
     case "$prov" in
         .claude)
             cfg=".claude/settings.json"; shape="nested"
@@ -488,9 +504,10 @@ guard-project-policy.sh Stop @any' ;;
     fi
 
     # Tuple coverage: each required guard on its correct event (+ matcher). awk
-    # computes the verdict per guard (no subshell touches ERRORS); the heredoc
-    # loop stays in this shell so ERRORS increments persist.
+    # computes the verdict per guard (no subshell touches ERRORS); the loop
+    # stays in this shell so ERRORS increments persist.
     while read -r script event matcher; do
+        tuple_rows=$((tuple_rows + 1))
         [ -n "$script" ] || continue
         # Mechanism guards live in the kit tree; the project-policy stop hook
         # is repo-owned at .harness/hooks/ (v0.23.0 ownership split).
@@ -534,9 +551,12 @@ guard-project-policy.sh Stop @any' ;;
                 echo "ERROR: guard $script on '$event' in $cfg has matcher '$badm', which does not cover the required '$matcher' — a weakened matcher narrows the guard's coverage (e.g. dropping Grep or Write). Widening or reordering is fine; a missing required tool is not."
                 ERRORS=$((ERRORS + 1)) ;;
         esac
-    done <<HOOK_TUPLES
-$tuples
-HOOK_TUPLES
+    done < <(printf '%s\n' "$tuples")
+    # This loop is #8d's ONLY error source: without it a provider whose guards
+    # are entirely unwired passes. That is the failure two adopter repos hit —
+    # 11 "cannot create temp file for here document" lines and exit 0. See
+    # assert_loop_ran in check-common.sh.
+    assert_loop_ran "$tuple_rows" "hook-tuple coverage check #8d for $cfg"
 
     # Command resolvability: every referenced hook script — kit-owned
     # scripts/harness/hooks/*.sh or repo-owned .harness/hooks/*.sh — must exist
@@ -544,15 +564,19 @@ HOOK_TUPLES
     # silent no-op the tuple table alone would miss. Pull the script paths
     # straight out of every command (no tab field-split — an empty matcher
     # field collapses under read's whitespace-IFS), dedup, and check each.
+    # Extracted into a variable first so the loop is fed by `printf '%s\n'`,
+    # which emits a line even for an empty set — that is what makes the
+    # consumption counter mean "the input never arrived" and nothing else.
+    hook_paths=$(printf '%s\n' "$rows" | grep -oE '(scripts/harness|\.harness)/hooks/[A-Za-z0-9_.-]+\.sh' | sort -u)
     while IFS= read -r path; do
+        path_rows=$((path_rows + 1))
         [ -n "$path" ] || continue
         if [ ! -x "$ROOT/$path" ]; then
             echo "ERROR: a hook command in $cfg points at '$path' but that script is missing or not executable — restore it (chmod +x) or fix the command"
             ERRORS=$((ERRORS + 1))
         fi
-    done <<HOOK_ROWS
-$(printf '%s\n' "$rows" | grep -oE '(scripts/harness|\.harness)/hooks/[A-Za-z0-9_.-]+\.sh' | sort -u)
-HOOK_ROWS
+    done < <(printf '%s\n' "$hook_paths")
+    assert_loop_ran "$path_rows" "hook command resolvability check #8d for $cfg"
 }
 
 hook_wired_declared=0
@@ -924,13 +948,17 @@ if command -v _provider_caps_file >/dev/null 2>&1; then
             END { if (rows == 0) print "table declares no provider rows" }
         ' "$caps_file")
         if [ -n "$caps_errs" ]; then
+            _caps_read=0
             while IFS= read -r ce; do
+                _caps_read=$((_caps_read + 1))
                 [ -n "$ce" ] || continue
                 echo "ERROR: malformed capability table (${caps_file##*/}) — $ce"
                 ERRORS=$((ERRORS + 1))
-            done <<EOF
-$caps_errs
-EOF
+            done < <(printf '%s\n' "$caps_errs")
+            # awk already proved the table is malformed, so a lost redirection
+            # here drops findings held in hand rather than merely skipping a
+            # scan — strictly worse than the general case.
+            assert_loop_ran "$_caps_read" "capability-table validation for ${caps_file##*/}"
         fi
     fi
 fi

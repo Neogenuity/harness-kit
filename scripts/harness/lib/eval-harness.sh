@@ -295,7 +295,17 @@ if [ "$FORMAT" = json ]; then
 else
     printf '%-26s %-8s %-16s %-18s %-6s %-8s %-8s %-7s %s\n' \
         TASK SUITE MODEL VARIANT PASS "pass@k" "pass^k" RATE "vs baseline"
+    # Process substitution, not a here-doc: a here-doc needs a temp file (bash
+    # 3.2: $TMPDIR, then the CWD) and a failed redirection under `set -uo
+    # pipefail` without `set -e` skips the loop, printing a header with no rows
+    # — an empty table reads as "no cells scored", which is exactly wrong when
+    # a regression was scored. The exit decision comes from $regressions /
+    # $violations above and is unaffected either way, so a lost table is a loud
+    # stderr warning rather than a failure of the run.
+    cells=$(printf '%s' "$SCORED" | jq -c '.[]')
+    rows_rendered=0
     while IFS= read -r row; do
+        rows_rendered=$((rows_rendered + 1))
         [ -n "$row" ] || continue
         task=$(printf '%s' "$row" | jq -r .task)
         suite=$(printf '%s' "$row" | jq -r .suite)
@@ -320,9 +330,10 @@ else
             && flag="$flag ** NEGATIVE VIOLATION"
         printf '%-26s %-8s %-16s %-18s %-6s %-8s %-8s %-7s %s%s\n' \
             "$task" "$suite" "$model" "$variant" "$passes/$trials" "$pk" "$phk" "$rate" "$note" "$flag"
-    done <<EOF
-$(printf '%s' "$SCORED" | jq -c '.[]')
-EOF
+    done < <(printf '%s\n' "$cells")
+    if [ "$rows_rendered" -eq 0 ] && [ -n "$cells" ]; then
+        echo "WARNING: $(printf '%s' "$SCORED" | jq 'length') scored cell(s) could not be rendered — the shell could not deliver the table loop its input. The pass/fail verdict below is still authoritative (it is computed from the same scored data); re-run with --format json for the cells" >&2
+    fi
 fi
 
 if [ "$FORMAT" = table ]; then echo "----"; fi

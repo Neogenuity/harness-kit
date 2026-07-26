@@ -117,7 +117,16 @@ write_mirrored_claude_settings "$F"
 missing=""
 unpinned=""
 manifest_paths=$(awk '{print $2}' "$F/scripts/harness/.harness-manifest")
+# Process substitution + a consumption counter, not a here-doc: a here-doc
+# needs a temp file (bash 3.2: $TMPDIR, then the CWD) and a failed redirection
+# under `set -uo pipefail` without `set -e` skips the loop silently. This loop
+# is the only thing that fills $missing and $unpinned, so a skip printed BOTH
+# "ok" lines below without having examined a single shipped path. Same defect
+# class as check #9c (harness-kit issue #15).
+shipped_inventory=$(harness_kit_shipped_paths "$SCRIPTS_DIR/kit-manifest")
+inventory_read=0
 while IFS= read -r p; do
+    inventory_read=$((inventory_read + 1))
     [ -n "$p" ] || continue
     [ -f "$F/$p" ] || missing="$missing $p(absent)"
     # Only .sh files must carry the exec bit (check-harness.sh check #5);
@@ -132,9 +141,10 @@ while IFS= read -r p; do
         *$'\n'"$p"$'\n'*) ;;
         *) unpinned="$unpinned $p" ;;
     esac
-done <<EOF
-$(harness_kit_shipped_paths "$SCRIPTS_DIR/kit-manifest")
-EOF
+done < <(printf '%s\n' "$shipped_inventory")
+if [ "$inventory_read" -eq 0 ]; then
+    fail "clean init: the shipped-inventory loop never ran — the shell could not deliver its input, so the two assertions below would have passed without examining anything"
+fi
 if [ -z "$missing" ]; then
     pass "clean init: every shipped kit-manifest entry installed and executable"
 else
@@ -411,6 +421,38 @@ if [ "$before" = "$after" ] && [ "$count" -eq 1 ]; then
     pass "formatterignore: a second call is a no-op (sha unchanged, one marker line)"
 else
     fail "formatterignore: a second call changed the file or duplicated the marker (count=$count)"
+fi
+rm -rf "$F"
+
+# --- (l2) formatterignore: an undeliverable entry list is reported, not skipped -
+# The "which required lines are missing?" loop is the ONLY thing that discovers
+# an incomplete block. It used to read through a here-doc, which needs a temp
+# file (bash 3.2: $TMPDIR, then the CWD); when neither is writable the
+# redirection fails and `set -uo pipefail` without `set -e` skips the loop —
+# leaving $missing empty, so the function returned 0 having healed nothing. The
+# heal this function exists for, silently not happening. It must now fail loudly.
+F=$(mktemp -d "$WORK/formatterignore-notemp.XXXXXX") || exit 1
+printf '# harness-kit: kit-owned mechanism + generated stubs — do not reformat\n' \
+    > "$F/.prettierignore"          # marker present, every entry line missing
+NOTEMP="$F/no-writable-temp"
+mkdir -p "$NOTEMP" && chmod 500 "$NOTEMP"
+if ( : > "$NOTEMP/.probe" ) 2>/dev/null; then
+    rm -f "$NOTEMP/.probe"; chmod 700 "$NOTEMP"
+    echo "skip: formatterignore undeliverable-list case — cannot make a directory unwritable here (DAC override, e.g. root)"
+else
+    out=$(cd "$NOTEMP" && TMPDIR="$NOTEMP" bash -c '
+        . "$1"
+        harness_append_formatterignore "$2"' _ "$SCRIPTS_DIR/harness/lib/install-lib.sh" "$F" 2>&1); rc=$?
+    chmod 700 "$NOTEMP"
+    # Either it delivered the list and healed the block (rc 0, entries present),
+    # or it could not and said so (rc 1 + the ERROR). Returning 0 with the block
+    # still unhealed is the regression.
+    if { [ "$rc" -ne 0 ] && case "$out" in *"could not read the required"*) true ;; *) false ;; esac; } \
+        || grep -qxF 'scripts/harness/' "$F/.prettierignore"; then
+        pass "formatterignore: an undeliverable entry list fails loudly instead of reporting a heal that never happened"
+    else
+        fail "formatterignore: returned $rc with the block still unhealed and no error" "$out"
+    fi
 fi
 rm -rf "$F"
 
