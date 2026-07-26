@@ -93,7 +93,9 @@ if [ -f "$MANIFEST" ] && [ -d "$ROOT/scripts/harness/hooks" ] && [ -f "$ROOT/scr
               "$ROOT/scripts/harness/kit-manifest"
         } | sort -u
     )
+    _9c_read=0
     while IFS= read -r rel; do
+        _9c_read=$((_9c_read + 1))
         [ -n "$rel" ] || continue
         # The ship contract installs under scripts/ and the two repo-owned
         # .harness/ policy homes; ignore anything else a malformed
@@ -113,9 +115,20 @@ if [ -f "$MANIFEST" ] && [ -d "$ROOT/scripts/harness/hooks" ] && [ -f "$ROOT/scr
                 echo "ERROR: mechanism file '$rel' is present but not pinned in scripts/harness/.harness-manifest — every mechanism file on disk must be integrity-pinned; an unpinned file is silently exempt from checksum verification. Re-pin it (init step 8)"
                 ERRORS=$((ERRORS + 1)) ;;
         esac
-    done <<EOF
-$expected_paths
-EOF
+    done < <(printf '%s\n' "$expected_paths")
+    # A here-doc is backed by a temp file. Under `set -uo pipefail` without
+    # `set -e`, a failed redirection skips the whole compound command, and
+    # because this loop is the only thing that raises #9c's error, the script
+    # then prints "OK: drift checks passed" without having examined one path —
+    # a check that never ran is indistinguishable from a clean one. Process
+    # substitution drops the temp-file dependency; the counter is what proves
+    # the loop actually consumed its input. `printf '%s\n' "$var"` is
+    # byte-identical to the here-doc it replaces, so an empty set still yields
+    # one (skipped) read and a zero count means only "the input never arrived".
+    if [ "$_9c_read" -eq 0 ]; then
+        echo "ERROR: manifest completeness check #9c did not run — the shell could not deliver its expected-path set, so this check's silence is not a pass. Re-run; if it persists, the temp/file-descriptor state that redirections depend on is broken"
+        ERRORS=$((ERRORS + 1))
+    fi
 fi
 
 # 9d. Ship contract: an adopted repo must carry scripts/harness/kit-manifest — present,
@@ -158,15 +171,25 @@ if [ -d "$ROOT/scripts/harness/hooks" ]; then
                 printf "line %d: unknown layer %s\n", NR, $1
             }' "$ROOT/scripts/harness/kit-manifest")
         if [ -n "$_bad_layers" ]; then
+            _9e_read=0
             while IFS= read -r _bl; do
+                _9e_read=$((_9e_read + 1))
                 [ -n "$_bl" ] || continue
                 echo "ERROR: scripts/harness/kit-manifest $_bl — a typo'd layer silently unships its file (drops from completeness #9c and from what update copies); known layers: mechanism policy optional-policy content retired"
                 ERRORS=$((ERRORS + 1))
-            done <<EOF
-$_bad_layers
-EOF
+            done < <(printf '%s\n' "$_bad_layers")
+            # Same fail-open shape as #9c: known-bad layers were already
+            # detected, so losing the redirection would drop errors we hold in
+            # hand rather than merely skip a scan.
+            if [ "$_9e_read" -eq 0 ]; then
+                echo "ERROR: scripts/harness/kit-manifest has unknown layer keywords, but the loop reporting them did not run — the shell could not deliver its input. Re-run; if it persists, the temp/file-descriptor state that redirections depend on is broken"
+                ERRORS=$((ERRORS + 1))
+            fi
         fi
+        _9d_retired=$(awk '$1=="retired" {print $2}' "$ROOT/scripts/harness/kit-manifest")
+        _9d_read=0
         while IFS= read -r rel; do
+            _9d_read=$((_9d_read + 1))
             [ -n "$rel" ] || continue
             [ -f "$ROOT/$rel" ] || continue
             # A ' # tailored' pin on a retired path is a deliberate,
@@ -176,9 +199,15 @@ EOF
                 continue
             fi
             echo "WARNING: retired path '$rel' is still present — the kit no longer ships it; update keeps drifted copies for manual review. Fold your local changes forward and delete the file (or keep it deliberately by re-pinning its line ' # tailored')"
-        done <<EOF
-$(awk '$1=="retired" {print $2}' "$ROOT/scripts/harness/kit-manifest")
-EOF
+        done < <(printf '%s\n' "$_9d_retired")
+        # This loop only warns, so a lost redirection costs no false PASS of
+        # its own — but a shell that cannot deliver loop input has broken the
+        # machinery every check here depends on, and staying silent about that
+        # is the same mistake in a quieter place.
+        if [ "$_9d_read" -eq 0 ]; then
+            echo "ERROR: retired-path check #9d did not run — the shell could not deliver the ship contract's retired set. Re-run; if it persists, the temp/file-descriptor state that redirections depend on is broken"
+            ERRORS=$((ERRORS + 1))
+        fi
     fi
 fi
 

@@ -108,7 +108,18 @@ heading_has_anchor() {
       { sub(/^[^\t]*\t/,"") }
       /^#{1,6}[[:space:]]+/ {
         h=$0; sub(/^#{1,6}[[:space:]]+/,"",h); sub(/[[:space:]]+#+[[:space:]]*$/,"",h)
-        h=tolower(h); gsub(/[^[:alnum:] _-]/,"",h); gsub(/[[:space:]]+/,"-",h)
+        # CommonMark drops trailing heading whitespace before the slugger sees
+        # it; without this trim, per-space hyphenation would emit trailing
+        # hyphens the real anchor never has.
+        sub(/[[:space:]]+$/,"",h)
+        # GitHub slugs by lowercasing, deleting disallowed characters, then
+        # turning EACH surviving space into its own hyphen. Runs are NOT
+        # collapsed: "Portability: DigitalOcean <-> AWS" loses ":" and the
+        # symbol but keeps both spaces around it, anchoring as
+        # "portability-digitalocean--aws". Collapsing the run here computed the
+        # single-hyphen form and reported every legitimate double-hyphen
+        # anchor as missing.
+        h=tolower(h); gsub(/[^[:alnum:] _-]/,"",h); gsub(/ /,"-",h)
         if (h == wanted) found=1
       }
       END { exit(found ? 0 : 1) }'
@@ -201,22 +212,67 @@ done < <(git -C "$ROOT" ls-files -z -- '*.md')
 
 # A deleted path is actionable only when docs still name it as a code-formatted
 # exact path and it has not since been recreated.
-git -C "$ROOT" log --diff-filter=D --name-only --format= -- 2>/dev/null | awk 'NF && !seen[$0]++' > "$WORK/deleted"
+#
+# Scan each file ONCE against the whole deleted set. The pairwise shape — every
+# deleted path re-listing and re-reading every Markdown file — is
+# O(deleted x files) with two awk spawns per pair, ~5ms each. A repo with
+# thousands of historical deletions (6,179 x 146 files = 902k pairs) spends
+# over an hour here, and because the report is only printed at the very end,
+# any timeout yields no output at all. Inverted, the cost is O(total doc bytes).
+git -C "$ROOT" log --diff-filter=D --name-only --format= -- 2>/dev/null \
+    | awk 'NF && !seen[$0]++' > "$WORK/deleted-history"
 while IFS= read -r deleted; do
     [ -n "$deleted" ] || continue
     [ ! -e "$ROOT/$deleted" ] || continue
+    printf '%s\n' "$deleted"
+done < "$WORK/deleted-history" > "$WORK/deleted"
+if [ -s "$WORK/deleted" ]; then
     while IFS= read -r -d '' rel; do
         file="$ROOT/$rel"
-        while IFS= read -r hit; do
-            line=${hit%%:*}
+        [ -f "$file" ] || continue
+        while IFS="$(printf '\t')" read -r line deleted; do
+            [ -n "$deleted" ] || continue
             add_finding deleted-path-reference medium "$rel" "$line" "$deleted" \
                 "documentation references a path deleted from Git history" || exit 1
-        done < <(markdown_visible "$file" | awk -v target="$deleted" '
-            index($0,"<!-- doc-garden: planned -->") == 0 && index($0,"`" target "`") {
-              line=$1; print line ":" $0
-            }' 2>/dev/null)
+        done < <(markdown_visible "$file" | awk -v setfile="$WORK/deleted" '
+            BEGIN {
+              ticks=0
+              while ((getline d < setfile) > 0) {
+                if (d == "") continue
+                gone[d]=1
+                # A path that itself holds a backtick is invisible to the split
+                # below, so it keeps the original literal search. Legal on
+                # POSIX and unquoted by git (backtick is printable ASCII), but
+                # absent from any ordinary repo — so this list is empty and
+                # costs nothing in the case that matters.
+                if (index(d,"`")) ticked[++ticks]=d
+              }
+              close(setfile)
+            }
+            index($0,"<!-- doc-garden: planned -->") { next }
+            {
+              line=$1; content=$0; sub(/^[^\t]*\t/,"",content)
+              # For a backtick-free path the literal "`path`" can only sit
+              # between two CONSECUTIVE backticks, so every interior field of a
+              # backtick split is exactly the set of substrings the per-path
+              # index() search would have found — one hash lookup each replaces
+              # one file rescan each. Emit at most one finding per line per
+              # path, as the first-match index() search did.
+              n=split(content, seg, "`")
+              for (i = 2; i < n; i++)
+                if ((seg[i] in gone) && !((line SUBSEP seg[i]) in emitted)) {
+                  emitted[line SUBSEP seg[i]]=1
+                  print line "\t" seg[i]
+                }
+              for (i = 1; i <= ticks; i++)
+                if (index(content, "`" ticked[i] "`") \
+                        && !((line SUBSEP ticked[i]) in emitted)) {
+                  emitted[line SUBSEP ticked[i]]=1
+                  print line "\t" ticked[i]
+                }
+            }')
     done < <(git -C "$ROOT" ls-files -z -- '*.md')
-done < "$WORK/deleted"
+fi
 
 findings=$(jq -s 'sort_by([(if .severity=="high" then 0 elif .severity=="medium" then 1 else 2 end),.file,.line,.rule,.target])' "$FINDINGS") \
     || { echo "doc-garden.sh: failed to aggregate findings" >&2; exit 1; }

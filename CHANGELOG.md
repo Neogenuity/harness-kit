@@ -3,6 +3,60 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.34.0 — 2026-07-26
+
+Three defects found by running the kit against a large external repo and by an
+outside report. Two made `doc-garden` unusable there — it could not finish, and
+what it did report included false positives. The third let `check-drift` print
+"OK" without having run its completeness check.
+
+### Fixed
+
+- **`doc-garden` no longer takes hours on a repo with a long deletion history.**
+  The deleted-path-reference stage was `O(deleted paths × tracked .md files)`,
+  re-listing the tracked Markdown set and re-reading every file once per
+  deleted path — two `awk` spawns per pair, ~5ms each. On a repo with 6,179
+  historical deletions and 146 Markdown files that is 902k pair scans, measured
+  at over an hour; because the report only prints at the very end, a timeout
+  yielded **no output at all**. The stage now builds the deleted set once and
+  scans each file a single time against it, so cost tracks total documentation
+  size instead of Git history. Findings are unchanged: for a backtick-free path
+  the interior fields of a backtick split are exactly the substrings the old
+  per-path search found, and the rare path that itself contains a backtick —
+  invisible to that split — keeps the original literal search. Same 15 findings on this repo,
+  23s → 7s; the shipped test pins the shape by asserting `ls-files` invocations
+  do not scale with the deleted-path count.
+
+- **`doc-garden` reported legitimate GitHub anchors as missing.** GitHub slugs a
+  heading by lowercasing, deleting disallowed characters, and then turning
+  **each** surviving space into its own hyphen. Runs are not collapsed, so
+  `## Provider Portability: DigitalOcean ↔ AWS` anchors as
+  `#provider-portability-digitalocean--aws` — the symbol goes, both spaces
+  around it stay. `heading_has_anchor` collapsed the run to a single hyphen and
+  reported every correct double-hyphen link as `missing-anchor`. It now
+  hyphenates per space, and trims trailing heading whitespace first (CommonMark
+  drops it before the slugger sees it) so the change cannot invent trailing
+  hyphens.
+
+- **`check-drift` could report success without running completeness check #9c**
+  ([#15](https://github.com/Neogenuity/harness-kit/issues/15)). Bash backs a
+  here-doc with a temp file; bash 3.2 puts it in `$TMPDIR` and falls back to the
+  CWD. With neither writable the redirection fails, and under `set -uo pipefail`
+  without `set -e` a failed redirection skips the entire compound command. That
+  loop is #9c's only error source, so the script printed `OK: drift checks
+  passed` and exited 0 for a repo with unpinned mechanism files on disk —
+  reproduced against a fixture, not theorized. Checks #9c, #9d, and #9e now read
+  through process substitution (no temp file, byte-identical input) and each
+  asserts it actually consumed its input, so "the check could not run" is an
+  ERROR instead of a silent pass.
+
+  Note the same here-doc-fed loop shape remains at 19 other sites; they are
+  recorded in `docs/plans/tech-debt.md` rather than converted here, because
+  about half exit the loop early and process substitution would expose those to
+  the ignored-SIGPIPE phantom failure this repo hit twice.
+
+  **Migration:** update mode replaces `lib/check-drift.sh`. No config change.
+
 ## 0.33.0 — 2026-07-25
 
 A repo-wide code formatter in an adopter repo rewrote the kit's checksum-pinned

@@ -302,6 +302,37 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
         "$(sha "$W/scripts/harness/check-harness")" > "$W/scripts/harness/.harness-manifest"
     assert_flags "manifest completeness: an unpinned kit-manifest is flagged" "$W" "kit-manifest' is present but not pinned"
 
+    # A completeness check that cannot run must not read as a clean one.
+    # Bash backs a here-doc with a temp file: bash 3.2 puts it in $TMPDIR and
+    # falls back to the CWD, so with both unwritable the redirection fails —
+    # and under `set -uo pipefail` without `set -e` a failed redirection skips
+    # the whole compound command. That loop is #9c's only error source, so the
+    # here-doc form printed "OK: drift checks passed" and exited 0 for a repo
+    # with unpinned mechanism files sitting on disk. Process substitution needs
+    # no temp file, and the iteration counter turns a lost input into an ERROR.
+    # (github.com/Neogenuity/harness-kit/issues/15)
+    W=$(new_fixture)
+    mkdir -p "$W/scripts/harness/hooks"
+    write_kmf "$W" "mechanism scripts/harness/lib/dev-instance.sh"
+    printf '#!/usr/bin/env bash\necho h000000000000\n' > "$W/scripts/harness/lib/dev-instance.sh"
+    chmod +x "$W/scripts/harness/lib/dev-instance.sh"
+    printf '# harness-kit 9.9.9\n%s  scripts/harness/check-harness\n%s  scripts/harness/kit-manifest\n' \
+        "$(sha "$W/scripts/harness/check-harness")" "$(sha "$W/scripts/harness/kit-manifest")" > "$W/scripts/harness/.harness-manifest"
+    _notemp="$W/no-writable-temp"
+    mkdir -p "$_notemp" && chmod 500 "$_notemp"
+    # check-drift.sh takes its ROOT from $0 and opens no temp file of its own,
+    # so the CWD here only supplies the here-doc fallback the failure needs.
+    _fo_out=$(cd "$_notemp" && TMPDIR="$_notemp" bash "$W/scripts/harness/lib/check-drift.sh" 2>&1); _fo_rc=$?
+    chmod 700 "$_notemp"
+    if [ "$_fo_rc" != "0" ] && has "$_fo_out" "dev-instance.sh' is present but not pinned"; then
+        echo "ok:   9c: an unbackable redirection cannot silence the completeness check"
+    else
+        echo "FAIL: 9c failed OPEN with no writable temp dir — expected a nonzero exit and the unpinned-file ERROR, got exit $_fo_rc"
+        printf '%s\n' "$_fo_out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W"
+
     # --- check #9d: retired paths still on disk WARN without failing ---
     # The fixture is otherwise fully green (pins current, ship contract sane,
     # empty provider declarations) so the warning is provably non-fatal.
