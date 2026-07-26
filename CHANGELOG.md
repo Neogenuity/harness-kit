@@ -3,7 +3,7 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
-## Unreleased
+## 0.37.0 — 2026-07-26
 
 ### Fixed
 
