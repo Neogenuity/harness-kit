@@ -117,6 +117,17 @@ assert_ok_without() {
     rm -rf "$work"
 }
 
+# --- a nested worktree checkout is not part of THIS checkout's doc set ------
+# Claude Code's .claude/worktrees/<name>/ holds a full second checkout of the
+# repo, hidden from Git via .git/info/exclude. check #4's AGENTS.md find used
+# to walk into it, so a broken link in a branch someone else is still writing
+# failed THIS checkout's gate, naming a path the reader cannot fix from here.
+# The nested AGENTS.md below links to a file that does not exist anywhere.
+W=$(new_fixture)
+mkdir -p "$W/.claude/worktrees/wt"
+printf '# Nested\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/.claude/worktrees/wt/AGENTS.md"
+assert_ok_without "check #4 does not walk into a nested .claude/worktrees/ checkout" "$W" "does-not-exist-anywhere.md"
+
 # --- the regression: a titled link to a file that EXISTS must not error ---
 # Before the fix, "${link%%#*}" left the title on the target
 # (guide.md "The Guide") so the path never resolved and check #4 errored.
@@ -1116,6 +1127,122 @@ YAML
     . "$SCRIPTS_DIR/harness/lib/install-lib.sh"
     harness_append_formatterignore "$W"
     assert_ok_without "10e / fix 1+7: the kit's own harness_append_formatterignore block satisfies 10e (no warning)" "$W" "does not cover kit-owned path"
+
+    # (fix8) NESTED CHECKOUT. Every exclusion mechanism this check knows is
+    # path-anchored, so a pattern with an interior slash matches the root copy
+    # only. Claude Code's worktree feature puts a full second checkout of the
+    # repo under .claude/worktrees/<name>/, kept out of Git via
+    # .git/info/exclude -- a file prettier does not read -- so a repo whose
+    # .prettierignore covered every kit path at the root still had the nested
+    # pinned/generated copies reformatted, and its format gate went red on a
+    # clean tree. The path is a kit path only when the directory exists (a repo
+    # that never made a worktree has nothing to exclude and must stay silent),
+    # so the fixture creates one.
+    W=$(new_10e_fixture)
+    : > "$W/.prettierrc"
+    mkdir -p "$W/.claude/worktrees/wt/scripts/harness"
+    printf 'scripts/harness/\n.harness/\n.claude/skills/\n.cursor/skills/\n.opencode/skills/\n.harness/adapters/\n' > "$W/.prettierignore"
+    assert_warns "10e / fix 8: root-anchored coverage plus an existing .claude/worktrees/ warns for the nested checkout" "$W" ".claude/worktrees"
+
+    # (fix8b) the SAME repo with no worktree directory must not gain a new
+    # permanent warning: the entry above is conditional on the directory, not
+    # unconditional noise for every adopter.
+    W=$(new_10e_fixture)
+    : > "$W/.prettierrc"
+    printf 'scripts/harness/\n.harness/\n.claude/skills/\n.cursor/skills/\n.opencode/skills/\n.harness/adapters/\n' > "$W/.prettierignore"
+    assert_ok_without "10e / fix 8: a repo with no .claude/worktrees/ is not warned about one" "$W" ".claude/worktrees"
+
+    # (fix8c) depth-agnostic entries are coverage. '**/foo' matches foo at any
+    # depth INCLUDING the root, so a .prettierignore written entirely in that
+    # form covers every root kit path this check asks about -- and it is the
+    # form harness_append_formatterignore now writes, so a check that failed to
+    # strip the prefix would warn about a remedy the kit had just applied.
+    W=$(new_10e_fixture)
+    : > "$W/.prettierrc"
+    printf '**/scripts/harness/\n**/.harness/\n**/.claude/skills/\n**/.cursor/skills/\n**/.opencode/skills/\n**/.harness/adapters/\n' > "$W/.prettierignore"
+    assert_ok_without "10e / fix 8: depth-agnostic '**/'-prefixed entries are recognized as coverage" "$W" "prettier"
+
+    # (fix9) CATCH-ALL includes must survive the "**/" strip. "**/*" is a
+    # repo-wide include; stripping its prefix left "*", which the trailing
+    # glob strips then reduced to the empty string and the loop SKIPPED -- so
+    # the most permissive config a formatter can carry read as "reaches
+    # nothing" and 10e went silent. The second case is the ordered-negation
+    # shape the biome helper's own header calls the most dangerous config it
+    # can meet: a catch-all AFTER a negation overrides it, and biome really
+    # does reformat every kit path there.
+    W=$(new_10e_fixture)
+    printf '{ "formatter": { "enabled": true, "includes": ["**/*"] } }\n' > "$W/biome.json"
+    assert_warns "10e / fix 9: a '**/*' catch-all include still reaches kit paths and warns" "$W" "path(s): scripts/harness"
+    W=$(new_10e_fixture)
+    printf '{ "formatter": { "enabled": true, "includes": ["!scripts/harness/**", "**/*"] } }\n' > "$W/biome.json"
+    assert_warns "10e / fix 9: a '**/*' catch-all AFTER a negation overrides it and warns" "$W" "path(s): scripts/harness"
+
+    # (fix9c) REPEATED leading globstars. "**/**/scripts/harness/" is valid
+    # gitignore -- an interior "/**/" matches zero or more directories -- so it
+    # covers the root path too. Stripping only ONE "**/" left "**/scripts/
+    # harness", which matches nothing at the root: a false warning here, and in
+    # the biome direction a false silence.
+    W=$(new_10e_fixture)
+    : > "$W/.prettierrc"
+    printf '**/**/scripts/harness/\n**/**/.harness/\n**/**/.claude/skills/\n**/**/.cursor/skills/\n**/**/.opencode/skills/\n**/**/.harness/adapters/\n' > "$W/.prettierignore"
+    assert_ok_without "10e / fix 9c: repeated leading globstars ('**/**/x') are recognized as coverage" "$W" "prettier"
+
+    # (fix9b) a "**/"-prefixed entry keeps its DEPTH match. "**/adapters/"
+    # means "adapters at any depth" and must read as covering
+    # ".harness/adapters"; stripping the prefix down to the bare component
+    # would have moved coverage to the root only, turning correct configs into
+    # warnings here and -- in the biome direction -- silence where the
+    # formatter would really rewrite the path.
+    W=$(new_10e_fixture)
+    : > "$W/.prettierrc"
+    printf '**/harness/\n**/.harness/\n**/skills/\n**/adapters/\n' > "$W/.prettierignore"
+    assert_ok_without "10e / fix 9b: depth-agnostic component entries ('**/adapters/') are recognized as coverage" "$W" "prettier"
+
+    # (fix10) the pre-commit REMEDY 10e prints must satisfy 10e. That branch
+    # tests coverage by literal substring, so a regex written "[.]claude/..."
+    # -- correct regex, and the kit's first suggestion -- never contains the
+    # ".claude/worktrees" it is meant to cover, and an adopter who pastes the
+    # kit's own advice is warned forever.
+    W=$(new_10e_fixture)
+    mkdir -p "$W/.claude/worktrees/wt"
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+exclude: '(^|/)\.claude/worktrees/|^(scripts/harness/|\.harness/|\.claude/skills/|\.cursor/skills/|\.opencode/skills/)'
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+YAML
+    assert_ok_without "10e / fix 10: the pre-commit remedy the kit suggests actually satisfies the kit's own check" "$W" ".claude/worktrees"
+
+    # (fix10b) the nested-checkout note must not ride along on a warning that
+    # names only OTHER paths -- it would tell the reader to exclude a
+    # directory they already excluded, about an entry not in the list shown.
+    W=$(new_10e_fixture)
+    : > "$W/.prettierrc"
+    mkdir -p "$W/.claude/worktrees/wt"
+    printf '.claude/worktrees/\n.harness/\n.claude/skills/\n.cursor/skills/\n.opencode/skills/\n' > "$W/.prettierignore"
+    assert_ok_without "10e / fix 10b: the nested note stays off a warning that does not name .claude/worktrees" "$W" "not kit-owned"
+
+    # (fix8d) the kit's own remedy must satisfy the check in the exact repo
+    # shape that broke: worktree directory present, block written by the kit.
+    # This is the end-to-end pin on install-lib.sh and check-doctor.sh agreeing.
+    W=$(new_fixture)
+    mkdir -p "$W/.harness/hooks" "$W/.claude/worktrees/wt/scripts/harness"
+    printf 'gate shellcheck\n' > "$W/.harness/gates.conf"
+    printf '#!/usr/bin/env bash\n' > "$W/.harness/hooks/guard-project-policy.sh"
+    printf '#!/usr/bin/env bash\n' > "$W/scripts/check-packaging.sh"
+    chmod +x "$W/.harness/hooks/guard-project-policy.sh" "$W/scripts/check-packaging.sh"
+    { printf '# harness-kit 9.9.9\n'
+      printf '%s  scripts/harness/lib/check-doctor.sh\n' "$(_t10e_sha "$W/scripts/harness/lib/check-doctor.sh")"
+      printf '%s  .harness/gates.conf # tailored\n' "$(_t10e_sha "$W/.harness/gates.conf")"
+      printf '%s  .harness/hooks/guard-project-policy.sh # tailored\n' "$(_t10e_sha "$W/.harness/hooks/guard-project-policy.sh")"
+      printf '%s  scripts/check-packaging.sh # tailored\n' "$(_t10e_sha "$W/scripts/check-packaging.sh")"
+    } > "$W/scripts/harness/.harness-manifest"
+    # shellcheck source=/dev/null
+    . "$SCRIPTS_DIR/harness/lib/install-lib.sh"
+    harness_append_formatterignore "$W"
+    assert_ok_without "10e / fix 8: the kit's block satisfies 10e with a .claude/worktrees/ checkout present" "$W" "does not cover kit-owned path"
 fi
 
 # --- check #8d: semantic hook-wiring validation ------------------------------

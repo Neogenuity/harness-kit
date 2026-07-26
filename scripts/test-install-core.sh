@@ -395,11 +395,39 @@ F=$(mktemp -d "$WORK/formatterignore.XXXXXX") || exit 1
 harness_append_formatterignore "$F"
 if [ -f "$F/.prettierignore" ] \
     && grep -qxF '# harness-kit: kit-owned mechanism + generated stubs — do not reformat' "$F/.prettierignore" \
-    && grep -qxF 'scripts/harness/' "$F/.prettierignore" \
-    && grep -qxF '.claude/skills/' "$F/.prettierignore"; then
+    && grep -qxF '**/scripts/harness/' "$F/.prettierignore" \
+    && grep -qxF '**/.claude/skills/' "$F/.prettierignore"; then
     pass "formatterignore: appends the marked kit-owned block"
 else
     fail "formatterignore: block missing or incomplete" "$(cat "$F/.prettierignore" 2>/dev/null)"
+fi
+
+# --- (k2) formatterignore: the block covers a NESTED checkout too --------------
+# Regression for the reproduced adopter failure: .prettierignore follows
+# gitignore anchoring, so the block's original 'scripts/harness/' matched the
+# repo-root copy ONLY. Claude Code's worktree feature puts a full second
+# checkout under .claude/worktrees/<name>/ and hides it from Git via
+# .git/info/exclude -- which prettier does not read -- so `prettier --check .`
+# reached the nested pinned/generated files and the adopter's format gate (and
+# with it `scripts/harness/verify`) went red on a clean tree. Two independent
+# requirements, asserted separately because either alone leaves the hole open:
+# the worktree root itself is excluded (which also spares the nested copy of
+# the adopter's OWN sources, inside which their own anchored entries stop
+# applying), and every kit-owned entry is written in the depth-agnostic '**/'
+# form gitignore matches at any level INCLUDING the root.
+missing_nested=""
+grep -qxF '.claude/worktrees/' "$F/.prettierignore" || missing_nested=" .claude/worktrees/(absent)"
+while IFS= read -r line; do
+    case "$line" in
+        ''|'#'*|'.claude/worktrees/') continue ;;
+        '**/'*) ;;
+        *) missing_nested="$missing_nested $line(root-anchored)" ;;
+    esac
+done < "$F/.prettierignore"
+if [ -z "$missing_nested" ]; then
+    pass "formatterignore: excludes .claude/worktrees/ and writes every kit entry in depth-agnostic '**/' form"
+else
+    fail "formatterignore: nested-checkout coverage gap ->$missing_nested" "$(cat "$F/.prettierignore")"
 fi
 
 # --- (l) formatterignore: idempotent -------------------------------------------
@@ -475,9 +503,10 @@ printf '%s\n' '# harness-kit: kit-owned mechanism + generated stubs — do not r
 harness_append_formatterignore "$F"
 marker_count=$(grep -cxF '# harness-kit: kit-owned mechanism + generated stubs — do not reformat' "$F/.prettierignore")
 if [ "$marker_count" -eq 1 ] \
-    && grep -qxF 'scripts/harness/' "$F/.prettierignore" \
-    && grep -qxF '.claude/skills/' "$F/.prettierignore" \
-    && grep -qxF '.opencode/agents/' "$F/.prettierignore"; then
+    && grep -qxF '.claude/worktrees/' "$F/.prettierignore" \
+    && grep -qxF '**/scripts/harness/' "$F/.prettierignore" \
+    && grep -qxF '**/.claude/skills/' "$F/.prettierignore" \
+    && grep -qxF '**/.opencode/agents/' "$F/.prettierignore"; then
     pass "formatterignore: a marker-only partial block is healed (missing entries appended, marker not duplicated)"
 else
     fail "formatterignore: partial block was not healed (marker_count=$marker_count)" "$(cat "$F/.prettierignore")"
@@ -499,7 +528,7 @@ rm -rf "$F"
 # config untouched (this kit never mutates repo-owned config unconditionally).
 T2=$(mktemp -d "$WORK/bootstrap-install-fmt.XXXXXX") || exit 1
 out=$("$BASH" "$SCRIPTS_DIR/harness/bootstrap" install --formatter-ignore "$SCRIPTS_DIR" "$T2" 2>&1); rc=$?
-if [ "$rc" -eq 0 ] && [ -f "$T2/.prettierignore" ] && grep -qxF 'scripts/harness/' "$T2/.prettierignore"; then
+if [ "$rc" -eq 0 ] && [ -f "$T2/.prettierignore" ] && grep -qxF '**/scripts/harness/' "$T2/.prettierignore"; then
     pass "bootstrap install --formatter-ignore: writes the .prettierignore block"
 else
     fail "bootstrap install --formatter-ignore: block missing after install (rc=$rc)" "$out"
@@ -522,7 +551,7 @@ rm -rf "$T2" "$T3"
 # proves the flag was not dropped.
 T2=$(mktemp -d "$WORK/bootstrap-install-fmt-after.XXXXXX") || exit 1
 out=$("$BASH" "$SCRIPTS_DIR/harness/bootstrap" install "$SCRIPTS_DIR" "$T2" --formatter-ignore 2>&1); rc=$?
-if [ "$rc" -eq 0 ] && [ -f "$T2/.prettierignore" ] && grep -qxF 'scripts/harness/' "$T2/.prettierignore"; then
+if [ "$rc" -eq 0 ] && [ -f "$T2/.prettierignore" ] && grep -qxF '**/scripts/harness/' "$T2/.prettierignore"; then
     pass "bootstrap install SRC ROOT --formatter-ignore: flag after positionals still writes the block"
 else
     fail "bootstrap install SRC ROOT --formatter-ignore: block missing after install (rc=$rc)" "$out"
@@ -564,7 +593,7 @@ rm -rf "$T2" "$VICT"
 # adopter running update would never receive the block without this wiring.
 F=$(make_fixture) || exit 1
 out=$("$BASH" "$SCRIPTS_DIR/harness/bootstrap" update --formatter-ignore "$SCRIPTS_DIR" "$F" 2>&1); rc=$?
-if [ "$rc" -eq 0 ] && [ -f "$F/.prettierignore" ] && grep -qxF 'scripts/harness/' "$F/.prettierignore"; then
+if [ "$rc" -eq 0 ] && [ -f "$F/.prettierignore" ] && grep -qxF '**/scripts/harness/' "$F/.prettierignore"; then
     pass "bootstrap update --formatter-ignore: writes the .prettierignore block on a real apply"
 else
     fail "bootstrap update --formatter-ignore: block missing after update (rc=$rc)" "$out"

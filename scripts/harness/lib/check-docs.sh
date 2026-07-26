@@ -51,8 +51,21 @@ check_doc_links() {
 # scanning the source templates would false-positive.
 _harness_doc_set() {
     local _f
-    find "$ROOT" -name AGENTS.md \
-        -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*' 2>/dev/null
+    # .claude/worktrees/ is pruned for the same reason the formatter-ignore
+    # block excludes it: it holds FULL nested checkouts of this repo (Claude
+    # Code's worktree feature), hidden from Git via .git/info/exclude, which
+    # nothing outside Git reads. Without the prune this find returns one
+    # AGENTS.md per live worktree, so a broken link in a branch someone else
+    # is still writing fails THIS checkout's gate, naming a path the reader
+    # is not editing and cannot fix from here. -prune, not another -not -path:
+    # -not -path only suppresses the RESULT, leaving find to walk every file of
+    # every live worktree first, so the cost of the scan would still multiply
+    # by the worktree count. The other doc producers below are already safe:
+    # they either name a file explicitly or start from a .harness/ subtree.
+    find "$ROOT" -path '*/.claude/worktrees' -prune -o \
+        -name AGENTS.md \
+        -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*' \
+        -print 2>/dev/null
     for _f in ARCHITECTURE.md README.md SECURITY.md CONTRIBUTING.md GEMINI.md llms.txt; do
         [ -f "$ROOT/$_f" ] && printf '%s\n' "$ROOT/$_f"
     done

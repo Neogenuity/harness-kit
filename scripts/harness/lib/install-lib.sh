@@ -377,18 +377,47 @@ harness_append_gitignore() {
 # Still safe against a no-trailing-newline file: the appended content always
 # starts on its own fresh line, so it never merges onto the file's last line
 # (e.g. 'dist' -> 'dist# harness-kit: ...').
+#
+# ENTRY SHAPE — why not the plain root-anchored paths this block shipped with.
+# .prettierignore uses gitignore matching, where a pattern containing a slash
+# anywhere but the end is ANCHORED to the ignore file's directory: the
+# original 'scripts/harness/' matched the repo-root copy and nothing else. A
+# repo holding a nested checkout of itself therefore had its kit-owned files
+# reformatted anyway — the reproduced case being Claude Code's worktree
+# feature, which puts a full second copy of the repo under
+# .claude/worktrees/<name>/. Claude Code hides that directory via
+# .git/info/exclude, which prettier does not read; prettier DOES read
+# .gitignore, so a repo that also lists the directory there is already spared
+# (this repo is one such — see its .gitignore), and the reproduced failure was
+# in a repo that was not.
+# `prettier --check .` then flagged the nested pinned/generated files and the
+# adopter's format gate — and with it `scripts/harness/verify` — was red on a
+# clean tree. Hence both halves below:
+#   - the '**/'-prefixed forms, which gitignore semantics match at ANY depth
+#     INCLUDING the root ('**/foo/bar' is "bar directly under foo, anywhere"),
+#     making each a strict SUPERSET of the plain form it replaces rather than
+#     a relocation of coverage; and
+#   - '.claude/worktrees/' itself, which additionally keeps the formatter out
+#     of the nested copy of the adopter's OWN sources — a duplicate tree
+#     inside which their own anchored entries ('src/generated/', ...) silently
+#     stop applying.
+# Existing installs lose nothing and need no hand-editing: the healing pass
+# below only ever APPENDS required lines it cannot find, so re-running
+# `bootstrap update --formatter-ignore` adds the new forms and leaves the
+# already-present plain ones (harmless subsets) alone.
 harness_append_formatterignore() {
     local pi="$1/.prettierignore" marker entries entry missing tmp
     marker='# harness-kit: kit-owned mechanism + generated stubs — do not reformat'
-    entries='scripts/harness/
-.harness/adapters/
-.claude/skills/
-.claude/agents/
-.cursor/skills/
-.cursor/agents/
-.codex/agents/
-.opencode/skills/
-.opencode/agents/'
+    entries='.claude/worktrees/
+**/scripts/harness/
+**/.harness/adapters/
+**/.claude/skills/
+**/.claude/agents/
+**/.cursor/skills/
+**/.cursor/agents/
+**/.codex/agents/
+**/.opencode/skills/
+**/.opencode/agents/'
 
     if [ -L "$pi" ]; then
         echo "ERROR: harness: $pi is a symlink — refusing to write through it" >&2

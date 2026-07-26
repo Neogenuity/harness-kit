@@ -171,6 +171,137 @@ else
     fails=$((fails + 1))
 fi
 
+# --- stop-markers stay inside the repo, from EITHER hook depth ---------------
+# hook_advise_once_seen's default marker dir is "$root/.harness/var/
+# stop-markers", and $root used to be dirname($0)/../../.. -- three levels
+# above the CALLING hook. A tailored policy hook at .harness/hooks/<name>.sh
+# sits only two levels down, so its markers landed OUTSIDE the repo, in a
+# directory shared by every sibling checkout under the same parent: two
+# unrelated worktrees deduped against each other, and the second one's
+# advisory was swallowed. No env override here on purpose -- the default path
+# is the thing under test. The fixture repo is nested two deep inside $WORK so
+# an escape of one level still lands inside $WORK and gets caught.
+AR="$WORK/advise/repo"
+mkdir -p "$AR/scripts/harness/hooks" "$AR/scripts/harness/lib" "$AR/.harness/hooks"
+cp "$LIB" "$AR/scripts/harness/hooks/lib.sh"
+cp "$(dirname "$LIB")/../lib/log-lib.sh" "$AR/scripts/harness/lib/log-lib.sh"
+cat > "$AR/.harness/hooks/policy.sh" <<'HOOKEOF'
+#!/usr/bin/env bash
+set -uo pipefail
+. "$(dirname "$0")/../../scripts/harness/hooks/lib.sh" 2>/dev/null || exit 0
+hook_read_input
+hook_advise_once "TEST WARNING"
+HOOKEOF
+chmod +x "$AR/.harness/hooks/policy.sh"
+a1=$(printf '%s' '{"session_id": "depth-s"}' | "$AR/.harness/hooks/policy.sh" 2>/dev/null)
+a2=$(printf '%s' '{"session_id": "depth-s"}' | "$AR/.harness/hooks/policy.sh" 2>/dev/null)
+if [ -d "$AR/.harness/var/stop-markers" ] \
+    && [ ! -e "$WORK/advise/.harness" ] && [ ! -e "$WORK/.harness" ]; then
+    echo "ok:   a .harness/hooks/ hook keeps its stop-markers inside the repo"
+else
+    echo "FAIL: stop-markers escaped the repo root (marker dir inside=$( [ -d "$AR/.harness/var/stop-markers" ] && echo yes || echo no ))"
+    fails=$((fails + 1))
+fi
+# The marker is only useful if it still dedupes: first stop advises, second is
+# suppressed by the marker written on the first.
+if printf '%s' "$a1" | grep -q "TEST WARNING" && ! printf '%s' "$a2" | grep -q "TEST WARNING"; then
+    echo "ok:   the in-repo marker still advises exactly once"
+else
+    echo "FAIL: advise-once dedupe broke from a .harness/hooks/ hook (a1='$a1' a2='$a2')"
+    fails=$((fails + 1))
+fi
+
+# --- harness.conf cannot relocate the resolved repo root ----------------------
+# hook_log reads HARNESS_LOG out of scripts/harness/harness.conf. Sourcing that
+# repo-owned file into the hook's own shell let ANY assignment in it overwrite
+# a lib.sh global -- including the resolved repo root, which
+# hook_advise_once_seen reads LATER in the same process to place its markers.
+# A conf that merely happened to define that name would have moved the markers
+# outside the repo with no HARNESS_STOP_MARKER_DIR in sight. HARNESS_LOG must
+# be unset in the environment here, or the env snapshot short-circuits the conf
+# read and the collision is never reached.
+AC="$WORK/conf/repo"
+mkdir -p "$AC/scripts/harness/hooks" "$AC/scripts/harness/lib" "$AC/.harness/hooks"
+cp "$LIB" "$AC/scripts/harness/hooks/lib.sh"
+cp "$(dirname "$LIB")/../lib/log-lib.sh" "$AC/scripts/harness/lib/log-lib.sh"
+cp "$AC/../../advise/repo/.harness/hooks/policy.sh" "$AC/.harness/hooks/policy.sh" 2>/dev/null \
+    || cat > "$AC/.harness/hooks/policy.sh" <<'HOOKEOF'
+#!/usr/bin/env bash
+set -uo pipefail
+. "$(dirname "$0")/../../scripts/harness/hooks/lib.sh" 2>/dev/null || exit 0
+hook_read_input
+hook_advise_once "TEST WARNING"
+HOOKEOF
+chmod +x "$AC/.harness/hooks/policy.sh"
+printf 'HARNESS_LOG=1\nHOOK_LIB_ROOT="%s/hijacked"\n' "$WORK" > "$AC/scripts/harness/harness.conf"
+printf '%s' '{"session_id": "conf-s"}' | env -u HARNESS_LOG "$AC/.harness/hooks/policy.sh" >/dev/null 2>&1
+printf '%s' '{"session_id": "conf-s"}' | env -u HARNESS_LOG "$AC/.harness/hooks/policy.sh" >/dev/null 2>&1
+if [ -d "$AC/.harness/var/stop-markers" ] && [ ! -e "$WORK/hijacked" ]; then
+    echo "ok:   a harness.conf assignment cannot relocate the repo root out from under the markers"
+else
+    echo "FAIL: harness.conf clobbered the resolved root (hijacked=$( [ -e "$WORK/hijacked" ] && echo created || echo absent ))"
+    fails=$((fails + 1))
+fi
+
+# --- ... including when the CALLING hook sources harness.conf itself --------
+# Containing the conf read inside hook_log was not enough: the shipped guard
+# hooks (guard-config.sh, guard-secrets.sh, format.sh) source harness.conf into
+# their OWN shell after loading lib.sh, so a conf assignment still reached the
+# global that hook_advise_once_seen consults later. The resolved root is
+# readonly, so the assignment fails instead of taking effect -- from any
+# sourcing site, not just the one inside this library.
+AK="$WORK/confcaller/repo"
+mkdir -p "$AK/scripts/harness/hooks" "$AK/scripts/harness/lib" "$AK/.harness/hooks"
+cp "$LIB" "$AK/scripts/harness/hooks/lib.sh"
+cp "$(dirname "$LIB")/../lib/log-lib.sh" "$AK/scripts/harness/lib/log-lib.sh"
+printf 'HOOK_LIB_ROOT="%s/hijacked-by-caller"\n' "$WORK" > "$AK/scripts/harness/harness.conf"
+cat > "$AK/.harness/hooks/policy.sh" <<'HOOKEOF'
+#!/usr/bin/env bash
+set -uo pipefail
+. "$(dirname "$0")/../../scripts/harness/hooks/lib.sh" 2>/dev/null || exit 0
+# the shipped guard hooks' own pattern: source the repo conf after lib.sh
+. "$(dirname "$0")/../../scripts/harness/harness.conf" 2>/dev/null || true
+hook_read_input
+hook_advise_once "TEST WARNING"
+HOOKEOF
+chmod +x "$AK/.harness/hooks/policy.sh"
+printf '%s' '{"session_id": "caller-s"}' | "$AK/.harness/hooks/policy.sh" >/dev/null 2>&1
+printf '%s' '{"session_id": "caller-s"}' | "$AK/.harness/hooks/policy.sh" >/dev/null 2>&1
+if [ -d "$AK/.harness/var/stop-markers" ] && [ ! -e "$WORK/hijacked-by-caller" ]; then
+    echo "ok:   a caller-side harness.conf source cannot relocate the repo root either"
+else
+    echo "FAIL: caller-side conf source moved the root (hijacked=$( [ -e "$WORK/hijacked-by-caller" ] && echo created || echo absent ))"
+    fails=$((fails + 1))
+fi
+
+# --- ... and an inherited environment variable cannot become the root -------
+# Guarding the one-time resolution on "is the name set" would also accept a
+# HOOK_LIB_ROOT arriving from the caller's environment -- a lower bar than the
+# harness.conf route it was written to close, needing no file edit at all.
+# A fixture with NO harness.conf: the conf-sourcing one above would overwrite
+# the inherited value before the markers are placed, masking exactly the path
+# under test.
+AE="$WORK/envroot/repo"
+mkdir -p "$AE/scripts/harness/hooks" "$AE/scripts/harness/lib" "$AE/.harness/hooks"
+cp "$LIB" "$AE/scripts/harness/hooks/lib.sh"
+cp "$(dirname "$LIB")/../lib/log-lib.sh" "$AE/scripts/harness/lib/log-lib.sh"
+cat > "$AE/.harness/hooks/policy.sh" <<'HOOKEOF'
+#!/usr/bin/env bash
+set -uo pipefail
+. "$(dirname "$0")/../../scripts/harness/hooks/lib.sh" 2>/dev/null || exit 0
+hook_read_input
+hook_advise_once "TEST WARNING"
+HOOKEOF
+chmod +x "$AE/.harness/hooks/policy.sh"
+printf '%s' '{"session_id": "env-s"}' \
+    | env HOOK_LIB_ROOT="$WORK/env-hijack" "$AE/.harness/hooks/policy.sh" >/dev/null 2>&1
+if [ ! -e "$WORK/env-hijack" ] && [ -d "$AE/.harness/var/stop-markers" ]; then
+    echo "ok:   an inherited HOOK_LIB_ROOT does not become the resolved repo root"
+else
+    echo "FAIL: an inherited HOOK_LIB_ROOT was adopted as the repo root"
+    fails=$((fails + 1))
+fi
+
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails advise-once case(s)"
     exit 1

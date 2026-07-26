@@ -3,6 +3,85 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## Unreleased
+
+### Fixed
+
+- **The opt-in prettier ignore block missed nested checkouts, so an adopter's
+  format gate went red on a clean tree.** `.prettierignore` follows gitignore
+  matching, where a pattern containing a slash before its end is anchored to
+  the repo root — the block's `scripts/harness/` and `.harness/adapters/`
+  matched the root copy and nothing else. Claude Code's worktree feature puts
+  a full second checkout of the repo under `.claude/worktrees/<name>/` and
+  hides it via `.git/info/exclude`, which prettier does not read. Prettier does
+  read `.gitignore`, so a repo that also lists the directory there is already
+  spared; in the repo where this was reported it was not, and `prettier --check .`
+  descended into the nested copy, flagged the checksum-pinned and generated
+  files there, and failed the adopter's format gate — and with it
+  `bash scripts/harness/verify` — with nothing actually wrong in the tree.
+  `harness_append_formatterignore` now excludes `.claude/worktrees/` (which
+  also spares the nested copy of the adopter's *own* sources, inside which
+  their own anchored entries silently stop applying) and writes every
+  kit-owned entry in the depth-agnostic `**/` form, which gitignore matches at
+  any depth **including** the root — a strict superset of the plain form it
+  replaces, not a relocation of coverage, and the shape that covers submodules
+  and vendored checkouts too.
+
+  The `**/` forms are deliberately broad: `**/scripts/harness/` also excludes
+  an unrelated `packages/app/scripts/harness/` an adopter happens to own, so a
+  monorepo may find a directory of its own going unformatted. That trade is
+  intentional — the cost is a few files a formatter skips, against a broken
+  checksum pin and a red gate for the miss in the other direction — but if it
+  is the wrong trade for a given repo, delete the `**/` lines and keep
+  `.claude/worktrees/`, which alone covers the reported failure.
+
+  **Existing installs need `bootstrap update --formatter-ignore` re-run.** The
+  helper only ever appends the required lines it cannot find, so a re-run adds
+  the new entries and leaves the already-present plain ones (harmless subsets)
+  untouched — no hand-editing, and no second write on a repo already carrying
+  the new block.
+
+- **Hooks in `.harness/hooks/` wrote their telemetry and stop-markers outside
+  the repository.** `scripts/harness/hooks/lib.sh` resolved the repo root as
+  `dirname($0)/../../..`, and `$0` is the *calling* hook — correct for the
+  kit's own guards at `scripts/harness/hooks/<name>.sh` (three levels below
+  the root), one level too high for a tailored policy hook at
+  `.harness/hooks/<name>.sh` (two levels below — the home ADR 010 documents).
+  Those hooks resolved the repo's **parent**, so `hook_log` appended to a
+  stray `<parent>/.harness/var/log.jsonl` and `hook_advise_once_seen` created
+  `<parent>/.harness/var/stop-markers/`. Both writers fail open, so there was
+  no symptom: outcome telemetry from the policy layer never reached the
+  repo's own log and the audit workflow undercounted it, while every checkout
+  sharing a parent — git worktrees most visibly — deduped stop advisories
+  against one another, letting a sibling worktree swallow an advisory that
+  had never been shown there. The root is now resolved once from `lib.sh`'s
+  own `BASH_SOURCE` path, which removes the caller's depth from the
+  calculation entirely; an unrecognized layout (a fixture that copies
+  `lib.sh` somewhere flat) resolves to `lib.sh`'s own directory, so writes
+  stay inside the fixture instead of climbing out of it. `HARNESS_LOG_FILE`
+  and `HARNESS_STOP_MARKER_DIR` overrides are unchanged. Adopters with a
+  tailored `.harness/hooks/` hook may have a stray `.harness/var/` directory
+  beside their repository; it is safe to delete once its contents are no
+  longer wanted.
+
+- **`check-docs` no longer pulls nested worktrees into the doc-link gate.**
+  Check #4's `AGENTS.md` scan walked the whole tree, so every live
+  `.claude/worktrees/<name>/` checkout contributed its own `AGENTS.md`: a
+  broken link in a branch someone else was still writing failed *this*
+  checkout's gate, naming a path the reader was not editing and could not fix
+  from where they stood, and the scan's cost multiplied by the worktree count.
+  The find now prunes that directory (a `-prune`, not a result filter, so the
+  walk actually stops).
+
+- **Doctor check #10e now sees the same blind spot.** It recognizes a leading
+  `**/` as coverage (without it the check would warn about a remedy the kit
+  had just applied), names `.claude/worktrees` among the paths a formatter
+  must not reach — but only when that directory exists, so a repo that has
+  never made a worktree gains no new warning — and appends a nested-checkout
+  hint to the prettier, biome, dprint, and pre-commit warnings alike, since
+  every one of those exclusion mechanisms is path-anchored and none is
+  interchangeable with `.prettierignore`.
+
 ## 0.34.0 — 2026-07-26
 
 Three defects found by running the kit against a large external repo and by an

@@ -27,6 +27,58 @@ LOG_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)/log-li
 # shellcheck disable=SC1090
 [ -f "$LOG_LIB" ] && . "$LOG_LIB" 2>/dev/null || true
 
+# The repo root, resolved ONCE from THIS FILE's own path — never from $0.
+# $0 is the CALLING hook, and hooks live at two different depths: the kit's
+# own guards at scripts/harness/hooks/<name>.sh (three levels below the root)
+# and a repo's tailored policy hooks at .harness/hooks/<name>.sh (two levels
+# below — the home ADR 010 documents). A single hardcoded "../../.." was
+# therefore guaranteed to be wrong for one of them, and it was: every
+# .harness/hooks/ hook resolved the repo's PARENT and wrote its telemetry and
+# stop-markers into a stray .harness/var/ NEXT TO the repo. Both writers fail
+# open, so nothing ever surfaced — the audit workflow simply undercounted the
+# policy layer, and sibling checkouts under one parent (git worktrees, most
+# visibly) shared a single marker dir, so advise-once deduped across repos
+# that have nothing to do with each other. Anchoring on BASH_SOURCE takes the
+# caller out of the calculation entirely; lib.sh's own install path is fixed
+# and manifest-pinned, so it is the one thing here that cannot move.
+#
+# An UNRECOGNIZED layout — a test fixture that copies lib.sh somewhere flat —
+# resolves the root to lib.sh's own directory rather than climbing blindly:
+# writes then stay inside the fixture. That is the safe direction for the
+# escape class this repo has already been bitten by (the v0.18.0 fixture
+# leak), and strictly better than the old math, which from a flat fixture
+# pointed three levels above it.
+#
+# Set once and READONLY. harness.conf is repo-owned tailoring, and several
+# hooks source it into their own shell AFTER this file (guard-config.sh,
+# guard-secrets.sh and format.sh all do), so a conf that merely happened to
+# assign HOOK_LIB_ROOT would relocate every later telemetry and stop-marker
+# write — silently, with no HARNESS_STOP_MARKER_DIR override in sight, and
+# from a file this library never gets to inspect. readonly makes that
+# assignment fail instead of take effect, no matter who sources the conf or
+# when; protecting the value here is what lets hook_log keep sourcing the
+# conf normally, so conf-defined HARNESS_LOG_FILE / HARNESS_STOP_MARKER_DIR
+# go on working exactly as they always have. Guarded on "already set" so a
+# second `. lib.sh` in one shell reuses the value instead of erroring on the
+# re-assignment -- tested on the readonly ATTRIBUTE, not on the name merely
+# being set, because a plain "is it set" guard would also accept an INHERITED
+# environment variable and hand the resolved root to whatever the caller's
+# environment happened to contain. Only a previous source of this file can
+# have made it readonly.
+case "$(declare -p HOOK_LIB_ROOT 2>/dev/null)" in
+    'declare -r'*) : ;;
+    *)
+    HOOK_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)" || HOOK_LIB_DIR=""
+    case "$HOOK_LIB_DIR" in
+        "") HOOK_LIB_ROOT="" ;;
+        */scripts/harness/hooks)
+            HOOK_LIB_ROOT="$(cd "$HOOK_LIB_DIR/../../.." 2>/dev/null && pwd)" || HOOK_LIB_ROOT="" ;;
+        *) HOOK_LIB_ROOT="$HOOK_LIB_DIR" ;;
+    esac
+    readonly HOOK_LIB_ROOT
+    ;;
+esac
+
 # Read the hook event JSON from stdin into HOOK_INPUT. Safe on empty stdin.
 hook_read_input() {
     HOOK_INPUT=$(cat 2>/dev/null || true)
@@ -104,11 +156,16 @@ hook_log() {
     local event="$1" file="${2:-}" detail="${3:-}" root logfile enabled
     local run_id="" run_source="" session_id="" session_source="" provider="" plan_slug="" context count
     command -v jq >/dev/null 2>&1 || return 0
-    root="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd)" || return 0
+    root="${HOOK_LIB_ROOT:-}"
+    [ -n "$root" ] || return 0
     if [ -n "$HOOK_ENV_HARNESS_LOG" ]; then
         enabled="$HOOK_ENV_HARNESS_LOG"
     else
         if [ -z "${HARNESS_LOG:-}" ] && [ -f "$root/scripts/harness/harness.conf" ]; then
+            # Sourced into this shell on purpose, so a conf-defined
+            # HARNESS_LOG_FILE / HARNESS_STOP_MARKER_DIR keeps working. The
+            # resolved root is readonly (see the top of this file), so the one
+            # value a conf must never be able to move is already out of reach.
             # shellcheck source=/dev/null
             . "$root/scripts/harness/harness.conf" 2>/dev/null || true
         fi
@@ -255,7 +312,8 @@ hook_text_digest() {
 # occasional duplicate one.
 hook_advise_once_seen() {
     local warnings="$1" root marker_dir sid sid_safe digest sid_digest key marker_file
-    root="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd)" || return 1
+    root="${HOOK_LIB_ROOT:-}"
+    [ -n "$root" ] || return 1
     marker_dir="${HOOK_ENV_HARNESS_STOP_MARKER_DIR:-${HARNESS_STOP_MARKER_DIR:-$root/.harness/var/stop-markers}}"
     mkdir -p "$marker_dir" 2>/dev/null || return 1
     [ -w "$marker_dir" ] || return 1

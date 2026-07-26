@@ -60,7 +60,13 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    `--formatter-ignore` to `bootstrap update` runs
    `harness_append_formatterignore` (same helper as init) to write the
    idempotent marked block to `.prettierignore` listing the kit-owned and
-   generated paths — but this only ever helps a **prettier** install. If the
+   generated paths — but this only ever helps a **prettier** install.
+   **Re-run it on an install that already has the block**, too: the helper
+   appends only the required lines it cannot find, so an install carrying an
+   older block gains the entries added since (currently `.claude/worktrees/`
+   and the `**/`-prefixed depth-agnostic forms, which are what make the block
+   cover a nested checkout) and keeps everything already there. On a repo
+   already at the current block it writes nothing at all. If the
    repo instead runs biome, dprint, or a pre-commit formatter hook, the flag
    is a no-op for it: each of those needs its own exclusion added by hand
    (biome's ordered `!` negation, dprint's `excludes`, pre-commit's

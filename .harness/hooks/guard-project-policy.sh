@@ -38,7 +38,37 @@ TPL="plugins/harness-kit/skills/harness-kit/templates/scripts"
 changed=$(git status --porcelain -uall -- "$TPL" 2>/dev/null \
     | sed -e 's/^...//' -e 's/.* -> //')
 if [ -n "$changed" ]; then
-    if ! printf '%s\n' "$changed" | grep -q 'test-[^/]*\.sh$'; then
+    # The TRIGGER is scoped to $TPL; the search for the accompanying test is
+    # NOT -- it spans the whole working tree. Several shipped mechanism
+    # libraries are, by settled convention, covered only by the maintainer
+    # suites at the repo root: scripts/test-install-core.sh owns
+    # templates/.../lib/install-lib.sh, scripts/test-check-harness.sh owns
+    # templates/.../lib/check-doctor.sh. Neither has a shipped test under
+    # templates/.../harness/tests/, and v0.29.0 descoped the adopter floor
+    # deliberately, so demanding one there just to satisfy this hook would
+    # reverse that decision. Searching only $TPL warned on every such change
+    # even when it shipped with full regression coverage -- a policy signal
+    # that fires on correct work is one the maintainer learns to ignore.
+    # Computed here rather than beside $changed so a stop with no mechanism
+    # change pays no second git call.
+    # Three things this pipeline is careful about, each a real way to satisfy
+    # the policy without adding coverage:
+    #   - DELETED paths are dropped. `git rm` of a test file still lists that
+    #     path in porcelain output, so a plain match counted removing a test
+    #     as writing one.
+    #   - the match is anchored to a path COMPONENT ((^|/)), so a file whose
+    #     name merely ENDS with a test-like suffix -- "contest-policy.sh",
+    #     which ends in "test-policy.sh" -- no longer passes as a test.
+    #   - grep -c, never grep -q. -q exits at the first match and SIGPIPEs the
+    #     upstream printf; under `set -o pipefail` (line 16) that makes the
+    #     whole pipeline false and INVERTS this condition, warning precisely
+    #     when a test was found. -c consumes all input, so it cannot. The same
+    #     hazard is documented in scripts/harness/lib/check-drift.sh.
+    touched=$(git status --porcelain -uall 2>/dev/null \
+        | grep -vE '^(D|.D)' \
+        | sed -e 's/^...//' -e 's/.* -> //')
+    tests_touched=$(printf '%s\n' "$touched" | grep -cE '(^|/)test-[^/]*\.sh$')
+    if [ "${tests_touched:-0}" -eq 0 ]; then
         append "POLICY WARNING: shipped mechanism templates changed ($(printf '%s' "$changed" | tr '\n' ' ')) but no regression test (test-*.sh) was touched. Every guard/mechanism change ships with a test — see docs/standards/templates.md."
     fi
     # Compare the actual version VALUE against HEAD, not just "did the file

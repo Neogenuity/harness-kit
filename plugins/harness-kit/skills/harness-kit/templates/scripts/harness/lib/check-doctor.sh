@@ -84,15 +84,46 @@ fi
 # the safer direction for a check that only ever WARNs. Both "./foo" and
 # gitignore-style anchored "/foo" strip down to the same "foo" — an anchored
 # entry is idiomatic and correct in a .prettierignore/.pre-commit exclude and
-# must not false-positive just because it starts with "/".
+# must not false-positive just because it starts with "/". A leading "**/" is
+# stripped for the same reason and is the OPPOSITE case: "**/foo" matches foo
+# at any depth INCLUDING the root, so it covers the root kit path this check
+# asks about — and it is the form the kit's own written block now uses (see
+# harness_append_formatterignore), so failing to strip it would make the kit
+# warn about a remedy it just applied.
+#
+# That prefix strip is narrow on BOTH sides, because the obvious wide version
+# breaks two shapes that used to work:
+#   - it fires only when a real path component follows ("**/" then at least
+#     one character that is neither "*" nor "/"). A CATCH-ALL spelled "**/*"
+#     would otherwise strip to "*" and then be reduced to the empty string by
+#     the trailing-glob strips below and skipped entirely — turning the
+#     single most permissive include a config can carry into "reaches
+#     nothing", which is how a repo-wide biome `includes: ["**/*"]` would
+#     stop warning altogether. Bare "**/" and "**/**" fall through here for
+#     the same reason and reach the catch-all handling below;
+#   - a stripped entry keeps its DEPTH match via the "*/" alternatives in the
+#     case below. "**/adapters/" means "adapters at any depth" and must still
+#     read as covering ".harness/adapters"; before the strip existed it did,
+#     accidentally, because "**" survived into the pattern as "*". Dropping
+#     that would move coverage rather than widen it — and in the biome
+#     direction (see _10e_biome_included, same shape) an entry that stops
+#     matching reads as "not reached", i.e. silence where the formatter
+#     really would rewrite the path.
 _10e_covers() {
-    local _entries="$1" _path="$2" _e
+    local _entries="$1" _path="$2" _e _dd
     while IFS= read -r _e; do
         [ -n "$_e" ] || continue
         _e=${_e#\!}
         _e=${_e#./}
         _e=${_e#/}
         _e=$(printf '%s' "$_e" | tr -d "\"'")
+        _dd=0
+        while :; do
+            case "$_e" in
+                '**/'*[!*/]*) _dd=1; _e=${_e#\*\*/} ;;
+                *) break ;;
+            esac
+        done
         _e=${_e%/\*\*}
         _e=${_e%/\*}
         _e=${_e%\*}
@@ -103,10 +134,17 @@ _10e_covers() {
         # character "*" — that is the whole point of stripping the glob
         # noise above. Quoting it (shellcheck's usual SC2254 advice) would
         # make a repo-wide "**" include silently never reach any path.
-        # shellcheck disable=SC2254
-        case "$_path" in
-            $_e|$_e/*) return 0 ;;
-        esac
+        if [ "$_dd" = "1" ]; then
+            # shellcheck disable=SC2254
+            case "$_path" in
+                $_e|$_e/*|*/$_e|*/$_e/*) return 0 ;;
+            esac
+        else
+            # shellcheck disable=SC2254
+            case "$_path" in
+                $_e|$_e/*) return 0 ;;
+            esac
+        fi
     done <<EOF
 $_entries
 EOF
@@ -170,6 +208,63 @@ done
 for _10e_prov in ${AGENT_PROVIDERS:-}; do
     _10e_add_kit_path "$_10e_prov/agents"
 done
+
+# A nested checkout of this repo holds a SECOND copy of every kit path above,
+# and every exclusion mechanism in this check is path-anchored: a pattern with
+# an interior slash ("scripts/harness/", "!scripts/harness/**", an
+# '^scripts/harness/' regex) matches the root copy only. The reproduced case
+# is Claude Code's worktree feature — .claude/worktrees/<name>/ is a full
+# working copy kept out of Git via .git/info/exclude, which no formatter
+# reads — so the formatter descends in, rewrites the pinned/generated files
+# there, and the worktree's own check-drift hard-fails on an otherwise clean
+# tree. Surfaced ONLY when the directory exists: a repo that has never made a
+# worktree has nothing to exclude, and a WARN-only check must stay silent when
+# it is not applicable. The hint rides along on every branch's warning below,
+# because the fix differs per tool and none of them is prettier-specific.
+#
+# ACCEPTED FALSE POSITIVE: prettier also honors .gitignore, so a repo that
+# gitignores .claude/worktrees/ is already covered and will still be warned
+# here, because the prettier branch reads .prettierignore only. Consulting
+# .gitignore too would silence that — but if the premise is wrong for the
+# reader's prettier version, the same change silences a warning that IS due,
+# and this check's whole design is that a false positive costs noise while a
+# false negative costs a broken integrity pin. Noise is the side to err on.
+_10e_nested=0
+if [ -d "$ROOT/.claude/worktrees" ]; then
+    _10e_add_kit_path ".claude/worktrees"
+    _10e_nested=1
+fi
+
+# _10e_nested_note <tool-specific remedy> — the nested-checkout clause for one
+# branch's warning, or nothing at all when this repo has no worktree directory.
+# The REASON is shared; the REMEDY belongs to the caller, because #10e's
+# governing rule (see the header above) is that no exclusion mechanism here is
+# interchangeable with another: a leading '**/' is meaningful in a
+# .prettierignore glob and meaningless in a pre-commit 'exclude:' regex, where
+# '**' has nothing to repeat. One hardcoded prettier remedy pasted onto all
+# four branches would be the exact "pointing a biome user at .prettierignore"
+# error this check was written to avoid. The note also says plainly that
+# .claude/worktrees/ is NOT kit-owned — it pins no file of its own and only
+# appears in the missing-path list because a formatter must not descend into
+# the copies it holds.
+_10e_nested_note() {
+    [ "$_10e_nested" = "1" ] || return 0
+    # $2, when the caller has one, is that branch's missing-path list. The
+    # note explains ONE path, so it must not ride along on a warning that
+    # names only others -- telling a reader to exclude a directory they
+    # already excluded, about an entry not in the list they were just shown,
+    # is how a correct warning starts reading as boilerplate. The
+    # no-.prettierignore branch passes no list because everything is missing
+    # there by definition.
+    if [ "$#" -ge 2 ]; then
+        case "$2" in
+            *".claude/worktrees"*) ;;
+            *) return 0 ;;
+        esac
+    fi
+    printf '%s' ". Note .claude/worktrees/ is not kit-owned: it holds full nested checkouts of this repo, and every exclusion mechanism here is path-anchored, so a pattern with an interior slash never matches the kit-owned copies inside one — $1"
+}
+
 _10e_kit_paths=$(printf '%s\n' "$_10e_kit_paths" | sed '/^$/d')
 _10e_kit_list=$(printf '%s' "$_10e_kit_paths" | tr '\n' ' ')
 
@@ -195,7 +290,7 @@ fi
 [ -f "$ROOT/.prettierignore" ] && _10e_prettier=1
 if [ "$_10e_prettier" = "1" ]; then
     if [ ! -f "$ROOT/.prettierignore" ]; then
-        echo "WARNING: prettier is configured but .prettierignore does not exist — add the harness's kit-owned paths ($_10e_kit_list) to .prettierignore, or prettier will rewrite checksum-pinned/generated files and check-harness's drift check will hard-fail"
+        echo "WARNING: prettier is configured but .prettierignore does not exist — add the harness's kit-owned paths ($_10e_kit_list) to .prettierignore, or prettier will rewrite checksum-pinned/generated files and check-harness's drift check will hard-fail$(_10e_nested_note "exclude that directory itself, or use gitignore's depth-agnostic leading '**/'")"
     else
         # Includes and negations evaluated SEPARATELY, like the biome branch
         # below: a path is covered only if some entry ignores it AND no '!'
@@ -219,7 +314,7 @@ if [ "$_10e_prettier" = "1" ]; then
 $_10e_kit_paths
 EOF
         [ -n "$_10e_missing" ] \
-            && echo "WARNING: .prettierignore does not cover kit-owned path(s):$_10e_missing — prettier will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail; add them to .prettierignore"
+            && echo "WARNING: .prettierignore does not cover kit-owned path(s):$_10e_missing — prettier will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail; add them to .prettierignore$(_10e_nested_note "exclude that directory itself, or use gitignore's depth-agnostic leading '**/'" "$_10e_missing")"
     fi
 fi
 
@@ -240,7 +335,7 @@ fi
 # never mentions <path> (e.g. a repo scoped to "src/**" only) must default to
 # NOT reached, not the other way around.
 _10e_biome_included() {
-    local _entries="$1" _path="$2" _e _neg _included=0
+    local _entries="$1" _path="$2" _e _neg _dd _included=0
     while IFS= read -r _e; do
         [ -n "$_e" ] || continue
         case "$_e" in
@@ -251,15 +346,32 @@ _10e_biome_included() {
         _e=${_e#./}
         _e=${_e#/}
         _e=$(printf '%s' "$_e" | tr -d "\"'")
+        # Same two-sided narrowness as _10e_covers above, and it matters more
+        # here: this function decides whether biome REACHES a path, so an
+        # entry that wrongly stops matching produces silence, not noise.
+        _dd=0
+        while :; do
+            case "$_e" in
+                '**/'*[!*/]*) _dd=1; _e=${_e#\*\*/} ;;
+                *) break ;;
+            esac
+        done
         _e=${_e%/\*\*}
         _e=${_e%/\*}
         _e=${_e%\*}
         _e=${_e%/}
         [ -n "$_e" ] || continue
-        # shellcheck disable=SC2254
-        case "$_path" in
-            $_e|$_e/*) [ "$_neg" = "1" ] && _included=0 || _included=1 ;;
-        esac
+        if [ "$_dd" = "1" ]; then
+            # shellcheck disable=SC2254
+            case "$_path" in
+                $_e|$_e/*|*/$_e|*/$_e/*) [ "$_neg" = "1" ] && _included=0 || _included=1 ;;
+            esac
+        else
+            # shellcheck disable=SC2254
+            case "$_path" in
+                $_e|$_e/*) [ "$_neg" = "1" ] && _included=0 || _included=1 ;;
+            esac
+        fi
     done <<EOF
 $_entries
 EOF
@@ -291,7 +403,7 @@ if [ -n "$_10e_biome_cfg" ]; then
 $_10e_kit_paths
 EOF
                 [ -n "$_10e_missing" ] \
-                    && echo "WARNING: $_10e_rel's files.includes/formatter.includes reaches kit-owned path(s):$_10e_missing without an ordered '!' negation excluding them — add e.g. \"!scripts/harness/**\" after the including entry, or biome will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail"
+                    && echo "WARNING: $_10e_rel's files.includes/formatter.includes reaches kit-owned path(s):$_10e_missing without an ordered '!' negation excluding them — add e.g. \"!scripts/harness/**\" after the including entry, or biome will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail$(_10e_nested_note "add \"!.claude/worktrees/**\" after the including entry" "$_10e_missing")"
             fi
         fi
     fi
@@ -323,7 +435,7 @@ if [ -n "$_10e_dprint_cfg" ]; then
 $_10e_kit_paths
 EOF
             [ -n "$_10e_missing" ] \
-                && echo "WARNING: $_10e_rel's \"includes\" reaches kit-owned path(s):$_10e_missing not listed in its \"excludes\" — add them to \"excludes\", or dprint will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail"
+                && echo "WARNING: $_10e_rel's \"includes\" reaches kit-owned path(s):$_10e_missing not listed in its \"excludes\" — add them to \"excludes\", or dprint will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail$(_10e_nested_note "add \".claude/worktrees/**\" to \"excludes\"" "$_10e_missing")"
         fi
     fi
 fi
@@ -389,7 +501,7 @@ if [ -n "$_10e_pc_cfg" ]; then
 $_10e_kit_paths
 EOF
             [ -n "$_10e_missing" ] \
-                && echo "WARNING: $_10e_rel runs a formatter hook not scoped by its own 'files:' — no real YAML parser here, so coverage can only be checked against a top-level 'exclude:', which does not demonstrably cover kit-owned path(s):$_10e_missing — pre-commit will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail unless they are actually excluded"
+                && echo "WARNING: $_10e_rel runs a formatter hook not scoped by its own 'files:' — no real YAML parser here, so coverage can only be checked against a top-level 'exclude:', which does not demonstrably cover kit-owned path(s):$_10e_missing — pre-commit will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail unless they are actually excluded$(_10e_nested_note "extend the exclude: regex, e.g. (^|/)[\\].claude/worktrees/ — note a glob '**/' is meaningless in a regex" "$_10e_missing")"
         fi
     fi
 fi

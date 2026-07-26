@@ -59,7 +59,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 # only cover a missing conf.
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 # shellcheck source=/dev/null
-[ -f "$ROOT/scripts/harness/harness.conf" ] && . "$ROOT/scripts/harness/harness.conf"
+[ -f "$ROOT/scripts/harness/harness.conf" ] && . "$ROOT/scripts/harness/harness.conf" 2>/dev/null
 SECRET_ALLOW_PATTERNS="${SECRET_ALLOW_PATTERNS:-.env.example .env.sample .env.dist .env.testing *.example}"
 SECRET_PATTERNS="${SECRET_PATTERNS:-.env .env.* auth.json credentials.json *.pem id_rsa id_ed25519 id_ecdsa id_dsa .git-credentials *.ppk *.jks}"
 

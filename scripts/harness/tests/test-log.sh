@@ -71,5 +71,39 @@ else
     fail "concurrent appends lost or interleaved event rows"
 fi
 
+# --- hook_log resolves the repo root from lib.sh, not from the caller -------
+# The default log path is "$root/.harness/var/log.jsonl", and $root used to be
+# computed as dirname($0)/../../.. -- three levels up from the CALLING hook.
+# That is right for the kit's own guards at scripts/harness/hooks/<name>.sh
+# and wrong for a tailored policy hook at .harness/hooks/<name>.sh (two levels
+# down, the home ADR 010 documents): those resolved the repo's PARENT and
+# wrote a stray .harness/var/ NEXT TO the repo. It fails open, so the only
+# symptom was missing telemetry. The fixture root is nested two deep inside
+# $WORK so "one level too high" still lands inside $WORK and is caught by the
+# assertion rather than escaping into the temp dir at large.
+HL="$WORK/hooklog/repo"
+mkdir -p "$HL/scripts/harness/hooks" "$HL/scripts/harness/lib" "$HL/.harness/hooks"
+cp "$SCRIPTS_DIR/../hooks/lib.sh" "$HL/scripts/harness/hooks/lib.sh"
+cp "$SCRIPTS_DIR/log-lib.sh" "$HL/scripts/harness/lib/log-lib.sh"
+cat > "$HL/.harness/hooks/policy.sh" <<'HOOKEOF'
+#!/usr/bin/env bash
+set -uo pipefail
+. "$(dirname "$0")/../../scripts/harness/hooks/lib.sh" 2>/dev/null || exit 0
+hook_log advise policy.sh detail
+HOOKEOF
+chmod +x "$HL/.harness/hooks/policy.sh"
+( cd "$HL" && ./.harness/hooks/policy.sh >/dev/null 2>&1 )
+if [ -f "$HL/.harness/var/log.jsonl" ] \
+    && jq -e 'select(.version == 2 and .event == "advise")' "$HL/.harness/var/log.jsonl" >/dev/null 2>&1; then
+    pass "hook_log from a .harness/hooks/ hook writes inside the repo"
+else
+    fail "hook_log from a .harness/hooks/ hook did not write $HL/.harness/var/log.jsonl"
+fi
+if [ -e "$WORK/hooklog/.harness" ] || [ -e "$WORK/.harness" ]; then
+    fail "hook_log created a stray .harness/ ABOVE the repo root (the escape this pins)"
+else
+    pass "hook_log creates nothing above the repo root"
+fi
+
 if [ "$fails" -gt 0 ]; then echo "FAILED: $fails log test(s)"; exit 1; fi
 echo "OK: log writer tests passed"
