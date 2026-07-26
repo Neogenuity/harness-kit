@@ -74,16 +74,18 @@ docs live in `.harness/agents/`:
 
 ## Quality Gates
 
-The ordered gates live in **`scripts/harness/verify`** — the executable definition
-of "done". Run it before any task is complete:
+The gate list lives in **`.harness/gates.conf`**, executed by the kit-owned
+runner **`scripts/harness/verify`** — the executable definition of "done".
+Run it before any task is complete:
 
 ```bash
 bash scripts/harness/verify          # every gate (format, lint, typecheck, tests)
 bash scripts/harness/verify --fast   # fast gates only (formatter/linter)
 ```
 
-Edit the gates in that script, never here — this doc points, the script
-defines.
+Edit the gates in `.harness/gates.conf`, never here and never in the runner —
+this doc points, the config declares, the runner executes. `verify` is
+checksum-pinned mechanism; `check-harness` (#9a) fails on a local edit to it.
 
 ## Security Checklist
 

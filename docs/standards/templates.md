@@ -8,7 +8,12 @@ mechanical ones.
 ## Every guard ships with a regression test
 
 A new or changed hook under `templates/scripts/harness/hooks/` gets a matching
-`test-<name>.sh` beside it, runnable standalone. A guard without a test is a
+`test-<name>.sh` in `templates/scripts/harness/tests/`, runnable standalone.
+Put it there and nowhere else: the gate that runs these is a `parallel-each`
+over `templates/scripts/harness/tests/test-*.sh` (and, for adopters,
+`scripts/harness/tests/test-*.sh`), so a test written beside the hook is a test
+no gate ever globs — the silent failure this rule exists to prevent. A guard
+without a test is a
 future silent failure — the hook will break on some payload shape and nobody
 will notice, because hooks fail open by design. CI runs every template test;
 the stop-hook warns when a template change touches no test.

@@ -123,7 +123,7 @@ _harness_path_sane() {
 # just the first) and returns 1 if any; 0 on a clean contract.
 harness_validate_ship_contract() {
     local kmf="$1" src="$2" layer path rest field val lineno=0 bad=0
-    local dests="" srcrel srcfile dup
+    local dests="" srcrel srcfile dup dup_read
     if [ ! -f "$kmf" ]; then
         echo "ERROR: kit-manifest: $kmf is missing — not a valid install source" >&2
         return 1
@@ -181,12 +181,21 @@ harness_validate_ship_contract() {
     done < "$kmf"
     dup=$(printf '%s' "$dests" | sort | uniq -d)
     if [ -n "$dup" ]; then
+        # Process substitution, not a here-doc: bash backs a here-doc with a
+        # temp file (bash 3.2: $TMPDIR, then the CWD), and with neither
+        # writable the redirection fails and `set -uo pipefail` without `set -e`
+        # skips the loop entirely. `bad=1` sits outside the loop so the verdict
+        # survives either way, but the operator would be told a duplicate exists
+        # without being told WHICH — so the counter reports the lost detail
+        # instead of leaving a bare, unactionable failure.
+        dup_read=0
         while IFS= read -r path; do
+            dup_read=$((dup_read + 1))
             [ -n "$path" ] || continue
             echo "ERROR: kit-manifest: destination '$path' is declared more than once (duplicate entry, colliding content dest=, or a shipped+retired conflict) — one declaration per installed path" >&2
-        done <<KDUP
-$dup
-KDUP
+        done < <(printf '%s\n' "$dup")
+        [ "$dup_read" -gt 0 ] \
+            || echo "ERROR: kit-manifest declares a duplicate destination, but the loop that names it could not be fed its input — re-run; if it persists, the temp/file-descriptor state that redirections depend on is broken" >&2
         bad=1
     fi
     return "$bad"
@@ -406,7 +415,7 @@ harness_append_gitignore() {
 # `bootstrap update --formatter-ignore` adds the new forms and leaves the
 # already-present plain ones (harmless subsets) alone.
 harness_append_formatterignore() {
-    local pi="$1/.prettierignore" marker entries entry missing tmp
+    local pi="$1/.prettierignore" marker entries entry missing tmp entries_read
     marker='# harness-kit: kit-owned mechanism + generated stubs — do not reformat'
     entries='.claude/worktrees/
 **/scripts/harness/
@@ -434,15 +443,27 @@ harness_append_formatterignore() {
     missing=""
     if [ -f "$pi" ]; then
         grep -qxF "$marker" "$pi" || missing="$marker"
+        # Process substitution, not a here-doc. A here-doc needs a temp file
+        # (bash 3.2: $TMPDIR, then the CWD); with neither writable the
+        # redirection fails and, under `set -uo pipefail` without `set -e`, the
+        # loop is skipped. This loop is the ONLY thing that discovers missing
+        # entry lines, so the skip left `missing` empty, the early return below
+        # reported success, and the ignore block was never healed — the healing
+        # this function exists for, silently not happening. The counter makes
+        # that state loud and nonzero instead.
+        entries_read=0
         while IFS= read -r entry; do
+            entries_read=$((entries_read + 1))
             [ -n "$entry" ] || continue
             if ! grep -qxF "$entry" "$pi"; then
                 missing="${missing:+$missing
 }$entry"
             fi
-        done <<ENTRIES
-$entries
-ENTRIES
+        done < <(printf '%s\n' "$entries")
+        if [ "$entries_read" -eq 0 ]; then
+            echo "ERROR: harness: could not read the required $pi entry list — the shell could not deliver the loop its input, so a missing entry would have gone undetected and this run would have reported success. Re-run; if it persists, the temp/file-descriptor state that redirections depend on is broken" >&2
+            return 1
+        fi
     else
         missing="$marker
 $entries"

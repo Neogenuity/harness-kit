@@ -115,13 +115,18 @@ if [ -f "$ROOT/$MATRIX_DOC" ]; then
         echo "WARNING: $MATRIX_DOC has tables but no 'verified <date>' stamps — its facts carry no freshness marker"
     fi
     if [ -n "$_thresh" ]; then
+        # Process substitution + a consumption counter rather than a
+        # here-string: see assert_loop_ran in check-common.sh.
+        _stamps_read=0
         while IFS= read -r _s; do
+            _stamps_read=$((_stamps_read + 1))
             [ -n "$_s" ] || continue
             case "$_s" in ????-??) _cmp="${_s}-01" ;; *) _cmp="$_s" ;; esac
             if [[ "$_cmp" < "$_thresh" ]]; then
                 echo "WARNING: $MATRIX_DOC has a 'verified $_s' stamp older than $MATRIX_STALE_DAYS days — re-verify those facts against their primary docs and restamp"
             fi
-        done <<< "$_stamps"
+        done < <(printf '%s\n' "$_stamps")
+        assert_loop_ran "$_stamps_read" "verification-stamp freshness check #10c for $MATRIX_DOC"
     fi
 fi
 

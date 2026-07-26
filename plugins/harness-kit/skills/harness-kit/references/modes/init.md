@@ -421,9 +421,10 @@ doctor keeps WARNing on the same condition on every later run (check #10).
    `log.status: no_data`, zero parser counters, empty gate/retry/deny sections,
    and review count zero. Git/eval sections remain independently derived. Then
    require `bash scripts/harness/verify` and `bash scripts/harness/check-harness` to pass;
-   each `scripts/harness/hooks/test-*.sh` passes standalone; run `bash scripts/harness/tests/test-log.sh`,
+   each `scripts/harness/tests/test-*.sh` passes standalone — including
+   `bash scripts/harness/tests/test-log.sh`,
    `bash scripts/harness/tests/test-audit-log.sh`, and `bash scripts/harness/tests/test-doc-garden.sh`
-   directly; feed `guard-secrets.sh` a real payload for the repo's
+   run directly; feed `guard-secrets.sh` a real payload for the repo's
    own `.env` and `guard-config.sh` one for `scripts/harness/hooks/lib.sh`, confirm
    exit 2 for both; repeat both with Codex-shaped payloads (an apply_patch
    envelope in `tool_input.command` — crib the builders from

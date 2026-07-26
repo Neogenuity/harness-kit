@@ -145,6 +145,12 @@ _10e_covers() {
                 $_e|$_e/*) return 0 ;;
             esac
         fi
+    # DELIBERATELY still a here-doc (see assert_loop_ran in check-common.sh):
+    # this loop returns on the first covering entry, and process substitution
+    # would leave the `printf` writer taking an EPIPE under an inherited-ignored
+    # SIGPIPE. Losing this loop fails CLOSED — "not covered", which its callers
+    # turn into a WARNING — so it cannot produce the silent pass the converted
+    # loops below could.
     done <<EOF
 $_entries
 EOF
@@ -154,8 +160,9 @@ EOF
 # _10e_formatter_parseable <path> — true if <path>'s extension is one a
 # repo-wide formatter (prettier/biome/dprint/a pre-commit formatter hook)
 # could plausibly rewrite. A real adopter's .harness-manifest is mostly
-# scripts/*.sh entries (shell has no formatter in this set that parses it at
-# all) plus a couple of non-code files (e.g. .harness/gates.conf); passing
+# scripts/harness/**/*.sh entries (shell has no formatter in this set that
+# parses it at all) plus a couple of non-code files
+# (e.g. .harness/gates.conf); passing
 # every entry through verbatim turned the manifest-derived half of this check
 # into permanent, unfixable noise — .sh paths no .prettierignore/.pre-commit
 # exclude could ever cover with a formatter that doesn't touch shell.
@@ -189,7 +196,15 @@ $1" ;;
     esac
 }
 if [ -f "$MANIFEST" ]; then
+    # Every loop from here to the end of #10e reads through process
+    # substitution and asserts it consumed its input — see assert_loop_ran in
+    # check-common.sh. This one feeds the kit-path set the four formatter
+    # branches below all compare against, so losing it does not merely drop one
+    # warning: it silently narrows what every branch checks.
+    _10e_pins=$(awk '$1 ~ /^[0-9a-fA-F]{64}$/ {print $2}' "$MANIFEST" 2>/dev/null)
+    _10e_pins_read=0
     while IFS= read -r _10e_p; do
+        _10e_pins_read=$((_10e_pins_read + 1))
         [ -n "$_10e_p" ] || continue
         _10e_formatter_parseable "$_10e_p" || continue
         case "$_10e_p" in
@@ -197,9 +212,8 @@ if [ -f "$MANIFEST" ]; then
             .harness/*) _10e_add_kit_path ".harness" ;;
             *) _10e_add_kit_path "$_10e_p" ;;
         esac
-    done <<EOF
-$(awk '$1 ~ /^[0-9a-fA-F]{64}$/ {print $2}' "$MANIFEST" 2>/dev/null)
-EOF
+    done < <(printf '%s\n' "$_10e_pins")
+    assert_loop_ran "$_10e_pins_read" "kit-owned path collection for formatter check #10e"
 fi
 _10e_add_kit_path ".harness/adapters"
 for _10e_prov in $PROVIDERS; do
@@ -303,16 +317,17 @@ if [ "$_10e_prettier" = "1" ]; then
         _10e_neg=$(printf '%s\n' "$_10e_entries" | grep '^!')
         _10e_inc=$(printf '%s\n' "$_10e_entries" | grep -v '^!')
         _10e_missing=""
+        _10e_read=0
         while IFS= read -r _10e_kp; do
+            _10e_read=$((_10e_read + 1))
             [ -n "$_10e_kp" ] || continue
             if _10e_covers "$_10e_inc" "$_10e_kp" && ! _10e_covers "$_10e_neg" "$_10e_kp"; then
                 :
             else
                 _10e_missing="$_10e_missing $_10e_kp"
             fi
-        done <<EOF
-$_10e_kit_paths
-EOF
+        done < <(printf '%s\n' "$_10e_kit_paths")
+        assert_loop_ran "$_10e_read" ".prettierignore coverage check #10e"
         [ -n "$_10e_missing" ] \
             && echo "WARNING: .prettierignore does not cover kit-owned path(s):$_10e_missing — prettier will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail; add them to .prettierignore$(_10e_nested_note "exclude that directory itself, or use gitignore's depth-agnostic leading '**/'" "$_10e_missing")"
     fi
@@ -334,9 +349,11 @@ fi
 # everything default), so a real, non-catch-all includes list that simply
 # never mentions <path> (e.g. a repo scoped to "src/**" only) must default to
 # NOT reached, not the other way around.
+_10e_biome_reported=0
 _10e_biome_included() {
-    local _entries="$1" _path="$2" _e _neg _dd _included=0
+    local _entries="$1" _path="$2" _e _neg _dd _included=0 _read=0
     while IFS= read -r _e; do
+        _read=$((_read + 1))
         [ -n "$_e" ] || continue
         case "$_e" in
             '!'*) _neg=1 ;;
@@ -372,9 +389,16 @@ _10e_biome_included() {
                 $_e|$_e/*) [ "$_neg" = "1" ] && _included=0 || _included=1 ;;
             esac
         fi
-    done <<EOF
-$_entries
-EOF
+    done < <(printf '%s\n' "$_entries")
+    # No early exit here — biome's LAST matching entry decides, so this loop
+    # must run to the end anyway, which makes it safe to convert. Its silent
+    # failure would be "not included" (no warning at all), so report it — once
+    # per run, not once per kit path, since one broken redirection breaks every
+    # call identically and N copies would bury the finding.
+    if [ "$_read" -eq 0 ] && [ "$_10e_biome_reported" -eq 0 ]; then
+        _10e_biome_reported=1
+        assert_loop_ran "$_read" "biome include/exclude evaluation for check #10e"
+    fi
     [ "$_included" = "1" ]
 }
 
@@ -396,12 +420,13 @@ if [ -n "$_10e_biome_cfg" ]; then
                 _10e_all=$(printf '%s' "$_10e_json" | jq -r '(.formatter.includes // .files.includes // []) | .[]?' 2>/dev/null)
                 [ -z "$_10e_all" ] && _10e_all='**'
                 _10e_missing=""
+                _10e_read=0
                 while IFS= read -r _10e_kp; do
+                    _10e_read=$((_10e_read + 1))
                     [ -n "$_10e_kp" ] || continue
                     _10e_biome_included "$_10e_all" "$_10e_kp" && _10e_missing="$_10e_missing $_10e_kp"
-                done <<EOF
-$_10e_kit_paths
-EOF
+                done < <(printf '%s\n' "$_10e_kit_paths")
+                assert_loop_ran "$_10e_read" "$_10e_rel formatter-coverage check #10e"
                 [ -n "$_10e_missing" ] \
                     && echo "WARNING: $_10e_rel's files.includes/formatter.includes reaches kit-owned path(s):$_10e_missing without an ordered '!' negation excluding them — add e.g. \"!scripts/harness/**\" after the including entry, or biome will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail$(_10e_nested_note "add \"!.claude/worktrees/**\" after the including entry" "$_10e_missing")"
             fi
@@ -426,14 +451,15 @@ if [ -n "$_10e_dprint_cfg" ]; then
             _10e_exc=$(printf '%s' "$_10e_json" | jq -r '.excludes // [] | .[]?' 2>/dev/null)
             [ -z "$_10e_inc" ] && _10e_inc='**'
             _10e_missing=""
+            _10e_read=0
             while IFS= read -r _10e_kp; do
+                _10e_read=$((_10e_read + 1))
                 [ -n "$_10e_kp" ] || continue
                 if _10e_covers "$_10e_inc" "$_10e_kp"; then
                     _10e_covers "$_10e_exc" "$_10e_kp" || _10e_missing="$_10e_missing $_10e_kp"
                 fi
-            done <<EOF
-$_10e_kit_paths
-EOF
+            done < <(printf '%s\n' "$_10e_kit_paths")
+            assert_loop_ran "$_10e_read" "$_10e_rel formatter-coverage check #10e"
             [ -n "$_10e_missing" ] \
                 && echo "WARNING: $_10e_rel's \"includes\" reaches kit-owned path(s):$_10e_missing not listed in its \"excludes\" — add them to \"excludes\", or dprint will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail$(_10e_nested_note "add \".claude/worktrees/**\" to \"excludes\"" "$_10e_missing")"
         fi
@@ -491,15 +517,16 @@ if [ -n "$_10e_pc_cfg" ]; then
         if [ "$(_10e_pc_hook_unscoped "$_10e_pc_cfg")" = "1" ]; then
             _10e_global_exclude=$(grep -E '^exclude:' "$_10e_pc_cfg" 2>/dev/null | head -n1)
             _10e_missing=""
+            _10e_read=0
             while IFS= read -r _10e_kp; do
+                _10e_read=$((_10e_read + 1))
                 [ -n "$_10e_kp" ] || continue
                 case "$_10e_global_exclude" in
                     *"$_10e_kp"*) ;;
                     *) _10e_missing="$_10e_missing $_10e_kp" ;;
                 esac
-            done <<EOF
-$_10e_kit_paths
-EOF
+            done < <(printf '%s\n' "$_10e_kit_paths")
+            assert_loop_ran "$_10e_read" "$_10e_rel formatter-coverage check #10e"
             [ -n "$_10e_missing" ] \
                 && echo "WARNING: $_10e_rel runs a formatter hook not scoped by its own 'files:' — no real YAML parser here, so coverage can only be checked against a top-level 'exclude:', which does not demonstrably cover kit-owned path(s):$_10e_missing — pre-commit will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail unless they are actually excluded$(_10e_nested_note "extend the exclude: regex, e.g. (^|/)[\\].claude/worktrees/ — note a glob '**/' is meaningless in a regex" "$_10e_missing")"
         fi

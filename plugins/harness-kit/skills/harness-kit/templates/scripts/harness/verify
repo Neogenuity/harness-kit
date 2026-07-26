@@ -269,10 +269,27 @@ wait_parallel_gates() {
 # command (with its internal spacing) in cmdstr.
 while IFS= read -r _line; do
     case "$_line" in ''|\#*) continue ;; esac
-    kind=""; label=""; cmdstr=""
-    read -r kind label cmdstr <<LINE
-$_line
-LINE
+    # Split with parameter expansion, NOT `read <<LINE`. A here-doc needs a
+    # temp file (bash 3.2: $TMPDIR, then a CWD fallback), and a failed
+    # redirection under `set -uo pipefail` without `set -e` skips the read and
+    # leaves all three fields empty — which the check below would then report as
+    # a MALFORMED gates.conf line, blaming the repo's config for the
+    # environment. The `cd "$ROOT"` above means the CWD fallback normally saves
+    # it, so this is narrower than the fail-open class in the check families
+    # (and fails closed, not open); a read-only checkout plus an unwritable
+    # $TMPDIR is still enough to produce the misleading diagnostic. Expansion
+    # needs no temp file at all. Same field semantics as
+    # `read -r kind label cmdstr`: leading whitespace skipped, first two
+    # whitespace-delimited words split off, the remainder — internal spacing
+    # intact, trailing whitespace stripped — left in cmdstr.
+    _rest=${_line#"${_line%%[![:space:]]*}"}
+    kind=${_rest%%[[:space:]]*}
+    _rest=${_rest#"$kind"}
+    _rest=${_rest#"${_rest%%[![:space:]]*}"}
+    label=${_rest%%[[:space:]]*}
+    _rest=${_rest#"$label"}
+    cmdstr=${_rest#"${_rest%%[![:space:]]*}"}
+    cmdstr=${cmdstr%"${cmdstr##*[![:space:]]}"}
     if [ -z "$kind" ] || [ -z "$label" ] || [ -z "$cmdstr" ]; then
         echo "FAIL: malformed .harness/gates.conf line (want '<kind> <label> <command...>'): '$_line'" >&2
         exit 1

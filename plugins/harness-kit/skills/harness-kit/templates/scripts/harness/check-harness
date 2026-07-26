@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check-harness — the full harness coherence check: runs every check family
 # (instructions, docs, plan, tests, drift, doctor) and owns the combined
-# summary. CI and the smoke test call THIS; each family is also a standalone
+# summary. CI and the verify harness gate call THIS; each family is also a standalone
 # command (check-instructions, check-docs, validate-plan, detect-drift; the
 # tests and doctor families run only here).
 # Exit code: 0 if all checks pass, 1 otherwise.

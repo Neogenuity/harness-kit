@@ -934,6 +934,27 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
     printf 'node_modules/\n' > "$W/.prettierignore"
     assert_warns "10e: prettier's .prettierignore missing a kit path warns" "$W" "scripts/harness"
 
+    # (b2) the same fixture with nowhere to write a here-doc temp file. #10e
+    # only ever WARNs, so a skipped loop cost no exit code — it just deleted
+    # the warning, which is the quieter half of the same defect the drift
+    # family hit in #9c. Post-fix the loop either runs (warning) or says it
+    # could not (ERROR); it can no longer produce neither.
+    W=$(new_10e_fixture)
+    : > "$W/.prettierrc"
+    printf 'node_modules/\n' > "$W/.prettierignore"
+    _notemp="$W/no-writable-temp"
+    mkdir -p "$_notemp" && chmod 500 "$_notemp"
+    _fo_out=$(cd "$_notemp" && TMPDIR="$_notemp" bash "$W/scripts/harness/lib/check-doctor.sh" 2>&1); _fo_rc=$?
+    chmod 700 "$_notemp"
+    if has "$_fo_out" "does not cover kit-owned path" || has "$_fo_out" "did not run"; then
+        echo "ok:   10e: an unbackable redirection cannot silence the formatter-coverage check"
+    else
+        echo "FAIL: 10e failed OPEN with no writable temp dir — expected the coverage WARNING or the did-not-run ERROR, got neither (exit $_fo_rc)"
+        printf '%s\n' "$_fo_out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W"
+
     # (c) prettier: fully-ignored configuration -> no warning
     W=$(new_10e_fixture)
     : > "$W/.prettierrc"
@@ -1323,6 +1344,36 @@ JSON
     W=$(new_hookwired_fixture)
     jq 'del(.hooks)' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
     assert_flags "8d: hooks object deleted (headline repro) is flagged" "$W" "guard session-context.sh is not wired in .claude/settings.json"
+
+    # The same headline repro, but with nowhere to write a here-doc's temp
+    # file. Bash 3.2 puts that file in $TMPDIR and falls back to the CWD; with
+    # neither writable the redirection fails, and `set -uo pipefail` without
+    # `set -e` skips the whole compound command. The tuple loop is #8d's ONLY
+    # error source, so the here-doc form validated ZERO guards and said nothing
+    # about it — the check that proves the hooks are wired at all, silently not
+    # running. Reproduced live in two adopter repos on 2026-07-26 (11 "cannot
+    # create temp file for here document" lines, exit 0). Process substitution
+    # needs no temp file; the consumption counter turns a lost input into an
+    # ERROR. Either outcome is correct — silence is not.
+    # (github.com/Neogenuity/harness-kit/issues/15)
+    W=$(new_hookwired_fixture)
+    jq 'del(.hooks)' "$W/.claude/settings.json" > "$W/.claude/s" && mv "$W/.claude/s" "$W/.claude/settings.json"
+    _notemp="$W/no-writable-temp"
+    mkdir -p "$_notemp" && chmod 500 "$_notemp"
+    # check-instructions.sh takes its ROOT from $0 and opens no temp file of
+    # its own, so the CWD here only supplies the here-doc fallback.
+    _fo_out=$(cd "$_notemp" && TMPDIR="$_notemp" bash "$W/scripts/harness/lib/check-instructions.sh" 2>&1); _fo_rc=$?
+    chmod 700 "$_notemp"
+    if [ "$_fo_rc" != "0" ] \
+        && { has "$_fo_out" "guard session-context.sh is not wired in .claude/settings.json" \
+             || has "$_fo_out" "check #8d for .claude/settings.json did not run"; }; then
+        echo "ok:   8d: an unbackable redirection cannot silence the hook-wiring check"
+    else
+        echo "FAIL: 8d failed OPEN with no writable temp dir — expected a nonzero exit naming the unwired guard or the did-not-run ERROR, got exit $_fo_rc"
+        printf '%s\n' "$_fo_out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W"
 
     W=$(new_hookwired_fixture); rm "$W/.cursor/hooks.json"
     assert_flags "8d: a declared provider's deleted config is flagged" "$W" "hook config .cursor/hooks.json is missing"

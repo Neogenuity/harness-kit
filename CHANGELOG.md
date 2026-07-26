@@ -82,6 +82,177 @@ All notable changes to harness-kit. The version is defined in
   every one of those exclusion mechanisms is path-anchored and none is
   interchangeable with `.prettierignore`.
 
+## 0.36.0 — 2026-07-26
+
+### Fixed
+
+- **The here-doc fail-open is closed across every check family, not just
+  `check-drift`** ([#15](https://github.com/Neogenuity/harness-kit/issues/15)).
+  v0.34.0 fixed the three loops in `check-drift.sh` the issue named and recorded
+  the other 19 as deferred; the promotion trigger fired the same day. Both
+  first-adopter repos reproduced the failure live: in one,
+  `lib/check-instructions.sh` emitted 11 `cannot create temp file for here
+  document: Operation not permitted` errors — six of them from line 441, the
+  **#8d hook-wiring validator** — and exited 0. That check is what proves the
+  guards are wired at all, so a harness with its entire `hooks` object deleted
+  passed. `check-drift.sh` printed `OK: drift checks passed` the same way.
+
+  All 16 of those loops that run to completion now read through process
+  substitution (no temp file, byte-identical input) and assert they actually
+  consumed it, via a new shared `assert_loop_ran` in `lib/check-common.sh` that
+  carries the whole rationale in one place: `check-instructions.sh` #7, #8c
+  (inventory pins and per-server audit), #8d (tuple coverage and command
+  resolvability) and #8g; `check-doctor.sh` #10e (kit-path collection, prettier,
+  biome, dprint, pre-commit); `check-docs.sh` #10c; `install-lib.sh`
+  (ship-contract duplicate reporting, and the `.prettierignore` heal — where a
+  skipped loop reported success without writing the block it exists to write);
+  and `eval-harness.sh`'s results table. The kit's own `test-install-core.sh`
+  and `test-shipped-doc-refs.sh` had the same shape and printed `ok` / `all
+  checks passed` without examining a single path; both now assert their scans
+  ran.
+
+  Adopters get their own coverage: a new shipped floor test,
+  `scripts/harness/tests/test-check-loops.sh`, asserts that `assert_loop_ran`
+  behaves, that a real family run with no writable `$TMPDIR` **and** no writable
+  CWD does not go silent, and — the durable guard — that **every** surviving
+  here-doc-fed reader carries a comment marking its retention deliberate. That
+  last check is what stops the class from growing back one site at a time; it
+  fails against the pre-fix tree listing all 20 unmarked sites (the 19 loops
+  plus `verify`'s single `read`). It scans
+  `lib/`, `hooks/`, `tests/` and the extensionless entry points, and matches
+  single `read ... <<` as well as `done <<` — a narrower first cut, limited to
+  `done <<` in `lib/` and `hooks/`, could not see the `verify` defect below.
+  Files the repo owns (`# tailored`, or locally drifted from their pin) are
+  reported as a note rather than failed, because update mode deliberately does
+  not replace those: hard-failing there would be a demand no upgrade can
+  satisfy. Three more cases in the maintainer suite pin the families end to end
+  (#9c, #8d, #10e), and one covers the `.prettierignore` heal returning success
+  without healing.
+
+- **`verify` could blame your `gates.conf` for an unwritable temp dir.** The
+  gate runner split each config line with `read -r kind label cmdstr <<LINE`.
+  When that redirection fails all three fields stay empty, and the very next
+  check reports `FAIL: malformed .harness/gates.conf line` — naming a
+  well-formed line and exiting before a single gate runs. This is narrower than
+  the fail-open class above (it fails *closed*, and `verify` chdirs to the repo
+  root first, so the CWD fallback normally covers it — a read-only checkout plus
+  an unwritable `$TMPDIR` is what it takes) but the diagnostic sends you to
+  audit a config file that was never the problem. Now split with plain parameter
+  expansion, which needs no temp file at all; verified field-for-field identical
+  to `read` across every line of this repo's `gates.conf` and the whitespace
+  edge cases.
+
+  Five loops deliberately stay on here-docs: they `return` on the first match,
+  where process substitution would expose the `printf` writer to the
+  ignored-SIGPIPE phantom failure this repo hit twice. Every one of them fails
+  **closed** — a lost redirection makes them report "not found" or run no
+  formatter, never a false pass. Each site says so in a comment, and
+  `docs/plans/tech-debt.md` records the class with a promotion trigger.
+
+  **Migration:** update mode replaces `lib/check-common.sh`,
+  `lib/check-instructions.sh`, `lib/check-doctor.sh`, `lib/check-docs.sh`,
+  `lib/install-lib.sh`, `lib/eval-harness.sh`, `hooks/format.sh`, and `verify`,
+  and adds `tests/test-check-loops.sh` to the shipped floor. No config change.
+
+  If you have tailored (`# tailored`) or locally drifted any of those files,
+  update keeps your copy — `harness_update_decision` returns `diff` for both
+  cases — while still installing the new floor test. Your build will **not**
+  break: the new test reports repo-owned files as a note rather than a failure,
+  precisely because upgrading cannot fix a file the upgrade does not touch. You
+  should still port the pattern by hand, and note that the helper it needs
+  (`assert_loop_ran`) lives in `check-common.sh`, which may itself be in your
+  not-replaced set. The failure this closes is silent by construction, so a
+  tailored copy gives no outward sign of still having it.
+
+## 0.35.0 — 2026-07-26
+
+Stale shipped text, and the maintainer gate that should have caught it. Both
+first adopters independently hand-corrected the same `AGENTS.md` sentence
+before anyone reported it — that duplication is what surfaced the class. Every
+prose fix here ships into adopting repos; none of them changes behaviour.
+
+### Fixed
+
+- **`AGENTS.md.tmpl` sent adopters to the wrong file to edit their gates.** It
+  said the ordered gates live in `scripts/harness/verify` and to "edit the
+  gates in that script, never here" — wrong since v0.23.0, when the gate list
+  moved to `.harness/gates.conf` and `verify` became checksum-pinned mechanism.
+  An adopter who followed the sentence either hit the config guard or edited
+  the runner and broke their own integrity pin. It now names
+  `.harness/gates.conf` as the gate list, the runner as mechanism, and
+  `check-harness` (#9a) as what rejects a local edit to it.
+
+- **The shipped `gates.conf` promised a floor entry retired two versions
+  earlier.** Its comment described the installed floor as including "the
+  install smoke test"; `test-harness-smoke.sh` left the shipped set in v0.29.0.
+  It now names the floor that actually ships — hook behavioural tests, library
+  and runtime suites, grader validity — and records the retirement.
+
+- **Three further copies of those same two retirements, all shipped.**
+  `references/modes/init.md` told adopters to check that each
+  `scripts/harness/hooks/test-*.sh` passes standalone, from a directory that
+  has held no tests since the v0.23.0 move to `scripts/harness/tests/`;
+  `check-tests.sh`'s check #6 comment repeated the smoke claim and credited
+  recursion control to the retired `test-harness-smoke.sh`, when the shipped
+  floor's one nested-checker test is `test-eval-graders.sh`, which owns it by
+  exporting `HARNESS_SKIP_TESTS_FAMILY` (`HARNESS_NESTED_FIXTURE` is read by no
+  shipped mechanism at all); and `check-harness`'s own header said "CI and the
+  smoke test call THIS".
+
+- **`references/fixture-recipe.md` could not build a working fixture.** Its
+  copy block still used the pre-v0.23.0 flat layout, installing the hooks where
+  the checker does not look and omitting `lib/`, which `check-harness` sources.
+  Corrected to the current layout, with an explicit note that this hand-copy
+  exercises the hooks only — a fixture a checker can pass needs `init`. The
+  same file's plan-seeding block lacked a `mkdir` for `.harness/templates`, so
+  its `cp` failed; fixed.
+
+- **`check-doctor.sh` mis-described an adopter's manifest** as "mostly
+  `scripts/*.sh` entries". An installed manifest is essentially all
+  `scripts/harness/**/*.sh`.
+
+### Changed
+
+- **The shipped-doc-refs gate sees glob citations, and can no longer pass
+  without running.** Its token regex stopped dead at `*`, so
+  `scripts/harness/tests/test-*.sh` extracted as nothing — which is why the
+  `init.md` defect above survived the v0.23.0 relocation. Globs now resolve by
+  matching at least one **regular** file (a directory named `test-x.sh` cannot
+  satisfy a citation), and `${VAR}/scripts/…` no longer falls out of the
+  pipeline unchecked. Literals are still read from the whole file, but globs
+  are read from prose only — every line of a `.md`/`.tmpl`/`.conf`, comment
+  lines only in a `.sh` — because a glob in shell code is a loop domain that is
+  allowed to be empty by design, and demanding it match would push
+  `doc-ref-ok:` annotations into shipped mechanism to satisfy a maintainer-only
+  gate. The scanned set gains `templates/scripts/gates.conf`, the
+  `templates/scripts/harness/` runners, the skill's `SKILL.md`, and this repo's
+  own `.harness/gates.conf`.
+
+- **That gate no longer fails open.** Both check loops were here-doc-fed — the
+  issue-#15 class, where bash 3.2 puts the here-doc temp in `$TMPDIR`, falls
+  back to CWD, and from an unwritable directory runs the loop body zero times
+  while still exiting 0. They use process substitution now (neither loop breaks
+  early, so there is no SIGPIPE hazard), and a counter assertion in each pass
+  turns any future silent skip into a failure instead of a green result.
+
+- **Contributor docs stopped misrouting guard tests.** `docs/standards/
+  templates.md` and `CONTRIBUTING.md` said a guard's regression test goes
+  "beside it" under `templates/scripts/harness/hooks/`. Every gate globs
+  `.../harness/tests/test-*.sh`, so a test written beside the hook is a test no
+  gate ever runs — exactly the silent failure that rule exists to prevent.
+
+### Migration
+
+- The mechanism files touched here (`check-harness`, `check-tests.sh`,
+  `check-doctor.sh`) are **replaced** by update mode. Every changed line is a
+  comment, so there is no behaviour change and no work beyond the normal
+  update.
+- `.harness/gates.conf` is a **policy** file — update mode never overwrites it.
+  The corrected floor comment therefore arrives as a proposed diff to accept,
+  not automatically. Adopters who never take it keep a stale comment and a
+  correct gate list.
+
+
 ## 0.34.0 — 2026-07-26
 
 Three defects found by running the kit against a large external repo and by an
