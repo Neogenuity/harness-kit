@@ -386,4 +386,198 @@ else
     fail "copy containment: stage symlink was followed or dest is not a regular file (rc=$rc, victim=$victim_content)" "$out"
 fi
 rm -rf "$R" "$VICT" "$WORK/stagesrc.sh"
+# --- (k) formatterignore: appends the marked block once -----------------------
+# harness_append_formatterignore is the prettier-exclusion counterpart to
+# harness_append_gitignore above, modeled on it directly (see its own comment
+# in install-lib.sh). Assert the marker line and a couple of the listed paths
+# land in a fresh .prettierignore.
+F=$(mktemp -d "$WORK/formatterignore.XXXXXX") || exit 1
+harness_append_formatterignore "$F"
+if [ -f "$F/.prettierignore" ] \
+    && grep -qxF '# harness-kit: kit-owned mechanism + generated stubs — do not reformat' "$F/.prettierignore" \
+    && grep -qxF 'scripts/harness/' "$F/.prettierignore" \
+    && grep -qxF '.claude/skills/' "$F/.prettierignore"; then
+    pass "formatterignore: appends the marked kit-owned block"
+else
+    fail "formatterignore: block missing or incomplete" "$(cat "$F/.prettierignore" 2>/dev/null)"
+fi
+
+# --- (l) formatterignore: idempotent -------------------------------------------
+before=$(sha_of "$F" ".prettierignore")
+harness_append_formatterignore "$F"
+after=$(sha_of "$F" ".prettierignore")
+count=$(grep -cxF '# harness-kit: kit-owned mechanism + generated stubs — do not reformat' "$F/.prettierignore")
+if [ "$before" = "$after" ] && [ "$count" -eq 1 ]; then
+    pass "formatterignore: a second call is a no-op (sha unchanged, one marker line)"
+else
+    fail "formatterignore: a second call changed the file or duplicated the marker (count=$count)"
+fi
+rm -rf "$F"
+
+# --- (m) formatterignore: no-trailing-newline merge safety --------------------
+# Same hazard harness_append_gitignore guards against (case (c) above): a
+# '.prettierignore' lacking a trailing newline must not have the block merge
+# onto its last line (e.g. 'dist' + the marker -> 'dist# harness-kit: ...').
+F=$(mktemp -d "$WORK/formatterignore-nl.XXXXXX") || exit 1
+printf 'dist' > "$F/.prettierignore"
+harness_append_formatterignore "$F"
+if grep -qxF 'dist' "$F/.prettierignore" \
+    && grep -qxF '# harness-kit: kit-owned mechanism + generated stubs — do not reformat' "$F/.prettierignore"; then
+    pass "formatterignore: a no-trailing-newline file gets its own block, not a merge"
+else
+    fail "formatterignore: block merged onto the prior line (or the prior line was lost)" "$(cat "$F/.prettierignore")"
+fi
+rm -rf "$F"
+
+# --- (n) formatterignore: a symlinked destination is refused -------------------
+# `.prettierignore` as a symlink must never be written through: [ -f ] alone
+# follows symlinks, so the old code would happily append the kit's block
+# through a link to an arbitrary path outside the repo. The helper must
+# refuse (nonzero), and the link's target must stay byte-for-byte untouched.
+F=$(mktemp -d "$WORK/formatterignore-symlink.XXXXXX") || exit 1
+VICT=$(mktemp -d "$WORK/formatterignore-symlink-victim.XXXXXX") || exit 1
+printf 'OUTSIDE\n' > "$VICT/target.txt"
+ln -s "$VICT/target.txt" "$F/.prettierignore"
+out=$(harness_append_formatterignore "$F" 2>&1); rc=$?
+victim_content=$(cat "$VICT/target.txt")
+if [ "$rc" -ne 0 ] && [ -L "$F/.prettierignore" ] && [ "$victim_content" = "OUTSIDE" ]; then
+    pass "formatterignore: a symlinked .prettierignore is refused, link target untouched"
+else
+    fail "formatterignore: symlink was followed or its target was modified (rc=$rc, target=$victim_content)" "$out"
+fi
+rm -rf "$F" "$VICT"
+
+# --- (o) formatterignore: a write failure returns nonzero, not silent success --
+# The old code ended in an unconditional `return 0`, so a failed write (full
+# disk, denied permission, ...) was indistinguishable from success. A
+# non-writable destination directory means the staged temp file can never be
+# created; the helper must return nonzero and must leave no .prettierignore
+# behind (same read-only-dir technique test-install-migrate.sh already uses to
+# force a staging failure).
+F=$(mktemp -d "$WORK/formatterignore-nowrite.XXXXXX") || exit 1
+chmod a-w "$F"
+out=$(harness_append_formatterignore "$F" 2>&1); rc=$?
+chmod u+w "$F"
+if [ "$rc" -ne 0 ] && [ ! -e "$F/.prettierignore" ]; then
+    pass "formatterignore: a non-writable destination directory returns nonzero, not a false success"
+else
+    fail "formatterignore: a write failure was reported as success (rc=$rc)" "$out"
+fi
+rm -rf "$F"
+
+# --- (p) formatterignore: a marker-only partial block gets healed ---------------
+# An interrupted run can leave just the marker comment with none of the
+# required entries; the old code treated the marker ALONE as proof of a
+# complete block and returned early forever. A healing call must append every
+# missing entry and must NOT duplicate the marker line.
+F=$(mktemp -d "$WORK/formatterignore-partial.XXXXXX") || exit 1
+printf '%s\n' '# harness-kit: kit-owned mechanism + generated stubs — do not reformat' > "$F/.prettierignore"
+harness_append_formatterignore "$F"
+marker_count=$(grep -cxF '# harness-kit: kit-owned mechanism + generated stubs — do not reformat' "$F/.prettierignore")
+if [ "$marker_count" -eq 1 ] \
+    && grep -qxF 'scripts/harness/' "$F/.prettierignore" \
+    && grep -qxF '.claude/skills/' "$F/.prettierignore" \
+    && grep -qxF '.opencode/agents/' "$F/.prettierignore"; then
+    pass "formatterignore: a marker-only partial block is healed (missing entries appended, marker not duplicated)"
+else
+    fail "formatterignore: partial block was not healed (marker_count=$marker_count)" "$(cat "$F/.prettierignore")"
+fi
+# A second call over the now-complete block is a true no-op (idempotence
+# still holds after healing, not just on a block written all at once).
+before=$(sha_of "$F" ".prettierignore")
+harness_append_formatterignore "$F"
+after=$(sha_of "$F" ".prettierignore")
+if [ "$before" = "$after" ]; then
+    pass "formatterignore: a healed complete block stays a no-op on the next call"
+else
+    fail "formatterignore: a healed block was rewritten by a following no-op call"
+fi
+rm -rf "$F"
+
+# --- (q) formatterignore via bootstrap: install wiring is opt-in ---------------
+# --formatter-ignore must write the block; its absence must leave the repo's
+# config untouched (this kit never mutates repo-owned config unconditionally).
+T2=$(mktemp -d "$WORK/bootstrap-install-fmt.XXXXXX") || exit 1
+out=$("$BASH" "$SCRIPTS_DIR/harness/bootstrap" install --formatter-ignore "$SCRIPTS_DIR" "$T2" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && [ -f "$T2/.prettierignore" ] && grep -qxF 'scripts/harness/' "$T2/.prettierignore"; then
+    pass "bootstrap install --formatter-ignore: writes the .prettierignore block"
+else
+    fail "bootstrap install --formatter-ignore: block missing after install (rc=$rc)" "$out"
+fi
+T3=$(mktemp -d "$WORK/bootstrap-install-nofmt.XXXXXX") || exit 1
+out=$("$BASH" "$SCRIPTS_DIR/harness/bootstrap" install "$SCRIPTS_DIR" "$T3" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && [ ! -e "$T3/.prettierignore" ]; then
+    pass "bootstrap install: .prettierignore is NOT written without --formatter-ignore (opt-in only)"
+else
+    fail "bootstrap install: .prettierignore appeared without --formatter-ignore (rc=$rc)" "$out"
+fi
+rm -rf "$T2" "$T3"
+
+# --- (r) bootstrap install: --formatter-ignore AFTER the positionals works -----
+# Flag parsing used to stop at the first positional argument, so the natural
+# invocation `bootstrap install SRC ROOT --formatter-ignore` silently dropped
+# the trailing flag and reported success without ever writing anything. This
+# fix accepts flags anywhere among the arguments — assert the flag-after
+# form actually WRITES the block (not merely that it exits 0), which is what
+# proves the flag was not dropped.
+T2=$(mktemp -d "$WORK/bootstrap-install-fmt-after.XXXXXX") || exit 1
+out=$("$BASH" "$SCRIPTS_DIR/harness/bootstrap" install "$SCRIPTS_DIR" "$T2" --formatter-ignore 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && [ -f "$T2/.prettierignore" ] && grep -qxF 'scripts/harness/' "$T2/.prettierignore"; then
+    pass "bootstrap install SRC ROOT --formatter-ignore: flag after positionals still writes the block"
+else
+    fail "bootstrap install SRC ROOT --formatter-ignore: block missing after install (rc=$rc)" "$out"
+fi
+rm -rf "$T2"
+# A third positional (or trailing garbage) must be rejected loudly, not
+# silently ignored — exit 64 (EX_USAGE), no partial install.
+T2=$(mktemp -d "$WORK/bootstrap-install-extra-arg.XXXXXX") || exit 1
+out=$("$BASH" "$SCRIPTS_DIR/harness/bootstrap" install "$SCRIPTS_DIR" "$T2" extra-positional 2>&1); rc=$?
+if [ "$rc" -eq 64 ] && [ ! -e "$T2/scripts" ]; then
+    pass "bootstrap install: a third positional argument is rejected (exit 64), nothing installed"
+else
+    fail "bootstrap install: an extra positional was accepted or mis-reported (rc=$rc)" "$out"
+fi
+rm -rf "$T2"
+
+# --- (s) bootstrap install: a failed --formatter-ignore warns but doesn't fail -
+# A symlinked .prettierignore makes harness_append_formatterignore fail (case
+# (n) above); that failure must not flip a successful install's exit code, but
+# it must not be silent either — bootstrap must print a WARNING naming what
+# did not happen, and the symlink's target must stay untouched.
+T2=$(mktemp -d "$WORK/bootstrap-install-fmt-fail.XXXXXX") || exit 1
+VICT=$(mktemp -d "$WORK/bootstrap-install-fmt-fail-victim.XXXXXX") || exit 1
+printf 'OUTSIDE\n' > "$VICT/target.txt"
+ln -s "$VICT/target.txt" "$T2/.prettierignore"
+out=$("$BASH" "$SCRIPTS_DIR/harness/bootstrap" install --formatter-ignore "$SCRIPTS_DIR" "$T2" 2>&1); rc=$?
+case "$out" in *WARNING*) warned=1 ;; *) warned=0 ;; esac
+victim_content=$(cat "$VICT/target.txt")
+if [ "$rc" -eq 0 ] && [ -f "$T2/scripts/harness/bootstrap" ] \
+    && [ -L "$T2/.prettierignore" ] && [ "$victim_content" = "OUTSIDE" ] && [ "$warned" -eq 1 ]; then
+    pass "bootstrap install: a failed --formatter-ignore warns on stderr but does not fail the install"
+else
+    fail "bootstrap install: failed formatter-ignore was silent or flipped the install's exit code (rc=$rc, warned=$warned)" "$out"
+fi
+rm -rf "$T2" "$VICT"
+
+# --- (t) formatterignore via bootstrap: UPDATE wiring (not just install) ------
+# The update branch previously called no ignore helper at all — an existing
+# adopter running update would never receive the block without this wiring.
+F=$(make_fixture) || exit 1
+out=$("$BASH" "$SCRIPTS_DIR/harness/bootstrap" update --formatter-ignore "$SCRIPTS_DIR" "$F" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && [ -f "$F/.prettierignore" ] && grep -qxF 'scripts/harness/' "$F/.prettierignore"; then
+    pass "bootstrap update --formatter-ignore: writes the .prettierignore block on a real apply"
+else
+    fail "bootstrap update --formatter-ignore: block missing after update (rc=$rc)" "$out"
+fi
+rm -rf "$F"
+
+# --- (u) formatterignore via bootstrap: --dry-run update writes nothing -------
+F=$(make_fixture) || exit 1
+out=$("$BASH" "$SCRIPTS_DIR/harness/bootstrap" update --dry-run --formatter-ignore "$SCRIPTS_DIR" "$F" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && [ ! -e "$F/.prettierignore" ]; then
+    pass "bootstrap update --dry-run --formatter-ignore: mutates nothing"
+else
+    fail "bootstrap update --dry-run --formatter-ignore: .prettierignore appeared under --dry-run (rc=$rc)" "$out"
+fi
+rm -rf "$F"
 finish "install-mechanism core"

@@ -53,6 +53,23 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    and a tailored `scripts/hooks/guard-project-policy.sh` moves to
    `.harness/hooks/`. Their old copies are retire-keep until resolved.
 
+   **Formatter-ignore adoption (any existing install, prettier only).**
+   Unlike `harness_append_gitignore` above, `update`'s bootstrap branch
+   historically called no formatter-ignore helper at all, so an install that
+   predates this feature never receives the block on its own. Passing
+   `--formatter-ignore` to `bootstrap update` runs
+   `harness_append_formatterignore` (same helper as init) to write the
+   idempotent marked block to `.prettierignore` listing the kit-owned and
+   generated paths — but this only ever helps a **prettier** install. If the
+   repo instead runs biome, dprint, or a pre-commit formatter hook, the flag
+   is a no-op for it: each of those needs its own exclusion added by hand
+   (biome's ordered `!` negation, dprint's `excludes`, pre-commit's
+   `exclude:` regex), and doctor check #10e keeps naming the gap on every
+   later `check-harness` run until it is addressed. Surface whichever remedy
+   applies in the diff and write it only on explicit user acceptance, same as
+   every other policy/content change here — never as an unconditional
+   mutation. `--dry-run` mutates nothing, this block included.
+
    **Retired paths.** The NEW kit-manifest's `retired` section names files the
    kit no longer ships. `harness_update_apply` removes an installed copy only
    when it is pristine (sha still matches its pin) and not ` # tailored`, and

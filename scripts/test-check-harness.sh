@@ -840,6 +840,253 @@ jobs:
 EOF
 assert_ok_without "10d: SHA-pinned actions (bare and single-quoted) and a local ref are clean" "$W" "mutable ref"
 
+# --- check #10e: repo-wide formatter must exclude kit-owned paths (doctor WARNs) ---
+# Same "gated on a real sha tool" shape as #9/#8d below: the fixture ships a
+# minimal-but-REAL manifest (one pin under scripts/harness/, one under
+# .harness/) so 10e's manifest-derived path list is exercised, not just its
+# hardcoded fallback (.harness/adapters, provider skill/agent stub dirs) — and
+# so #9a's checksum verification (which runs whenever a manifest exists, no
+# adoption gate) stays green instead of turning every case here into a
+# drift ERROR unrelated to what's under test. The manifest also pins one .md
+# file under each of scripts/harness/ and .harness/ alongside a .sh/.conf
+# entry: 10e only collapses a manifest-pinned path into its root kit-path
+# ("scripts/harness" / ".harness") when at least one pinned entry there has an
+# extension a formatter could actually parse (see _10e_formatter_parseable in
+# check-doctor.sh) — without a qualifying entry, neither root would be
+# derived at all, and every case below that expects to see "scripts/harness"
+# or ".harness" in the output would silently stop exercising anything.
+if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; then
+    _t10e_sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'; else sha256sum "$1" | awk '{print $1}'; fi; }
+
+    # new_10e_fixture -> new_fixture plus a manifest pinning
+    # scripts/harness/lib/check-doctor.sh (.sh — deliberately formatter-
+    # unparseable, proving it does NOT drive the "scripts/harness" collapse),
+    # a fabricated scripts/harness/README.md (.md — the entry that actually
+    # does), and the .harness/ mirror of both (gates.conf + policy.md),
+    # collapsing to kit paths "scripts/harness" and ".harness" via the real
+    # manifest-derivation code path.
+    new_10e_fixture() {
+        local work
+        work=$(new_fixture) || return 1
+        mkdir -p "$work/.harness" || return 1
+        printf 'gate shellcheck\n' > "$work/.harness/gates.conf"
+        printf '# harness policy\n' > "$work/.harness/policy.md"
+        printf '# harness readme\n' > "$work/scripts/harness/README.md"
+        { printf '# harness-kit 9.9.9\n'
+          printf '%s  scripts/harness/lib/check-doctor.sh\n' "$(_t10e_sha "$work/scripts/harness/lib/check-doctor.sh")"
+          printf '%s  scripts/harness/README.md\n' "$(_t10e_sha "$work/scripts/harness/README.md")"
+          printf '%s  .harness/gates.conf # tailored\n' "$(_t10e_sha "$work/.harness/gates.conf")"
+          printf '%s  .harness/policy.md\n' "$(_t10e_sha "$work/.harness/policy.md")"
+        } > "$work/scripts/harness/.harness-manifest"
+        printf '%s' "$work"
+    }
+
+    # (a) prettier configured, no .prettierignore at all -> warns, names it
+    W=$(new_10e_fixture)
+    : > "$W/.prettierrc"
+    assert_warns "10e: prettier configured with no .prettierignore warns" "$W" ".prettierignore"
+
+    # (b) prettier: .prettierignore exists but misses a kit path -> warns
+    W=$(new_10e_fixture)
+    : > "$W/.prettierrc"
+    printf 'node_modules/\n' > "$W/.prettierignore"
+    assert_warns "10e: prettier's .prettierignore missing a kit path warns" "$W" "scripts/harness"
+
+    # (c) prettier: fully-ignored configuration -> no warning
+    W=$(new_10e_fixture)
+    : > "$W/.prettierrc"
+    printf 'node_modules/\nscripts/harness/\n.harness/\n.claude/skills/\n.cursor/skills/\n.opencode/skills/\n.harness/adapters/\n' > "$W/.prettierignore"
+    assert_ok_without "10e: prettier fully covering kit paths in .prettierignore does not warn" "$W" "prettier"
+
+    # (d) biome: default (no files.includes/formatter.includes -> repo-wide),
+    #     no negation -> warns, names biome's own mechanism
+    W=$(new_10e_fixture)
+    printf '{ "formatter": { "enabled": true } }\n' > "$W/biome.json"
+    assert_warns "10e: biome with no negation over kit paths warns" "$W" "files.includes/formatter.includes"
+
+    # (e) biome: fully-ignored via ordered '!' negations -> no warning
+    W=$(new_10e_fixture)
+    cat > "$W/biome.json" <<'JSON'
+{ "formatter": { "enabled": true, "includes": ["**", "!scripts/harness/**", "!.harness/**", "!.claude/skills/**", "!.cursor/skills/**", "!.opencode/skills/**", "!.harness/adapters/**"] } }
+JSON
+    assert_ok_without "10e: biome with negations covering every kit path does not warn" "$W" "biome.json"
+
+    # (f) biome: includes scoped away from kit paths entirely -> no warning
+    #     (the "scoped / non-repo-wide" case: this repo only ever formats src/)
+    W=$(new_10e_fixture)
+    printf '{ "formatter": { "enabled": true, "includes": ["src/**"] } }\n' > "$W/biome.json"
+    assert_ok_without "10e: biome scoped to src/ only (never reaches kit paths) does not warn" "$W" "biome.json"
+
+    # (g) biome: formatter explicitly disabled -> no warning regardless of includes
+    W=$(new_10e_fixture)
+    printf '{ "formatter": { "enabled": false } }\n' > "$W/biome.json"
+    assert_ok_without "10e: biome with formatter.enabled=false does not warn" "$W" "biome.json"
+
+    # (h) dprint: default includes (repo-wide), empty excludes -> warns
+    W=$(new_10e_fixture)
+    printf '{ "excludes": [] }\n' > "$W/dprint.json"
+    assert_warns "10e: dprint with no excludes over kit paths warns" "$W" "dprint.json"
+
+    # (i) dprint: excludes fully covering kit paths -> no warning
+    W=$(new_10e_fixture)
+    cat > "$W/dprint.json" <<'JSON'
+{ "excludes": ["scripts/harness/**", ".harness/**", ".claude/skills/**", ".cursor/skills/**", ".opencode/skills/**", ".harness/adapters/**"] }
+JSON
+    assert_ok_without "10e: dprint excludes covering every kit path does not warn" "$W" "dprint.json"
+
+    # (j) pre-commit: a formatter hook with no exclude anywhere -> warns
+    W=$(new_10e_fixture)
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+YAML
+    assert_warns "10e: pre-commit formatter hook with no exclude warns" "$W" ".pre-commit-config.yaml"
+
+    # (k) pre-commit: a top-level exclude covering ONLY scripts/harness/ and
+    #     .harness/ (fix 6) — the exclude never mentions the generated
+    #     provider-stub dirs (.harness/adapters, .claude/skills, etc.), so it
+    #     still warns for exactly those. Before fix 6 this stayed silent
+    #     because the whole-pattern text merely CONTAINED the word "harness"
+    #     — a substring match, not per-path proof of coverage.
+    W=$(new_10e_fixture)
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+exclude: '^(scripts/harness/|\.harness/)'
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+YAML
+    assert_warns "10e: pre-commit exclude covering scripts/harness+.harness but not the generated provider dirs still warns for those" "$W" ".harness/adapters"
+
+    # (l) pre-commit: hook scoped via a per-hook 'files:' restriction -> no
+    #     warning (the "scoped / non-repo-wide command" case)
+    W=$(new_10e_fixture)
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+        files: \.py$
+YAML
+    assert_ok_without "10e: pre-commit hook scoped via files: does not warn" "$W" "pre-commit-config"
+
+    # (m) malformed config (invalid JSON: trailing comma) fails open — stays
+    #     exit 0 and, per this check's contract, only ever emits a clearly
+    #     hedged warning (never a bare claim that the path IS excluded)
+    W=$(new_10e_fixture)
+    printf '{ "formatter": { "enabled": true, "includes": ["**",] } }\n' > "$W/biome.json"
+    assert_warns "10e: malformed biome.json fails open with a hedged warning" "$W" "could not be parsed as JSON"
+
+    # (n) jq unavailable: must not assert kit paths ARE excluded — a false
+    #     assertion of safety — even though biome.json (if parsed) would show
+    #     no negation over kit paths at all
+    shim10e=$(mktemp -d "$WORK/shim10e.XXXXXX") || exit 1
+    for u in bash sh env dirname basename grep egrep awk sed sort find wc tr head cat date git shasum sha256sum mktemp rm chmod ls uname printf seq; do
+        p=$(command -v "$u" 2>/dev/null) && ln -s "$p" "$shim10e/$u" 2>/dev/null
+    done
+    W=$(new_10e_fixture)
+    printf '{ "formatter": { "enabled": true, "includes": ["**"] } }\n' > "$W/biome.json"
+    out=$(env PATH="$shim10e" bash "$W/scripts/harness/check-harness" 2>&1); rc=$?
+    if [ "$rc" = "0" ] \
+        && has "$out" "jq is not available" \
+        && ! has "$out" "reaches kit-owned path"; then
+        echo "ok:   10e: jq unavailable hedges instead of asserting an exclusion state"
+    else
+        echo "FAIL: 10e: jq-unavailable handling — rc=$rc"
+        printf '%s\n' "$out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W" "$shim10e"
+
+    # --- regression cases for the reproduced 10e defects (fixes 1-7) --------
+
+    # (fix2) prettier: a '!' negation RE-INCLUDES a path an earlier entry
+    # ignored — the single most dangerous config this check can meet (prettier
+    # WILL format it), and _10e_covers's unconditional '!'-strip read it as
+    # coverage before this fix. Must now warn.
+    W=$(new_10e_fixture)
+    : > "$W/.prettierrc"
+    printf 'scripts/harness/\n!scripts/harness/\n.harness/\n.harness/adapters/\n.claude/skills/\n.cursor/skills/\n.opencode/skills/\n' > "$W/.prettierignore"
+    assert_warns "10e / fix 2: a '!' negation re-including a kit path warns instead of silently passing" "$W" "scripts/harness"
+
+    # (fix3) prettier: gitignore-style anchored entries ("/scripts/harness/")
+    # are valid and idiomatic; before this fix the leading "/" was never
+    # stripped, so a fully-correct anchored .prettierignore false-warned.
+    W=$(new_10e_fixture)
+    : > "$W/.prettierrc"
+    printf '/scripts/harness/\n/.harness/\n/.harness/adapters/\n/.claude/skills/\n/.cursor/skills/\n/.opencode/skills/\n' > "$W/.prettierignore"
+    assert_ok_without "10e / fix 3: gitignore-style anchored entries ('/scripts/harness/') are recognized as coverage" "$W" "prettier"
+
+    # (fix4) prettier invoked via a bare package.json script with NO dedicated
+    # config file at all — the exact adopter-reported case that motivated this
+    # whole fix set. Before fix 4, only a *.prettierrc*/prettier.config.* file
+    # or an embedded '"prettier": {' config block tripped the trigger.
+    W=$(new_10e_fixture)
+    printf '{ "scripts": { "format": "prettier --write ." } }\n' > "$W/package.json"
+    assert_warns "10e / fix 4: prettier run via a package.json script with no config file still warns" "$W" ".prettierignore"
+
+    # (fix5) biome: a negation FOLLOWED BY a later catch-all include — biome's
+    # own ordering rule says the LAST matching entry wins, so "**" after the
+    # negation overrides it and biome reformats everything. The unordered
+    # split (any negation match anywhere) read this as excluded before this fix.
+    W=$(new_10e_fixture)
+    printf '{ "formatter": { "enabled": true, "includes": ["!scripts/harness/**", "**"] } }\n' > "$W/biome.json"
+    assert_warns "10e / fix 5: an include appearing after a negation overrides it (ordered evaluation) and warns" "$W" "path(s): scripts/harness"
+
+    # (fix6) pre-commit: an UNRELATED hook's own 'files:' must not suppress
+    # the warning for a DIFFERENT, actually-unscoped formatter hook. Before
+    # this fix, "does 'files:' appear anywhere in the file, and does nothing
+    # in the whole file mention scripts/harness|.harness" could not tell the
+    # two hooks apart and stayed silent.
+    W=$(new_10e_fixture)
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+repos:
+  - repo: https://github.com/some/yaml-linter
+    rev: v1.0.0
+    hooks:
+      - id: yamllint
+        files: \.ya?ml$
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+YAML
+    assert_warns "10e / fix 6: an unrelated hook's own files: does not suppress the warning for a different, unscoped formatter hook" "$W" ".pre-commit-config.yaml"
+
+    # (fix1 + fix7) the kit's OWN remedy must satisfy the kit's OWN check.
+    # harness_append_formatterignore (install-lib.sh) is the only sanctioned
+    # way this kit ever writes to an adopter's .prettierignore; if 10e still
+    # warns after it has run, the kit tells adopters to fix something its own
+    # tooling doesn't actually fix. The manifest below mirrors a REAL
+    # adopter install: a top-level tailored scripts/*.sh entry plus
+    # .harness/gates.conf and .harness/hooks/guard-project-policy.sh — every
+    # entry unparseable by any formatter (fix 1), so "scripts/harness" and
+    # ".harness" must NOT be derived as kit paths, leaving only
+    # ".harness/adapters" and the provider skill dirs, all of which the
+    # written block actually lists.
+    W=$(new_fixture)
+    mkdir -p "$W/.harness/hooks"
+    printf 'gate shellcheck\n' > "$W/.harness/gates.conf"
+    printf '#!/usr/bin/env bash\n' > "$W/.harness/hooks/guard-project-policy.sh"
+    printf '#!/usr/bin/env bash\n' > "$W/scripts/check-packaging.sh"
+    chmod +x "$W/.harness/hooks/guard-project-policy.sh" "$W/scripts/check-packaging.sh"
+    { printf '# harness-kit 9.9.9\n'
+      printf '%s  scripts/harness/lib/check-doctor.sh\n' "$(_t10e_sha "$W/scripts/harness/lib/check-doctor.sh")"
+      printf '%s  .harness/gates.conf # tailored\n' "$(_t10e_sha "$W/.harness/gates.conf")"
+      printf '%s  .harness/hooks/guard-project-policy.sh # tailored\n' "$(_t10e_sha "$W/.harness/hooks/guard-project-policy.sh")"
+      printf '%s  scripts/check-packaging.sh # tailored\n' "$(_t10e_sha "$W/scripts/check-packaging.sh")"
+    } > "$W/scripts/harness/.harness-manifest"
+    # shellcheck source=/dev/null
+    . "$SCRIPTS_DIR/harness/lib/install-lib.sh"
+    harness_append_formatterignore "$W"
+    assert_ok_without "10e / fix 1+7: the kit's own harness_append_formatterignore block satisfies 10e (no warning)" "$W" "does not cover kit-owned path"
+fi
+
 # --- check #8d: semantic hook-wiring validation ------------------------------
 # Needs jq (tuple parse) and a sha tool (a hook-wired install is adopted, so the
 # fixture ships a real manifest to keep #9 green). new_hookwired_fixture builds a

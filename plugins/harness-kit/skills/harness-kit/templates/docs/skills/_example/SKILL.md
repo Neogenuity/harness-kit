@@ -1,10 +1,10 @@
 ---
 name: <kebab-case-slug>
 description: >-
-    <What this skill does, in one sentence. Then the activation triggers:
-    "Activates when <task shapes, file types, or user phrasings that should
-    fire this skill>." The description is the ONLY signal harnesses use to
-    auto-activate — write it for the router, not the reader.>
+  <What this skill does, in one sentence. Then the activation triggers:
+  "Activates when <task shapes, file types, or user phrasings that should
+  fire this skill>." The description is the ONLY signal harnesses use to
+  auto-activate — write it for the router, not the reader.>
 ---
 
 # <Skill Title>

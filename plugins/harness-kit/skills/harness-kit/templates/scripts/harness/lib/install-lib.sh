@@ -340,6 +340,115 @@ harness_append_gitignore() {
     fi
 }
 
+# --- formatter-ignore: prettier (or similar) whole-repo runs ------------------
+# An adopter's repo-wide `prettier --write .` rewrites the kit's checksum-pinned
+# files (scripts/harness/) and byte-exact generated stubs (.claude/skills/,
+# .harness/adapters/, etc.), which then hard-fails check-harness. The kit ships
+# no formatter config of its own; instead it can add an exclusion block to the
+# repo's OWN .prettierignore — but only when the adopter opts in (bootstrap's
+# --formatter-ignore flag): .prettierignore is repo-owned config, and this kit
+# never mutates repo-owned config unconditionally.
+
+# harness_append_formatterignore <repo_root>
+# Ensures the kit-owned mechanism + generated-stub surface is excluded from a
+# repo-wide prettier run: appends a marked block to <repo_root>/.prettierignore.
+# Modeled on harness_append_gitignore just above, hardened further:
+#   - refuses a symlinked or otherwise non-regular destination: [ -L ] is
+#     checked BEFORE any [ -f ] test (which follows symlinks), so an opted-in
+#     write can never be redirected outside the repo through a link a
+#     .prettierignore symlink would otherwise let through; a non-regular
+#     existing file (fifo, device, ...) is refused the same way. Returns
+#     nonzero in both cases and leaves the destination untouched;
+#   - verifies every required line — the marker AND each listed entry — not
+#     just the marker, and re-appends whichever ones are missing. An
+#     interrupted run that left a marker-only block is thereby HEALED on the
+#     next call instead of being accepted as complete forever. A block where
+#     every required line is already present is a true no-op: no temp file is
+#     even created;
+#   - writes atomically: the (possibly healed) content is staged in a temp
+#     file created BESIDE the destination with mktemp, then renamed into
+#     place — the same mktemp-beside-destination + mv pattern sync-lib.sh
+#     uses for its own config reconciliation — so an interrupted run can never
+#     leave a half-written file;
+#   - returns NONZERO on any failure: a missing destination directory, a
+#     failed stage-file creation, a failed write into it, or a failed rename.
+#     The caller (bootstrap) must see this and warn — a write failure here
+#     must never be silently reported as success.
+# Still safe against a no-trailing-newline file: the appended content always
+# starts on its own fresh line, so it never merges onto the file's last line
+# (e.g. 'dist' -> 'dist# harness-kit: ...').
+harness_append_formatterignore() {
+    local pi="$1/.prettierignore" marker entries entry missing tmp
+    marker='# harness-kit: kit-owned mechanism + generated stubs — do not reformat'
+    entries='scripts/harness/
+.harness/adapters/
+.claude/skills/
+.claude/agents/
+.cursor/skills/
+.cursor/agents/
+.codex/agents/
+.opencode/skills/
+.opencode/agents/'
+
+    if [ -L "$pi" ]; then
+        echo "ERROR: harness: $pi is a symlink — refusing to write through it" >&2
+        return 1
+    fi
+    if [ -e "$pi" ] && [ ! -f "$pi" ]; then
+        echo "ERROR: harness: $pi exists but is not a regular file — refusing to write" >&2
+        return 1
+    fi
+
+    # Which required lines (the marker, and each entry) are missing? Absent
+    # file -> everything is missing (the whole block gets written, same
+    # content and order as a fresh install always produced).
+    missing=""
+    if [ -f "$pi" ]; then
+        grep -qxF "$marker" "$pi" || missing="$marker"
+        while IFS= read -r entry; do
+            [ -n "$entry" ] || continue
+            if ! grep -qxF "$entry" "$pi"; then
+                missing="${missing:+$missing
+}$entry"
+            fi
+        done <<ENTRIES
+$entries
+ENTRIES
+    else
+        missing="$marker
+$entries"
+    fi
+    [ -n "$missing" ] || return 0
+
+    tmp=$(mktemp "$pi.hk-fmtignore.XXXXXX" 2>/dev/null) || {
+        echo "ERROR: harness: failed to create a stage file for $pi" >&2
+        return 1
+    }
+    if [ -f "$pi" ]; then
+        if ! cat "$pi" > "$tmp"; then
+            echo "ERROR: harness: failed to stage existing content of $pi" >&2
+            rm -f "$tmp"
+            return 1
+        fi
+        # Start on a fresh line even if the existing file lacks a trailing
+        # newline (checked against the ORIGINAL file, not the staged copy).
+        if [ -s "$pi" ] && [ -n "$(tail -c1 "$pi" 2>/dev/null)" ]; then
+            printf '\n' >> "$tmp" || { rm -f "$tmp"; return 1; }
+        fi
+    fi
+    if ! printf '%s\n' "$missing" >> "$tmp"; then
+        echo "ERROR: harness: failed to write $pi" >&2
+        rm -f "$tmp"
+        return 1
+    fi
+    if ! mv "$tmp" "$pi"; then
+        echo "ERROR: harness: failed to move staged .prettierignore into place at $pi" >&2
+        rm -f "$tmp"
+        return 1
+    fi
+    return 0
+}
+
 # harness_conf_declared <repo_root> <VARNAME>
 # Returns 0 if scripts/harness/harness.conf declares VARNAME (an uncommented
 # `VARNAME=` assignment), 1 otherwise. Update/audit uses it to tell a legacy

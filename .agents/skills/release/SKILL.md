@@ -1,10 +1,10 @@
 ---
 name: release
 description: >-
-    Cut a harness-kit release: run the quality gates, bump the plugin
-    version, update the changelog, refresh this repo's own installed harness
-    and manifest, and tag. Activates when asked to release, publish, cut,
-    or tag a new version of harness-kit, or to prepare a version bump.
+  Cut a harness-kit release: run the quality gates, bump the plugin
+  version, update the changelog, refresh this repo's own installed harness
+  and manifest, and tag. Activates when asked to release, publish, cut,
+  or tag a new version of harness-kit, or to prepare a version bump.
 ---
 
 # Release

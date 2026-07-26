@@ -54,6 +54,24 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      loop (`harness.conf`'s `FORMAT_RULES`/`LINT_RULES` data) — recon
      proposes from the toolchain; slow static analysis stays in the full
      gates of `.harness/gates.conf`.
+   - **Repo-wide formatter adoption is a separate opt-in.** Ask whether a
+     repo-wide formatter runs (`prettier --write .` or an equivalent for
+     another tool, distinct from the per-file fast linter above). **If it is
+     prettier**, confirm passing `--formatter-ignore` to `bootstrap install`
+     so `harness_append_formatterignore` writes the marked `.prettierignore`
+     block — this is the only formatter that flag automates anything for.
+     **For any other formatter** (biome, dprint, pre-commit, ...),
+     `--formatter-ignore` does nothing: each has its own, non-interchangeable
+     exclusion mechanism (biome's ordered `!` negation in `files.includes`,
+     dprint's `excludes` list, pre-commit's `exclude:` regex), so the adopter
+     must add the equivalent exclusion themselves — `check-harness` doctor
+     check #10e names the missing kit-owned path(s) for whichever tool it
+     detects, on every later run, so an unaddressed gap keeps surfacing
+     rather than going silent. Whichever formatter is in use, leaving it
+     unconfigured means it will rewrite the checksum-pinned mechanism tree
+     and generated provider stubs/adapters, breaking the integrity pin — for
+     those byte-exact artifacts, a deadlock against `sync`, not a re-pin
+     chore.
    - Which providers to wire beyond Claude Code + `AGENTS.md` (Cursor?
      Codex? OpenCode? — cheap to include, default to all four:
      `HARNESS_PROVIDERS=".claude .cursor .codex .opencode"`). `.agents/skills/`

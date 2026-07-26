@@ -91,6 +91,7 @@ mechanism scripts/harness/tests/test-audit-log.sh
 mechanism scripts/harness/tests/test-doc-garden.sh
 mechanism scripts/harness/tests/test-verify.sh
 mechanism scripts/harness/tests/test-sync-secrets.sh
+mechanism scripts/harness/tests/test-sync-adapters.sh
 mechanism scripts/harness/tests/test-skip-tests-family.sh
 mechanism scripts/harness/tests/test-eval-graders.sh
 

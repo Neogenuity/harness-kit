@@ -120,7 +120,7 @@ done
 #    Complements check 2: that one bounds stub *shape*, this one pins *content*.
 if [ -f "$ROOT/scripts/harness/sync" ]; then
     if ! bash "$ROOT/scripts/harness/sync" --check; then
-        echo "ERROR: provider skill stubs are out of sync — run 'bash scripts/harness/sync' and commit the result"
+        echo "ERROR: provider skill stubs, agent stubs, or generated adapters are out of sync — run 'bash scripts/harness/sync' and commit the result"
         ERRORS=$((ERRORS + 1))
     fi
 fi

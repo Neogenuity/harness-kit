@@ -5,14 +5,27 @@
 # command exposes the deterministic primitives it drives.
 #
 #   bootstrap preflight                 # name missing runtime prerequisites
-#   bootstrap install [--allow-degraded] <src> <root>
+#   bootstrap install [--allow-degraded] [--formatter-ignore] <src> <root>
 #                                       # copy the ship contract's file set;
 #                                       # refuses on missing prerequisites
-#                                       # unless degradation is acknowledged
-#   bootstrap update  [--allow-degraded] [--dry-run] <src> <root>
+#                                       # unless degradation is acknowledged;
+#                                       # --formatter-ignore additionally
+#                                       # appends the kit's block to
+#                                       # .prettierignore (opt-in — never an
+#                                       # unconditional repo-config mutation).
+#                                       # Flags may appear before, after, or
+#                                       # between <src> and <root> — exactly
+#                                       # two non-flag arguments are required;
+#                                       # extras or an unrecognized flag exit 64
+#   bootstrap update  [--allow-degraded] [--dry-run] [--formatter-ignore] <src> <root>
 #                                       # replace/add/remove per the contract;
 #                                       # --dry-run prints the plan, mutates
-#                                       # nothing, needs no acknowledgement
+#                                       # nothing, needs no acknowledgement;
+#                                       # --formatter-ignore appends the
+#                                       # .prettierignore block after a real
+#                                       # (non-dry) apply only. Flags may
+#                                       # appear anywhere among the arguments,
+#                                       # same as install above
 #   bootstrap repin   <root> <version>  # regenerate the integrity manifest
 #                                       # (preserves ' # tailored' markers)
 set -uo pipefail
@@ -20,7 +33,7 @@ set -uo pipefail
 # shellcheck source=/dev/null
 . "$(dirname "$0")/lib/install-lib.sh"
 
-usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # _missing_has <missing-output> <token> — exact-line membership, pipe-free
 # (grep -q + pipefail turns an ignored-SIGPIPE EPIPE into a phantom failure).
@@ -80,28 +93,67 @@ case "${1:-}" in
     install)
         shift
         allow_degraded=0
-        while :; do
-            case "${1:-}" in
-                --allow-degraded) allow_degraded=1; shift ;;
-                *) break ;;
+        formatter_ignore=0
+        pos1=""
+        pos2=""
+        extra=0
+        # Flags may appear before, after, or between the two positionals — a
+        # natural `bootstrap install SRC ROOT --formatter-ignore` must WORK,
+        # not silently drop the flag because parsing stopped at the first
+        # positional. Scan every remaining argument; an unrecognized `-*`
+        # token or a third positional is invalid usage (exit 64), never a
+        # silent partial parse.
+        while [ "$#" -gt 0 ]; do
+            case "$1" in
+                --allow-degraded) allow_degraded=1 ;;
+                --formatter-ignore) formatter_ignore=1 ;;
+                -*) usage; exit 64 ;;
+                *)
+                    if [ -z "$pos1" ]; then pos1="$1"
+                    elif [ -z "$pos2" ]; then pos2="$1"
+                    else extra=1
+                    fi ;;
             esac
+            shift
         done
-        [ -n "${1:-}" ] && [ -n "${2:-}" ] || { usage; exit 64; }
+        [ -n "$pos1" ] && [ -n "$pos2" ] && [ "$extra" -eq 0 ] || { usage; exit 64; }
         _gate_prereqs "$allow_degraded" || exit 1
-        harness_install_mechanism "$1" "$2" && harness_append_gitignore "$2"
+        harness_install_mechanism "$pos1" "$pos2" && harness_append_gitignore "$pos2"
+        rc=$?
+        # --formatter-ignore must not turn a successful mechanism install into
+        # a failure, but a failure writing it must not be silent either: warn
+        # on stderr, naming what did not happen, while still exiting with the
+        # install's own status.
+        if [ "$rc" -eq 0 ] && [ "$formatter_ignore" -eq 1 ]; then
+            harness_append_formatterignore "$pos2" \
+                || echo "WARNING: harness: --formatter-ignore did not update $pos2/.prettierignore — the install itself still succeeded; see the error above, then fix it and re-run 'bootstrap install --formatter-ignore $pos1 $pos2' to retry just this step" >&2
+        fi
+        exit "$rc"
         ;;
     update)
         shift
         allow_degraded=0
         dry=""
-        while :; do
-            case "${1:-}" in
-                --allow-degraded) allow_degraded=1; shift ;;
-                --dry-run) dry="--dry-run"; shift ;;
-                *) break ;;
+        formatter_ignore=0
+        pos1=""
+        pos2=""
+        extra=0
+        # Same anywhere-flags parsing as install above, applied consistently.
+        while [ "$#" -gt 0 ]; do
+            case "$1" in
+                --allow-degraded) allow_degraded=1 ;;
+                --dry-run) dry="--dry-run" ;;
+                --formatter-ignore) formatter_ignore=1 ;;
+                -*) usage; exit 64 ;;
+                *)
+                    if [ -z "$pos1" ]; then pos1="$1"
+                    elif [ -z "$pos2" ]; then pos2="$1"
+                    else extra=1
+                    fi ;;
             esac
+            shift
         done
-        [ -n "${1:-}" ] && [ -n "${2:-}" ] || { usage; exit 64; }
+        [ -n "$pos1" ] && [ -n "$pos2" ] && [ "$extra" -eq 0 ] || { usage; exit 64; }
         # A dry run mutates nothing, so it needs no --allow-degraded
         # acknowledgement — jq/git gate the runtime guard layer, not the plan.
         # sha256 is different: it is an INPUT to the plan. Without a sha tool
@@ -111,13 +163,22 @@ case "${1:-}" in
         # hard-refuses in _gate_prereqs on the same missing tool).
         if [ -z "$dry" ]; then
             _gate_prereqs "$allow_degraded" || exit 1
-            harness_update_apply "$1" "$2"
+            harness_update_apply "$pos1" "$pos2"
+            rc=$?
+            # Same fail-open-but-not-silent contract as install above;
+            # --formatter-ignore never fires under --dry-run (this branch is
+            # NON-dry only).
+            if [ "$rc" -eq 0 ] && [ "$formatter_ignore" -eq 1 ]; then
+                harness_append_formatterignore "$pos2" \
+                    || echo "WARNING: harness: --formatter-ignore did not update $pos2/.prettierignore — the update itself still succeeded; see the error above, then fix it and re-run 'bootstrap update --formatter-ignore $pos1 $pos2' to retry just this step" >&2
+            fi
+            exit "$rc"
         else
             if _missing_has "$(harness_missing_prereqs)" sha256sum; then
                 echo "ERROR: no sha256 tool (shasum/sha256sum) on PATH — a dry-run plan would misreport every pristine file as drifted. Install one, then re-run." >&2
                 exit 1
             fi
-            harness_update_apply "$1" "$2" --dry-run
+            harness_update_apply "$pos1" "$pos2" --dry-run
         fi
         ;;
     repin)
