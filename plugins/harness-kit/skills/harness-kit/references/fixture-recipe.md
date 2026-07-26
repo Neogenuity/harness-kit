@@ -96,12 +96,18 @@ scripts in directly:
 
 ```bash
 KIT=/path/to/harness-kit/plugins/harness-kit/skills/harness-kit/templates
-mkdir -p scripts
-cp "$KIT"/scripts/harness/harness.conf scripts/
-cp "$KIT"/scripts/harness/check-harness scripts/
-cp -R "$KIT"/scripts/harness/hooks scripts/
-chmod +x scripts/*.sh scripts/harness/hooks/*.sh
+mkdir -p scripts/harness
+cp "$KIT"/scripts/harness/harness.conf scripts/harness/
+cp "$KIT"/scripts/harness/check-harness scripts/harness/
+cp -R "$KIT"/scripts/harness/lib scripts/harness/     # check-harness sources lib/
+cp -R "$KIT"/scripts/harness/hooks scripts/harness/
+chmod +x scripts/harness/check-harness scripts/harness/hooks/*.sh
 ```
+
+This hand-copy exercises the **hooks** only. It deliberately installs no
+manifests and no provider configs, so `check-harness` will ERROR on the missing
+`kit-manifest`, `.harness-manifest`, and provider settings — run `init` if you
+want a fixture a checker can pass.
 
 ## Verify: session-context announces a seeded plan (scope item 6 acceptance)
 
@@ -109,7 +115,7 @@ chmod +x scripts/*.sh scripts/harness/hooks/*.sh
 the plans README from the template, seed one plan, and run the hook:
 
 ```bash
-mkdir -p docs/plans/active
+mkdir -p docs/plans/active .harness/templates
 cp "$KIT"/docs/plans/PLANS.md   docs/plans/
 cp "$KIT"/docs/templates/execution-plan.md .harness/templates/  # README links it
 cp "$KIT"/docs/templates/execution-plan.md docs/plans/active/demo-plan.md

@@ -16,7 +16,8 @@ continue to require only Bash, `jq`, Git, and a SHA-256 tool.
 2. **Template changes ship with a test.** Anything under
    `plugins/harness-kit/skills/harness-kit/templates/scripts/` is code that gets
    installed into other people's repos — a new or changed guard hook gets a
-   `test-<name>.sh` beside it. The advisory stop-hook will remind you; CI
+   `test-<name>.sh` in `templates/scripts/harness/tests/` (not beside the hook;
+   that directory is what the gates glob). The advisory stop-hook will remind you; CI
    will insist. See [docs/standards/templates.md](docs/standards/templates.md).
 3. **Never hand-edit generated stubs** (`.claude/skills/`, `.cursor/skills/`,
    `.opencode/skills/`). Edit the canonical file under `.agents/skills/`,

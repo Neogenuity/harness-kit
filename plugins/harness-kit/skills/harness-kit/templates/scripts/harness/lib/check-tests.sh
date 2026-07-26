@@ -9,6 +9,9 @@ set -uo pipefail
 
 # 5. Harness scripts must be executable (a chmod lost in a copy or checkout
 #    silently disables a hook — most harnesses skip non-executables).
+#    The first arm covers repo-authored top-level scripts (dev.sh in an app
+#    repo); the kit ships nothing there, so in a library repo that glob is
+#    empty and the [ -f ] guard below absorbs it.
 for hook in "$ROOT"/scripts/*.sh "$ROOT"/scripts/harness/hooks/*.sh; do
     [ -f "$hook" ] || continue
     if [ ! -x "$hook" ]; then
@@ -51,6 +54,7 @@ done
 #     the scripts that `git init` throwaway repos and `rm -rf` scratch trees).
 #     The kit repo's maintainer-only conformance suites (root scripts/test-*.sh,
 #     tailored) are covered by its own gates and fixture-isolation suite.
+#     (doc-ref-ok: scripts/test-*.sh — kit-root maintainer files, never shipped.)
 #
 #     Boundary, as honest as #8's "detects drift, does not prove equivalence":
 #     this is a line-based hygiene gate, not an adversarial control. It reads
@@ -137,13 +141,17 @@ done < <(
 )
 
 # 6. Regression tests must pass — the shipped floor at
-#    scripts/harness/tests/test-*.sh (hook guards, verify orchestration, the
-#    install smoke). The maintainer-only conformance suites live at the KIT
-#    repo's root as tailored files and run from its own gate list, not here —
-#    an adopter's audit runs only what the kit ships (v0.22.0 descope).
-#    Recursion control lives in the one test that needs it:
-#    test-harness-smoke.sh installs a throwaway fixture and runs ITS checker,
-#    so it exports HARNESS_NESTED_FIXTURE and skips itself inside nested runs.
+#    scripts/harness/tests/test-*.sh (hook guards, verify orchestration,
+#    library and runtime suites, grader validity). The maintainer-only
+#    conformance suites live at the KIT repo's root as tailored files and run
+#    from its own gate list, not here — an adopter's audit runs only what the
+#    kit ships (v0.22.0 descope, extended in v0.29.0 to the install-mechanics
+#    smoke). One shipped floor test DOES reach a nested checker —
+#    test-eval-graders.sh, whose graders call check-harness inside cloned
+#    workspaces — and it owns that itself by exporting HARNESS_SKIP_TESTS_FAMILY
+#    before the loop. HARNESS_NESTED_FIXTURE is not the control for it and is
+#    read by no shipped mechanism at all: it is a v0.29.0 vestige that only the
+#    kit's maintainer-only root suites still honour.
 #    No skip list here, and no env var selectively switches off just the
 #    guard behavioral tests (test-guard-*.sh, the catch for a re-pinned guard
 #    weakening) — the one whole-loop exception is HARNESS_SKIP_TESTS_FAMILY=1,

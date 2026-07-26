@@ -3,6 +3,94 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.35.0 — 2026-07-26
+
+Stale shipped text, and the maintainer gate that should have caught it. Both
+first adopters independently hand-corrected the same `AGENTS.md` sentence
+before anyone reported it — that duplication is what surfaced the class. Every
+prose fix here ships into adopting repos; none of them changes behaviour.
+
+### Fixed
+
+- **`AGENTS.md.tmpl` sent adopters to the wrong file to edit their gates.** It
+  said the ordered gates live in `scripts/harness/verify` and to "edit the
+  gates in that script, never here" — wrong since v0.23.0, when the gate list
+  moved to `.harness/gates.conf` and `verify` became checksum-pinned mechanism.
+  An adopter who followed the sentence either hit the config guard or edited
+  the runner and broke their own integrity pin. It now names
+  `.harness/gates.conf` as the gate list, the runner as mechanism, and
+  `check-harness` (#9a) as what rejects a local edit to it.
+
+- **The shipped `gates.conf` promised a floor entry retired two versions
+  earlier.** Its comment described the installed floor as including "the
+  install smoke test"; `test-harness-smoke.sh` left the shipped set in v0.29.0.
+  It now names the floor that actually ships — hook behavioural tests, library
+  and runtime suites, grader validity — and records the retirement.
+
+- **Three further copies of those same two retirements, all shipped.**
+  `references/modes/init.md` told adopters to check that each
+  `scripts/harness/hooks/test-*.sh` passes standalone, from a directory that
+  has held no tests since the v0.23.0 move to `scripts/harness/tests/`;
+  `check-tests.sh`'s check #6 comment repeated the smoke claim and credited
+  recursion control to the retired `test-harness-smoke.sh`, when the shipped
+  floor's one nested-checker test is `test-eval-graders.sh`, which owns it by
+  exporting `HARNESS_SKIP_TESTS_FAMILY` (`HARNESS_NESTED_FIXTURE` is read by no
+  shipped mechanism at all); and `check-harness`'s own header said "CI and the
+  smoke test call THIS".
+
+- **`references/fixture-recipe.md` could not build a working fixture.** Its
+  copy block still used the pre-v0.23.0 flat layout, installing the hooks where
+  the checker does not look and omitting `lib/`, which `check-harness` sources.
+  Corrected to the current layout, with an explicit note that this hand-copy
+  exercises the hooks only — a fixture a checker can pass needs `init`. The
+  same file's plan-seeding block lacked a `mkdir` for `.harness/templates`, so
+  its `cp` failed; fixed.
+
+- **`check-doctor.sh` mis-described an adopter's manifest** as "mostly
+  `scripts/*.sh` entries". An installed manifest is essentially all
+  `scripts/harness/**/*.sh`.
+
+### Changed
+
+- **The shipped-doc-refs gate sees glob citations, and can no longer pass
+  without running.** Its token regex stopped dead at `*`, so
+  `scripts/harness/tests/test-*.sh` extracted as nothing — which is why the
+  `init.md` defect above survived the v0.23.0 relocation. Globs now resolve by
+  matching at least one **regular** file (a directory named `test-x.sh` cannot
+  satisfy a citation), and `${VAR}/scripts/…` no longer falls out of the
+  pipeline unchecked. Literals are still read from the whole file, but globs
+  are read from prose only — every line of a `.md`/`.tmpl`/`.conf`, comment
+  lines only in a `.sh` — because a glob in shell code is a loop domain that is
+  allowed to be empty by design, and demanding it match would push
+  `doc-ref-ok:` annotations into shipped mechanism to satisfy a maintainer-only
+  gate. The scanned set gains `templates/scripts/gates.conf`, the
+  `templates/scripts/harness/` runners, the skill's `SKILL.md`, and this repo's
+  own `.harness/gates.conf`.
+
+- **That gate no longer fails open.** Both check loops were here-doc-fed — the
+  issue-#15 class, where bash 3.2 puts the here-doc temp in `$TMPDIR`, falls
+  back to CWD, and from an unwritable directory runs the loop body zero times
+  while still exiting 0. They use process substitution now (neither loop breaks
+  early, so there is no SIGPIPE hazard), and a counter assertion in each pass
+  turns any future silent skip into a failure instead of a green result.
+
+- **Contributor docs stopped misrouting guard tests.** `docs/standards/
+  templates.md` and `CONTRIBUTING.md` said a guard's regression test goes
+  "beside it" under `templates/scripts/harness/hooks/`. Every gate globs
+  `.../harness/tests/test-*.sh`, so a test written beside the hook is a test no
+  gate ever runs — exactly the silent failure that rule exists to prevent.
+
+### Migration
+
+- The mechanism files touched here (`check-harness`, `check-tests.sh`,
+  `check-doctor.sh`) are **replaced** by update mode. Every changed line is a
+  comment, so there is no behaviour change and no work beyond the normal
+  update.
+- `.harness/gates.conf` is a **policy** file — update mode never overwrites it.
+  The corrected floor comment therefore arrives as a proposed diff to accept,
+  not automatically. Adopters who never take it keep a stale comment and a
+  correct gate list.
+
 ## 0.34.0 — 2026-07-26
 
 Three defects found by running the kit against a large external repo and by an

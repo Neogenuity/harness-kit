@@ -116,8 +116,9 @@ EOF
 # _10e_formatter_parseable <path> — true if <path>'s extension is one a
 # repo-wide formatter (prettier/biome/dprint/a pre-commit formatter hook)
 # could plausibly rewrite. A real adopter's .harness-manifest is mostly
-# scripts/*.sh entries (shell has no formatter in this set that parses it at
-# all) plus a couple of non-code files (e.g. .harness/gates.conf); passing
+# scripts/harness/**/*.sh entries (shell has no formatter in this set that
+# parses it at all) plus a couple of non-code files
+# (e.g. .harness/gates.conf); passing
 # every entry through verbatim turned the manifest-derived half of this check
 # into permanent, unfixable noise — .sh paths no .prettierignore/.pre-commit
 # exclude could ever cover with a formatter that doesn't touch shell.
