@@ -71,6 +71,21 @@ git_c() { git -c user.email=t@example.com -c user.name=t "$@"; }
 # sha_of <root> <relpath> — the file's sha256, nothing else.
 sha_of() { ( cd "$1" && _harness_sha256 "$2" | awk '{print $1}' ); }
 
+# mode_of <path> — the file's octal permission bits (e.g. 644, 755), nothing
+# else. Two forms because `stat` is the one common tool with NO portable
+# interface: BSD/macOS spells it `-f %Lp`, GNU/coreutils spells it `-c %a`, and
+# each rejects the other's flag. No precedent existed in this repo — every other
+# permission assertion used `[ -x ]`, which cannot tell 755 from 711. Try BSD
+# first (this repo's own dev platform), fall back to GNU. If NEITHER works,
+# print nothing and return 1 so a caller comparing against an expected mode
+# sees an empty mismatch and fails loudly; a silent "" = "" would make every
+# mode assertion vacuously pass.
+mode_of() {
+    stat -f %Lp "$1" 2>/dev/null && return 0
+    stat -c %a "$1" 2>/dev/null && return 0
+    return 1
+}
+
 # make_fixture — prints a fresh installed + committed fixture root: a throwaway
 # git repo with one source file, the mechanism installed from this script's own
 # scripts/ dir, a generated manifest, and .harness/ git-ignored.

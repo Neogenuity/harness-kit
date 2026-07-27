@@ -650,12 +650,34 @@ _harness_copy_shipped() {
         rm -f "$tmp"
         return 1
     fi
+    # Normalize the stage to the ship contract's base mode BEFORE the exec-bit
+    # cases below. An installed mode must be a deterministic property of the
+    # ship contract — 644 for data, 755 for executables — and NOTHING else:
+    # not how the stage happened to be created, and not the umask of whoever
+    # ran the install. Two separate mechanisms conspire against that:
+    #
+    #   1. mktemp creates the stage 0600 (private by design), and `cp` onto an
+    #      ALREADY-EXISTING file writes bytes without touching the destination's
+    #      mode. Without the absolute `chmod 644` below, every installed file
+    #      inherits mktemp's private 0600.
+    #   2. Symbolic `chmod +x` means `a+x` MASKED BY UMASK, so under a
+    #      restrictive umask it grants owner-exec only: 0600 -> 0700 (or, from a
+    #      644 base, 744). Only an absolute octal mode is umask-independent.
+    #
+    # Both failure modes break the same thing: a script that is not readable by
+    # the group/other uids running gates in containers and multi-uid CI cannot
+    # be executed at all (bash must READ a script to run it), and a 0600
+    # kit-manifest breaks drift checks for the same reason.
+    #
+    # `cp -p` is wrong here (it would make installed modes depend on how the
+    # kit's own checkout was cloned) and `chmod --reference` is GNU-only.
+    chmod 644 "$tmp" || { rm -f "$tmp"; return 1; }
     case "$p" in
-        *.sh) chmod +x "$tmp" || { rm -f "$tmp"; return 1; } ;;
+        *.sh) chmod 755 "$tmp" || { rm -f "$tmp"; return 1; } ;;
         scripts/harness/*/*) ;;
         scripts/harness/*)
             # extensionless command entries are executable too
-            case "$(head -c2 "$tmp" 2>/dev/null)" in '#!') chmod +x "$tmp" || { rm -f "$tmp"; return 1; } ;; esac ;;
+            case "$(head -c2 "$tmp" 2>/dev/null)" in '#!') chmod 755 "$tmp" || { rm -f "$tmp"; return 1; } ;; esac ;;
     esac
     if ! mv "$tmp" "$root/$p"; then
         printf 'ERROR: harness: failed to move staged copy into place at %s\n' "$root/$p" >&2

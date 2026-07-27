@@ -166,6 +166,67 @@ else
 fi
 rm -rf "$F"
 
+# --- (a2) clean init: installed permission modes -------------------------------
+# The exec-bit inventory in (a) asserts with `[ -x ]`, which is true for 711 and
+# 700 alike — and those are exactly what a regression here produces. The stage
+# file is created by mktemp (0600) and `cp` onto an existing file preserves the
+# DESTINATION mode, so an install that does not normalize the stage lands data
+# files 0600 and executables 0711 (default umask) or 0700 (restrictive umask,
+# because symbolic `chmod +x` is `a+x` masked by umask). Every one of those is
+# unreadable to the other uids that run gates in containers and multi-uid CI,
+# where bash must READ a script to execute it.
+#
+# Installing under `umask 077` in a subshell is the whole point of this case:
+# the contract is that installed modes are a deterministic property of the ship
+# contract (644/755) and never of the installing shell umask, so a permissive
+# ambient umask must not be what makes this pass. `[ -x ]` cannot see any of
+# it; only an octal comparison can.
+F2=$(mktemp -d "$WORK/modes.XXXXXX") || exit 1
+( cd "${F2:?}" && git init -q )
+( umask 077; harness_install_mechanism "$SCRIPTS_DIR" "$F2" )
+badmodes=""
+# Process substitution + a consumption counter, not a pipe or a here-doc: same
+# SIGPIPE / temp-file hazard the (a) loop documents. A silently skipped loop
+# here would print the "ok" line below without having inspected a single
+# installed file.
+#
+# The manifest lives at <scripts>/harness/kit-manifest — an inventory read from
+# a path that does not resolve comes back EMPTY, and an empty inventory makes
+# every assertion below vacuously true. That is why the counter below increments
+# only for files actually stat'd, AFTER the existence test, rather than once per
+# line read: counting lines cannot distinguish "56 files inspected" from "one
+# empty line delivered by printf", and both an unresolvable manifest and a
+# wholly failed install must be loud here, not green.
+mode_inventory=$(harness_kit_shipped_paths "$SCRIPTS_DIR/harness/kit-manifest")
+mode_read=0
+while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    # Absent files are section (a) business; report only real mode violations.
+    [ -f "$F2/$p" ] || continue
+    mode_read=$((mode_read + 1))
+    # Expected mode mirrors _harness_copy_shipped exec-bit cases: .sh files and
+    # extensionless scripts/harness/* command entries whose first two bytes are
+    # a shebang are executable (755); everything else is data (644).
+    want=644
+    case "$p" in
+        *.sh) want=755 ;;
+        scripts/harness/*/*) ;;
+        scripts/harness/*)
+            case "$(head -c2 "$F2/$p" 2>/dev/null)" in '#!') want=755 ;; esac ;;
+    esac
+    got=$(mode_of "$F2/$p")
+    [ "$got" = "$want" ] || badmodes="$badmodes $p(got-$got want-$want)"
+done < <(printf '%s\n' "$mode_inventory")
+if [ "$mode_read" -eq 0 ]; then
+    fail "clean init modes: not one installed file was inspected — an empty inventory or a failed install would have made the assertion below pass vacuously"
+fi
+if [ -z "$badmodes" ]; then
+    pass "clean init: every installed file lands 644 (755 for executables) under a restrictive umask"
+else
+    fail "clean init: installed files do not carry the ship contract mode —$badmodes"
+fi
+rm -rf "$F2"
+
 # --- (b) non-clobber floor ----------------------------------------------------
 # A partial-harness repo's hand-written files must survive install byte-for-byte.
 F=$(mktemp -d "$WORK/partial.XXXXXX") || exit 1
