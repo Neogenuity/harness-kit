@@ -559,13 +559,33 @@ harness_conf_declare() {
 # unreachable by another uid — traversal needs the directory's search bit, so
 # normalizing file modes alone does not deliver the guarantee.
 #
-# Only newly created components are chmod'ed. An already-existing directory is
+# Only newly created components get the mode. An already-existing directory is
 # the adopter's (their .claude/ mode, their repo root's mode) and re-moding it
 # would be the installer overwriting a decision it never made — so the recursion
 # stops at the first existing ancestor. Recursion, not a read loop, because a
 # here-doc-fed loop needs a temp file and fails open when it cannot get one.
+#
+# Two hazards this must not walk into:
+#
+#   SYMLINKED COMPONENT. `[ -d ]`, `mkdir`, and `chmod` all FOLLOW symlinks, so
+#   a pre-planted $root/scripts -> /somewhere-else makes a naive walk create the
+#   rest of the tree outside the repo entirely. (File CONTENT was already
+#   contained — _harness_copy_shipped re-checks the destination's physical path
+#   against the root — and plain `mkdir -p` had exactly this behavior before,
+#   but directory creation is this helper's job now, so the refusal belongs
+#   here.) Any component that exists AND is a symlink is refused outright;
+#   components that exist as real directories are still left untouched.
+#
+#   TORN CREATE. `mkdir` then `chmod` is two steps: a kill between them strands
+#   a umask-masked 0700 directory that the exists-early-return above would then
+#   skip forever on every later run — the defect repairs itself never. `mkdir -m`
+#   is POSIX, is one utility invocation, and applies the mode unmasked by umask.
 _harness_mkdir_installed() {
     local d="$1" parent
+    if [ -L "$d" ]; then
+        printf 'ERROR: harness: directory %s is a symlink — refusing to write through it\n' "$d" >&2
+        return 1
+    fi
     [ -d "$d" ] && return 0
     parent="$(dirname "$d")"
     # dirname("/") is "/" — a fixed point means we walked to the filesystem root
@@ -573,14 +593,18 @@ _harness_mkdir_installed() {
     # under an existing repo root and must not spin forever if it somehow does.
     [ "$parent" = "$d" ] && return 1
     _harness_mkdir_installed "$parent" || return 1
-    if ! mkdir "$d" 2>/dev/null; then
-        # Lost a race (or the name appeared as a symlink-to-dir): it exists now
-        # and is therefore not ours to re-mode. Anything else is a real failure.
+    if ! mkdir -m 755 "$d" 2>/dev/null; then
+        # Lost a race: it exists now and is therefore not ours to re-mode — but
+        # a symlink that appeared in the gap is refused exactly as above, never
+        # accepted just because it happens to resolve to a directory.
+        if [ -L "$d" ]; then
+            printf 'ERROR: harness: directory %s is a symlink — refusing to write through it\n' "$d" >&2
+            return 1
+        fi
         [ -d "$d" ] && return 0
         printf 'ERROR: harness: failed to create directory %s\n' "$d" >&2
         return 1
     fi
-    chmod 755 "$d" || { printf 'ERROR: harness: failed to set mode 755 on %s\n' "$d" >&2; return 1; }
     return 0
 }
 

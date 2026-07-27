@@ -278,27 +278,75 @@ while IFS= read -r d; do
     got=$(mode_of "$F2/$d")
     [ "$got" = "755" ] || baddirs="$baddirs $d(got-$got want-755)"
 done < <(printf '%s' "$dirset")
+assert_layer_sentinels "$mode_inventory" "clean init modes"
+mode_floor_ok=1
+dir_floor_ok=1
 if [ "$mode_total" -eq 0 ]; then
+    mode_floor_ok=0
     fail "clean init modes: the shipped inventory is EMPTY — the mode assertions below would have passed vacuously"
 elif [ "$mode_read" -ne "$mode_total" ]; then
+    mode_floor_ok=0
     fail "clean init modes: only $mode_read of $mode_total shipped files were inspected — the rest never installed, so their modes were never checked"
 fi
 if [ "$dir_total" -eq 0 ]; then
+    dir_floor_ok=0
     fail "clean init modes: no installed directories were derived from the inventory — the directory assertion below would have passed vacuously"
 elif [ "$dir_read" -ne "$dir_total" ]; then
+    dir_floor_ok=0
     fail "clean init modes: only $dir_read of $dir_total installed directories were inspected"
 fi
-if [ -z "$badmodes" ]; then
-    pass "clean init: every installed file lands 644 (755 for executables) under a restrictive umask"
-else
+# WITHHOLD the pass line when the install rc or a floor already failed. "Every
+# installed file lands 644" is a claim about the whole shipped set; printing it
+# because the SUBSET that happened to install had good modes is a false green in
+# the log even though the suite's exit status is right. No pass, no duplicate
+# fail — the earlier check already recorded one.
+if [ -n "$badmodes" ]; then
     fail "clean init: installed files do not carry the ship contract mode —$badmodes"
+elif [ "$install_ok" = "1" ] && [ "$mode_floor_ok" = "1" ]; then
+    pass "clean init: every installed file lands 644 (755 for executables) under a restrictive umask"
 fi
-if [ -z "$baddirs" ]; then
-    pass "clean init: every install-created directory lands 755 under a restrictive umask"
-else
+if [ -n "$baddirs" ]; then
     fail "clean init: installed directories do not carry the ship contract mode —$baddirs"
+elif [ "$install_ok" = "1" ] && [ "$dir_floor_ok" = "1" ]; then
+    pass "clean init: every install-created directory lands 755 under a restrictive umask"
 fi
 rm -rf "$F2"
+
+# --- (a3) clean init: a symlinked tree component is refused --------------------
+# `[ -d ]`, `mkdir`, and `chmod` all FOLLOW symlinks, so a $root/scripts planted
+# as a link to somewhere else turns "create the installed tree" into "create it
+# in the attacker's directory". File CONTENT was always contained (the copy
+# function re-resolves the destination's physical path and refuses anything
+# outside the root), so the exposure is directory CREATION — which is exactly
+# what _harness_mkdir_installed now owns, and therefore what it must refuse.
+#
+# Two independent assertions, because they fail apart: the install must abort
+# loudly (naming the symlink), and the link target must be untouched. Without
+# the refusal the first still holds — the per-file containment check rejects
+# every copy, so the install returns non-zero anyway — while the second flips.
+# Asserting only the exit status would have looked green on a tree where the
+# installer had already created directories outside the repo.
+F3=$(mktemp -d "$WORK/symdir.XXXXXX") || exit 1
+OUTSIDE=$(mktemp -d "$WORK/outside.XXXXXX") || exit 1
+( cd "${F3:?}" && git init -q )
+ln -s "$OUTSIDE" "$F3/scripts"
+sym_out=$(harness_install_mechanism "$SCRIPTS_DIR" "$F3" 2>&1); sym_rc=$?
+sym_named=0
+case "$sym_out" in *"is a symlink"*) sym_named=1 ;; esac
+if [ "$sym_rc" != "0" ] && [ "$sym_named" = "1" ]; then
+    pass "symlinked tree component: install refuses loudly instead of creating through the link"
+else
+    fail "symlinked tree component: install did not refuse by name (rc=$sym_rc)" "$sym_out"
+fi
+# Nothing at all may appear under the link target — not a file, not an empty
+# directory. `find -mindepth 1` is the whole-subtree form of that question.
+sym_created=$(find "$OUTSIDE" -mindepth 1 2>/dev/null)
+if [ -z "$sym_created" ]; then
+    pass "symlinked tree component: nothing was created under the link target"
+else
+    fail "symlinked tree component: install created paths outside the repo through the link" "$sym_created"
+fi
+rm -rf "$F3" "$OUTSIDE"
 
 # --- (b) non-clobber floor ----------------------------------------------------
 # A partial-harness repo's hand-written files must survive install byte-for-byte.
