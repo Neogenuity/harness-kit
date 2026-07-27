@@ -35,10 +35,29 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-check-loops.XXXXXX") || exit 1
 # recursive delete or the cleanup itself fails.
 trap 'chmod -R u+w "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
 
-LIB_SRC="$(cd "$(dirname "$0")/../lib" && pwd)"
-HOOK_SRC="$(cd "$(dirname "$0")/../hooks" && pwd)"
-HARNESS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Every glob root is resolved and checked SEPARATELY, and a root that does not
+# resolve is fatal. `$(cd … && pwd)` prints nothing and writes only to stderr
+# when its directory is gone, so an unguarded root degrades silently to a bare
+# `/*.sh` glob — and because the sweep counted files globally, the surviving
+# roots kept that count positive and the narrowing went unreported. Moving
+# hooks/ aside was demonstrated to hide an unmarked reader exactly that way.
+_resolve_dir() {
+    (cd "$1" 2>/dev/null && pwd)
+}
+_SELF_DIR=$(dirname "$0")
+LIB_SRC=$(_resolve_dir "$_SELF_DIR/../lib")
+HOOK_SRC=$(_resolve_dir "$_SELF_DIR/../hooks")
+TEST_SRC=$(_resolve_dir "$_SELF_DIR/../tests")
+HARNESS_DIR=$(_resolve_dir "$_SELF_DIR/..")
+ROOT_DIR=$(_resolve_dir "$_SELF_DIR/../../..")
+_root_fail=0
+for _pair in "lib:$LIB_SRC" "hooks:$HOOK_SRC" "tests:$TEST_SRC" \
+    "entrypoints:$HARNESS_DIR" "repo-root:$ROOT_DIR"; do
+    [ -n "${_pair#*:}" ] && continue
+    echo "FAIL: test-check-loops — scan root '${_pair%%:*}' does not resolve; the sweep would silently narrow to the surviving roots"
+    _root_fail=1
+done
+[ "$_root_fail" -eq 0 ] || exit 1
 PIN_FILE="$ROOT_DIR/scripts/harness/.harness-manifest"
 fails=0
 
@@ -125,28 +144,48 @@ skipped=""
 # otherwise yield empty hits on every file and print the "ok" below).
 scanned=0
 scan_errors=0
-for _f in "$LIB_SRC"/*.sh "$HOOK_SRC"/*.sh "$HARNESS_DIR"/tests/*.sh "$HARNESS_DIR"/*; do
-    [ -f "$_f" ] || continue
-    # Shell files only: kit-manifest, provider-caps and harness.conf carry no
-    # shebang and are not code this scan can reason about.
-    head -n 1 "$_f" 2>/dev/null | grep -q '^#!.*sh' || continue
-    scanned=$((scanned + 1))
-    _hits=$(awk -v marker="$MARKER" "$scan_prog" "$_f" 2>"$WORK/scan.err")
-    _rc=$?
-    if [ "$_rc" -ne 0 ]; then
-        echo "FAIL: test-check-loops — scanner failed on $_f (awk rc=$_rc):"
-        sed 's/^/        /' "$WORK/scan.err" 2>/dev/null
-        scan_errors=$((scan_errors + 1))
+root_gaps=0
+# _scan_root <label> <path…> — sweep ONE glob root and require it to have
+# yielded at least one shell file. Per-root is the only honest unit: a single
+# global count cannot see one root vanish, because the other three hold it
+# above zero while the files that root was supposed to cover go unexamined.
+_scan_root() {
+    local label="$1"
+    shift
+    local n=0
+    for _f in "$@"; do
+        [ -f "$_f" ] || continue
+        # Shell files only: kit-manifest, provider-caps and harness.conf carry
+        # no shebang and are not code this scan can reason about.
+        head -n 1 "$_f" 2>/dev/null | grep -q '^#!.*sh' || continue
+        n=$((n + 1))
+        scanned=$((scanned + 1))
+        _hits=$(awk -v marker="$MARKER" "$scan_prog" "$_f" 2>"$WORK/scan.err")
+        _rc=$?
+        if [ "$_rc" -ne 0 ]; then
+            echo "FAIL: test-check-loops — scanner failed on $_f (awk rc=$_rc):"
+            sed 's/^/        /' "$WORK/scan.err" 2>/dev/null
+            scan_errors=$((scan_errors + 1))
+            fails=$((fails + 1))
+            continue
+        fi
+        [ -n "$_hits" ] || continue
+        if kit_owned "$_f"; then
+            undocumented="${undocumented}${_hits}"$'\n'
+        else
+            skipped="${skipped}${_hits}"$'\n'
+        fi
+    done
+    if [ "$n" -eq 0 ]; then
+        echo "FAIL: test-check-loops — scan root '$label' contributed zero shell files — that root moved or the shebang filter broke, and everything under it went unexamined"
+        root_gaps=$((root_gaps + 1))
         fails=$((fails + 1))
-        continue
     fi
-    [ -n "$_hits" ] || continue
-    if kit_owned "$_f"; then
-        undocumented="${undocumented}${_hits}"$'\n'
-    else
-        skipped="${skipped}${_hits}"$'\n'
-    fi
-done
+}
+_scan_root lib "$LIB_SRC"/*.sh
+_scan_root hooks "$HOOK_SRC"/*.sh
+_scan_root tests "$TEST_SRC"/*.sh
+_scan_root entrypoints "$HARNESS_DIR"/*
 undocumented=$(printf '%s' "$undocumented" | sed '/^$/d')
 skipped=$(printf '%s' "$skipped" | sed '/^$/d')
 
@@ -162,8 +201,8 @@ if [ -n "$skipped" ]; then
     echo "note: test-check-loops — repo-owned ('# tailored' or locally drifted) file(s) not held to this rule; the kit's update mode does not replace them, so folding the fix forward is the repo's call:"
     printf '%s\n' "$skipped" | sed 's/^/        /'
 fi
-if [ "$scan_errors" -ne 0 ]; then
-    echo "FAIL: test-check-loops — $scan_errors file(s) the scanner could not read (see above); an empty finding list is not evidence, so the structural ok is withheld"
+if [ "$scan_errors" -ne 0 ] || [ "$scanned" -eq 0 ] || [ "$root_gaps" -ne 0 ]; then
+    echo "FAIL: test-check-loops — structural ok withheld: $scanned file(s) examined, $root_gaps glob root(s) empty, $scan_errors file(s) unreadable by the scanner (see above); an empty finding list is not evidence"
 elif [ -z "$undocumented" ]; then
     echo "ok: test-check-loops — every surviving here-doc-fed reader is marked deliberate"
 fi
@@ -182,61 +221,120 @@ fi
 # --- 2. positive control: the scanner of case 1 must be falsifiable ----------
 # Case 1 reports by ABSENCE of findings — the exact shape that fails open. A
 # scan program that matches nothing, or an awk that never ran, prints its "ok"
-# having proven nothing. So run the same program against two fixtures whose
-# verdict is known in advance and demand the precise result: the marked reader
-# left alone, the unmarked one flagged at an exact line.
+# having proven nothing. So run the same program against fixtures whose verdict
+# is known in advance and demand the precise `file:line`, not merely non-empty
+# output: exactness is what pins the program against silent drift.
 #
-# The fixture bodies are written with printf, with the loop terminator held in
-# "$_d", never as a here-doc body: case 1 sweeps tests/*.sh, THIS FILE
-# INCLUDED, so a literal `done <<` at the start of a line in this source would
-# make the test flag itself. The fixtures live under $WORK, outside every glob
-# root of the case-1 loop, so they are invisible to it — deliberately.
+# EVERY match rule needs its own fixture. The swept tree happens to contain only
+# `done <<` sites today, so case 1 gives the other two rules no incidental
+# coverage at all — deleting the `read … <<` rule, or the continuation pair,
+# left the whole test green. That `read … <<` rule is there because the first
+# version of this scan MISSED a live one in verify's gates.conf parser; a
+# control that cannot see it removed is not a control.
+#
+# The fixture bodies are printf-built with every trigger token held in a
+# variable ("$_d" done, "$_r" read, "$_h" <<), never as a here-doc body: case 1
+# sweeps tests/*.sh, THIS FILE INCLUDED, so a literal `done <<`, `read … <<`,
+# `done \` or a bare `<<` continuation at the start of a line in this source
+# would make the test flag itself. The fixtures live under $WORK, outside every
+# glob root of case 1, so they are invisible to it — deliberately.
 mkdir -p "$WORK/fixtures"
 _d='done'
+_r='read'
+_h='<<'
 _fx_write() {
-    # $1 = destination path, $2 = the comment line immediately above the reader.
-    {
-        printf '#!/usr/bin/env bash\n'
-        printf 'while read -r _line; do\n'
-        printf '    printf "%%s\\n" "$_line"\n'
-        printf '%s\n' "$2"
-        printf '%s <<FXEOF\n' "$_d"
-        printf 'x\n'
-        printf 'FXEOF\n'
-    } > "$1"
+    # $1 = destination path, $2 = form, $3 = comment line above the reader.
+    # The reader's line number per form is asserted by the caller.
+    case "$2" in
+    loop)
+        # 1 shebang / 2 while / 3 body / 4 comment / 5 READER / 6 data / 7 end
+        {
+            printf '#!/usr/bin/env bash\n'
+            printf 'while %s -r _line; do\n' "$_r"
+            printf '    printf "%%s\\n" "$_line"\n'
+            printf '%s\n' "$3"
+            printf '%s %sFXEOF\n' "$_d" "$_h"
+            printf 'x\n'
+            printf 'FXEOF\n'
+        } > "$1"
+        ;;
+    single-read)
+        # 1 shebang / 2 comment / 3 READER / 4 data / 5 end
+        {
+            printf '#!/usr/bin/env bash\n'
+            printf '%s\n' "$3"
+            printf '%s -r a b %sFXEOF\n' "$_r" "$_h"
+            printf 'x y\n'
+            printf 'FXEOF\n'
+        } > "$1"
+        ;;
+    continuation)
+        # The same defect wearing a line break.
+        # 1 shebang / 2 while / 3 body / 4 `done \` / 5 READER / 6 data / 7 end
+        {
+            printf '#!/usr/bin/env bash\n'
+            printf 'while %s -r _line; do\n' "$_r"
+            printf '    printf "%%s\\n" "$_line"\n'
+            printf '%s \\\n' "$_d"
+            printf '    %sFXEOF\n' "$_h"
+            printf 'x\n'
+            printf 'FXEOF\n'
+        } > "$1"
+        ;;
+    stale-marker)
+        # A marked comment block, then a non-comment line, then an UNMARKED
+        # reader. The marker is 4 lines up: any fixed look-behind window would
+        # excuse this reader, which is the bug the adjacent-comment-block rule
+        # replaced. It must still be flagged.
+        # 1 shebang / 2 marker / 3 x=1 / 4 while / 5 body / 6 READER / 7-8 data
+        {
+            printf '#!/usr/bin/env bash\n'
+            printf '# %s: this marker documents the assignment, not the reader.\n' "$MARKER"
+            printf 'x=1\n'
+            printf 'while %s -r _line; do\n' "$_r"
+            printf '    printf "%%s\\n" "$_line"\n'
+            printf '%s %sFXEOF\n' "$_d" "$_h"
+            printf 'x\n'
+            printf 'FXEOF\n'
+        } > "$1"
+        ;;
+    esac
 }
-# The reader is line 5 of that 7-line body. Asserting the exact `file:line`
-# rather than "non-empty" is what pins the scan program against silent drift.
-FX_READER_LINE=5
-_fx_marked="$WORK/fixtures/marked.sh"
-_fx_unmarked="$WORK/fixtures/unmarked.sh"
-_fx_write "$_fx_marked" "# $MARKER: this reader returns on the first hit."
-_fx_write "$_fx_unmarked" "# an ordinary comment saying nothing about the redirection"
 
-_pc_marked=$(awk -v marker="$MARKER" "$scan_prog" "$_fx_marked" 2>"$WORK/pc-marked.err")
-_pc_marked_rc=$?
-if [ "$_pc_marked_rc" -eq 0 ] && [ -z "$_pc_marked" ]; then
-    echo "ok: test-check-loops — the scanner leaves a marked here-doc reader alone"
-else
-    echo "FAIL: test-check-loops — the scanner flagged a MARKED reader (awk rc=$_pc_marked_rc), got:"
-    printf '%s\n' "$_pc_marked" | sed 's/^/        /'
-    sed 's/^/        /' "$WORK/pc-marked.err" 2>/dev/null
-    fails=$((fails + 1))
-fi
-
-_pc_want="$_fx_unmarked:$FX_READER_LINE"
-_pc_unmarked=$(awk -v marker="$MARKER" "$scan_prog" "$_fx_unmarked" 2>"$WORK/pc-unmarked.err")
-_pc_unmarked_rc=$?
-if [ "$_pc_unmarked_rc" -eq 0 ] && [ "$_pc_unmarked" = "$_pc_want" ]; then
-    echo "ok: test-check-loops — the scanner still finds an unmarked here-doc reader"
-else
-    echo "FAIL: test-check-loops — the scanner did not report the unmarked reader as '$_pc_want' (awk rc=$_pc_unmarked_rc), got:"
-    printf '%s\n' "$_pc_unmarked" | sed 's/^/        /'
-    sed 's/^/        /' "$WORK/pc-unmarked.err" 2>/dev/null
+# _pc_expect <label> <fixture> <exact expected stdout> — one ok/FAIL pair.
+_pc_expect() {
+    local out rc
+    out=$(awk -v marker="$MARKER" "$scan_prog" "$2" 2>"$WORK/pc.err")
+    rc=$?
+    if [ "$rc" -eq 0 ] && [ "$out" = "$3" ]; then
+        echo "ok: test-check-loops — $1"
+        return 0
+    fi
+    echo "FAIL: test-check-loops — $1 — expected '$3' (awk rc=$rc), got:"
+    printf '%s\n' "$out" | sed 's/^/        /'
+    sed 's/^/        /' "$WORK/pc.err" 2>/dev/null
     echo "        Case 1 reports by absence of findings; a scanner that can no"
     echo "        longer produce this finding makes that \"ok\" meaningless."
     fails=$((fails + 1))
-fi
+}
+
+_fx_marked="$WORK/fixtures/marked.sh"
+_fx_unmarked="$WORK/fixtures/unmarked.sh"
+_fx_single="$WORK/fixtures/single-read.sh"
+_fx_cont="$WORK/fixtures/continuation.sh"
+_fx_stale="$WORK/fixtures/stale-marker.sh"
+_fx_plain="# an ordinary comment saying nothing about the redirection"
+_fx_write "$_fx_marked" loop "# $MARKER: this reader returns on the first hit."
+_fx_write "$_fx_unmarked" loop "$_fx_plain"
+_fx_write "$_fx_single" single-read "$_fx_plain"
+_fx_write "$_fx_cont" continuation ""
+_fx_write "$_fx_stale" stale-marker ""
+
+_pc_expect "the scanner leaves a marked here-doc reader alone" "$_fx_marked" ""
+_pc_expect "the scanner still finds an unmarked here-doc reader" "$_fx_unmarked" "$_fx_unmarked:5"
+_pc_expect "the scanner still finds an unmarked single-read here-doc" "$_fx_single" "$_fx_single:3"
+_pc_expect "the scanner still finds a line-continued here-doc redirect" "$_fx_cont" "$_fx_cont:5"
+_pc_expect "a marker outside the reader's own comment block does not excuse it" "$_fx_stale" "$_fx_stale:6"
 
 # --- 3. unit: assert_loop_ran ------------------------------------------------
 # The probe sits at lib/ depth so check-common.sh's own $0-relative ROOT
