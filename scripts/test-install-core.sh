@@ -129,7 +129,16 @@ manifest_paths=$(awk '{print $2}' "$F/scripts/harness/.harness-manifest")
 # shipped path. The counter therefore increments only past the blank-line
 # filter — counting delivered lines cannot distinguish "56 paths inspected"
 # from "one empty line", and only one of those is good news.
+# A zero-floor alone is still too weak: it proves SOME path was seen, not that
+# the whole contract was. A regression that drops an entire manifest layer (or
+# a truncated read) leaves the survivors green. Pin the expected size up front
+# and require an exact match below.
 shipped_inventory=$(harness_kit_shipped_paths "$SCRIPTS_DIR/harness/kit-manifest")
+inventory_total=0
+while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    inventory_total=$((inventory_total + 1))
+done < <(printf '%s\n' "$shipped_inventory")
 inventory_read=0
 while IFS= read -r p; do
     [ -n "$p" ] || continue
@@ -148,8 +157,10 @@ while IFS= read -r p; do
         *) unpinned="$unpinned $p" ;;
     esac
 done < <(printf '%s\n' "$shipped_inventory")
-if [ "$inventory_read" -eq 0 ]; then
-    fail "clean init: the shipped-inventory loop never ran — the shell could not deliver its input, so the two assertions below would have passed without examining anything"
+if [ "$inventory_total" -eq 0 ]; then
+    fail "clean init: the shipped inventory is EMPTY — the two assertions below would have passed without examining a single shipped path"
+elif [ "$inventory_read" -ne "$inventory_total" ]; then
+    fail "clean init: only $inventory_read of $inventory_total shipped paths were examined — the two assertions below saw an incomplete inventory"
 fi
 if [ -z "$missing" ]; then
     pass "clean init: every shipped kit-manifest entry installed and executable"
@@ -187,27 +198,63 @@ rm -rf "$F"
 # contract (644/755) and never of the installing shell umask, so a permissive
 # ambient umask must not be what makes this pass. `[ -x ]` cannot see any of
 # it; only an octal comparison can.
+#
+# FILES ARE ONLY HALF OF IT. `mkdir -p` is umask-masked exactly like symbolic
+# `chmod +x`, so the directories the install creates land 0700 under this same
+# umask — and a 0755 file inside a 0700 directory is still unreachable to
+# another uid, because traversal needs the directory search bit. An earlier
+# version of this case asserted file modes only and passed green on a tree
+# whose every directory was 0700, i.e. on a tree where the ticket harm was
+# fully intact. Hence the second, directory-mode assertion below.
 F2=$(mktemp -d "$WORK/modes.XXXXXX") || exit 1
 ( cd "${F2:?}" && git init -q )
-( umask 077; harness_install_mechanism "$SCRIPTS_DIR" "$F2" )
+# The install rc is an assertion, not noise: a half-failed install leaves the
+# files it never wrote ABSENT, and an absent file is skipped by the mode loops
+# below rather than flagged. Checking rc AND the full-count floors means a
+# partial install fails here twice over instead of reporting green modes for
+# whatever happened to land.
+( umask 077; harness_install_mechanism "$SCRIPTS_DIR" "$F2" ) \
+    || fail "clean init modes: install failed under umask 077"
 badmodes=""
-# Process substitution + a consumption counter, not a pipe or a here-doc: same
-# SIGPIPE / temp-file hazard the (a) loop documents. A silently skipped loop
-# here would print the "ok" line below without having inspected a single
-# installed file.
+baddirs=""
+# Process substitution + counted floors, not a pipe or a here-doc: same SIGPIPE
+# / temp-file hazard the (a) loop documents.
 #
-# The manifest lives at <scripts>/harness/kit-manifest — an inventory read from
-# a path that does not resolve comes back EMPTY, and an empty inventory makes
-# every assertion below vacuously true. That is why the counter below increments
-# only for files actually stat'd, AFTER the existence test, rather than once per
-# line read: counting lines cannot distinguish "56 files inspected" from "one
-# empty line delivered by printf", and both an unresolvable manifest and a
-# wholly failed install must be loud here, not green.
+# Both floors below are FULL-COUNT, not zero-floors. A zero-floor only proves
+# the loop ran at least once, so an install that dropped a third of the tree
+# still printed "ok" for the survivors — the missing files were skipped by the
+# existence test and never counted. Requiring an exact match against the
+# inventory size makes "did not inspect it" as loud as "inspected it and it was
+# wrong", which is the only version of this case worth having.
 mode_inventory=$(harness_kit_shipped_paths "$SCRIPTS_DIR/harness/kit-manifest")
+# One pass to size the file inventory and to derive the DIRECTORY set: every
+# intermediate component of every shipped path, deduped. Directories are half
+# the contract — a 755 file under a 0700 directory is unreachable to another
+# uid, because traversal needs the search bit — and in a fresh fixture every
+# directory except .git/ is install-created, so all of them are fair game.
+mode_total=0
+dirset=""
+while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    mode_total=$((mode_total + 1))
+    d=$(dirname "$p")
+    while [ "$d" != "." ] && [ "$d" != "/" ]; do
+        # Pipe-free exact-line membership, as elsewhere in this suite.
+        case $'\n'"$dirset"$'\n' in
+            *$'\n'"$d"$'\n'*) ;;
+            *) dirset="$dirset$d"$'\n' ;;
+        esac
+        d=$(dirname "$d")
+    done
+done < <(printf '%s\n' "$mode_inventory")
+dir_total=0
+while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    dir_total=$((dir_total + 1))
+done < <(printf '%s' "$dirset")
 mode_read=0
 while IFS= read -r p; do
     [ -n "$p" ] || continue
-    # Absent files are section (a) business; report only real mode violations.
     [ -f "$F2/$p" ] || continue
     mode_read=$((mode_read + 1))
     # Expected mode mirrors _harness_copy_shipped exec-bit cases: .sh files and
@@ -223,13 +270,33 @@ while IFS= read -r p; do
     got=$(mode_of "$F2/$p")
     [ "$got" = "$want" ] || badmodes="$badmodes $p(got-$got want-$want)"
 done < <(printf '%s\n' "$mode_inventory")
-if [ "$mode_read" -eq 0 ]; then
-    fail "clean init modes: not one installed file was inspected — an empty inventory or a failed install would have made the assertion below pass vacuously"
+dir_read=0
+while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    [ -d "$F2/$d" ] || { baddirs="$baddirs $d(absent)"; continue; }
+    dir_read=$((dir_read + 1))
+    got=$(mode_of "$F2/$d")
+    [ "$got" = "755" ] || baddirs="$baddirs $d(got-$got want-755)"
+done < <(printf '%s' "$dirset")
+if [ "$mode_total" -eq 0 ]; then
+    fail "clean init modes: the shipped inventory is EMPTY — the mode assertions below would have passed vacuously"
+elif [ "$mode_read" -ne "$mode_total" ]; then
+    fail "clean init modes: only $mode_read of $mode_total shipped files were inspected — the rest never installed, so their modes were never checked"
+fi
+if [ "$dir_total" -eq 0 ]; then
+    fail "clean init modes: no installed directories were derived from the inventory — the directory assertion below would have passed vacuously"
+elif [ "$dir_read" -ne "$dir_total" ]; then
+    fail "clean init modes: only $dir_read of $dir_total installed directories were inspected"
 fi
 if [ -z "$badmodes" ]; then
     pass "clean init: every installed file lands 644 (755 for executables) under a restrictive umask"
 else
     fail "clean init: installed files do not carry the ship contract mode —$badmodes"
+fi
+if [ -z "$baddirs" ]; then
+    pass "clean init: every install-created directory lands 755 under a restrictive umask"
+else
+    fail "clean init: installed directories do not carry the ship contract mode —$baddirs"
 fi
 rm -rf "$F2"
 

@@ -550,6 +550,40 @@ harness_conf_declare() {
 # caller's authoring/merge step, so the "never clobber hand-written files"
 # floor holds by construction. Returns 1 when the source has no kit-manifest
 # (a pre-v0.21.0 template dir — not a valid install source for this library).
+# _harness_mkdir_installed <absolute dir>
+# `mkdir -p` equivalent that leaves every directory it CREATES at 0755.
+#
+# Directory modes are part of the ship contract exactly like file modes, and
+# `mkdir` is umask-masked the same way symbolic `chmod +x` is: under `umask 077`
+# plain `mkdir -p` lands 0700, and a 0755 FILE inside a 0700 directory is still
+# unreachable by another uid — traversal needs the directory's search bit, so
+# normalizing file modes alone does not deliver the guarantee.
+#
+# Only newly created components are chmod'ed. An already-existing directory is
+# the adopter's (their .claude/ mode, their repo root's mode) and re-moding it
+# would be the installer overwriting a decision it never made — so the recursion
+# stops at the first existing ancestor. Recursion, not a read loop, because a
+# here-doc-fed loop needs a temp file and fails open when it cannot get one.
+_harness_mkdir_installed() {
+    local d="$1" parent
+    [ -d "$d" ] && return 0
+    parent="$(dirname "$d")"
+    # dirname("/") is "/" — a fixed point means we walked to the filesystem root
+    # without finding an existing directory, which cannot happen for a path
+    # under an existing repo root and must not spin forever if it somehow does.
+    [ "$parent" = "$d" ] && return 1
+    _harness_mkdir_installed "$parent" || return 1
+    if ! mkdir "$d" 2>/dev/null; then
+        # Lost a race (or the name appeared as a symlink-to-dir): it exists now
+        # and is therefore not ours to re-mode. Anything else is a real failure.
+        [ -d "$d" ] && return 0
+        printf 'ERROR: harness: failed to create directory %s\n' "$d" >&2
+        return 1
+    fi
+    chmod 755 "$d" || { printf 'ERROR: harness: failed to set mode 755 on %s\n' "$d" >&2; return 1; }
+    return 0
+}
+
 # _harness_copy_shipped <srcfile> <path> <root>
 # Copy one shipped file into the tree and set its executable bit by the rule
 # install and update both use (every *.sh, and any scripts/harness/ top-level
@@ -583,7 +617,7 @@ _harness_copy_shipped() {
             printf 'ERROR: harness: destination ancestor %s resolves outside the repo root %s — refusing to create directories through it\n' "$anc" "$rootphys" >&2
             return 1 ;;
     esac
-    mkdir -p "$destdir" || return 1
+    _harness_mkdir_installed "$destdir" || return 1
     if [ -L "$root/$p" ]; then
         printf 'ERROR: harness: destination %s is a symlink — refusing to write through it\n' "$root/$p" >&2
         return 1
@@ -695,7 +729,9 @@ harness_install_mechanism() {
     # unsafe paths, duplicate destinations, and missing declared sources all
     # abort here instead of surfacing as a partial install.
     harness_validate_ship_contract "$kmf" "$src" || return 1
-    mkdir -p "$root/scripts/harness"
+    # Loud, not best-effort: if the tree's own root directory cannot be created
+    # at the ship contract's mode there is nothing to install into.
+    _harness_mkdir_installed "$root/scripts/harness" || return 1
     # Process substitution (not `... | while`) so a copy failure inside the
     # loop reaches `failed` in THIS shell instead of dying in a pipe subshell.
     while IFS= read -r p; do
@@ -872,7 +908,7 @@ harness_update_apply() {
         if [ -n "$dry" ]; then
             mf_read="$root/scripts/.harness-manifest"
         else
-            mkdir -p "$root/scripts/harness"
+            _harness_mkdir_installed "$root/scripts/harness" || return 1
             if ! mv "$root/scripts/.harness-manifest" "$mf"; then
                 printf 'ERROR: harness_update_apply: failed to migrate the integrity manifest\n' >&2
                 return 1
@@ -919,7 +955,11 @@ harness_update_apply() {
     # commands, libraries, hooks, and tests alike — the kit-manifest enumerates
     # them all). Process substitution (not `... | while`) keeps `failed` in
     # THIS shell; every copy is checked via _harness_copy_shipped.
-    [ -n "$dry" ] || mkdir -p "$root/scripts/harness"
+    # Update creates installed-tree directories too (a fresh layer's dir on a
+    # tree that predates it), so it owes the same 0755 contract as init.
+    if [ -z "$dry" ]; then
+        _harness_mkdir_installed "$root/scripts/harness" || return 1
+    fi
     while IFS= read -r p; do
         srcfile="$src/$(_harness_kit_src_rel "$kmf" "$p")"
         if [ -f "$srcfile" ] && [ ! -f "$root/$p" ]; then
