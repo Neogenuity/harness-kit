@@ -38,8 +38,21 @@ templates being shipped, and an annotated tag pushed.
    release, roll the changes into this repo's own installation (the kit's
    **update** mode: replace manifest-matching files in `scripts/`, diff
    tailored ones), then re-pin `scripts/harness/.harness-manifest` with the new
-   version header and checksums (command in the SKILL's init step 8; set
-   `HARNESS_ALLOW_MECHANISM_EDITS=1` for the session). This step is
+   version header and checksums:
+
+   ```bash
+   bash -c 'HARNESS_ALLOW_MECHANISM_EDITS=1 bash scripts/harness/bootstrap repin . <version>'
+   ```
+
+   Do **not** re-pin with init step 8's `harness_generate_manifest` — that
+   producer emits no `# tailored` markers and drops retired tailored-only
+   paths from the pin set, so on a repo with existing tailored pins the next
+   update mode sees unmarked non-policy pins that match the tailored content
+   and classifies them "replace" — silently clobbering the tailored copies
+   with pristine templates (retired ones just fall out of integrity
+   pinning). `bootstrap repin` preserves the markers, refuses missing
+   arguments, and writes atomically; generate is the fresh-install producer,
+   for trees with no tailored pins to preserve. This step is
    CI-enforced: `scripts/harness/tests/test-template-sync.sh` fails when a non-tailored
    installed file differs from its template.
 6. `bash scripts/harness/verify` again — the manifest gate must pass post-re-pin.

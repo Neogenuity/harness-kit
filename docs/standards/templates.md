@@ -138,7 +138,10 @@ declared Codex execution-profile validation, for example, requires Python 3.11+
 
 ## Version discipline
 
-A behavior change in shipped mechanism bumps `plugins/harness-kit/.claude-plugin/plugin.json`
-before release ([.agents/skills/release/SKILL.md](../../.agents/skills/release/SKILL.md)) —
+A behavior change in shipped mechanism bumps the kit version before release:
+`plugins/harness-kit/VERSION` is the single source of truth, mirrored into
+both `plugins/harness-kit/.claude-plugin/plugin.json` and
+`plugins/harness-kit/.codex-plugin/plugin.json`
+([.agents/skills/release/SKILL.md](../../.agents/skills/release/SKILL.md)) —
 installed repos pin mechanism by checksum, and update mode uses the version
 to know what changed.
