@@ -1,4 +1,4 @@
-# harness-kit 0.40.0
+# harness-kit 0.40.1
 f765112e42bb5b7304cf8a2405ec41b4d9c997e1c47fae7d16ef43d0fe4defa7  .harness/gates.conf # tailored
 9af2143887fdaa870eac1a2c0be38ce89a09d36c6503fb8ec4308eb9d072df40  .harness/hooks/guard-project-policy.sh # tailored
 245079626615bdc1545e362c236472cd763ff649496f8b0d9d8d3540d37c8882  scripts/check-packaging.sh # tailored
@@ -53,7 +53,7 @@ fcb1d46188347815db7ccacd29e36b97de6b0a693ffdbabaa0eed9c8c7d9042e  scripts/harnes
 11860239c84527e390d33aff803c75bed7d81d8a6410ad30a14c89e77c7db4ab  scripts/harness/tests/test-skip-tests-family.sh
 d0e5642fc915b85c58b69acd6b469ce0957528dd4852775e7d0bb9eb598081fb  scripts/harness/tests/test-sync-adapters.sh
 2e42265a4da784cdc54a885f78a959b40db8d191dbaaafe30b4a5d5bcd7faf69  scripts/harness/tests/test-sync-secrets.sh
-9b228a70f35ece990f53b603439ababd13c4acb45349dfbd523dc14b948cf184  scripts/harness/tests/test-verify.sh
+addf49e46ceaab3d67b51688cc22bf95d2173885b225bf1b45d62ba9996f316b  scripts/harness/tests/test-verify.sh
 f126ca9721409b6283a792144e37bd7ba127c5b0b63534de8940d2bcf576f2c5  scripts/harness/validate-plan
 e3c6638cbcb7495ae80450dff463b1540716eadfed7e7c189dec2839d89f581f  scripts/harness/verify
 784a83d624e756ba7b93b88d1b31fd415e22d5da21133cdfc0e39caa2ce0723b  scripts/install-test-lib.sh # tailored

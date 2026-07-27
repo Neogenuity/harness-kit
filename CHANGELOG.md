@@ -3,6 +3,22 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.40.1 — 2026-07-27
+
+### Fixed
+
+- **The shipped `tests/test-verify.sh` failed 13 of its own assertions under
+  any CI runner.** GitHub Actions (and most runners) export `CI=true`, and
+  v0.40.0's runner deliberately refuses `--changed` there — correctly, since the
+  cache is writable by the same agent whose work verify gates. But the suite
+  drives `--changed` directly to exercise the memoization, so it inherited that
+  refusal and every `--changed` case failed with `rc=64`. The suite now `unset
+  CI`s at the top and the one case that asserts the refusal sets `CI=true` for
+  its own invocation, so both branches stay covered. Local runs passed because
+  a developer shell has no `CI` set; the shipped floor is exactly where that
+  divergence is invisible until it reaches a runner. Verified by running the
+  suite, `check-harness`, and a full `verify` with `CI=true` before release.
+
 ## 0.40.0 — 2026-07-27
 
 ### Added

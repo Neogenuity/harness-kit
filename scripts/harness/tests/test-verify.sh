@@ -15,6 +15,13 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-verify.XXXXXX") || exit 1
 export TEST_WORK="$WORK"
 export HARNESS_LOG_LIB="$LIB_DIR/log-lib.sh"
 export HARNESS_LOG_FILE="$WORK/gates.jsonl"
+# GitHub Actions and most runners export CI=true, and the runner under test
+# deliberately REFUSES --changed there (the cache is writable by the agent whose
+# work verify gates, so the one place it must never run is the place where the
+# green is the artifact). This suite drives --changed directly, so it has to
+# control that variable rather than inherit it. The case that asserts the
+# refusal sets CI=true for its own invocation only.
+unset CI
 fails=0
 
 cleanup() { rm -rf "$WORK"; }
