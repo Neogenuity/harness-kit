@@ -73,16 +73,27 @@ sha_of() { ( cd "$1" && _harness_sha256 "$2" | awk '{print $1}' ); }
 
 # mode_of <path> — the file's octal permission bits (e.g. 644, 755), nothing
 # else. Two forms because `stat` is the one common tool with NO portable
-# interface: BSD/macOS spells it `-f %Lp`, GNU/coreutils spells it `-c %a`, and
-# each rejects the other's flag. No precedent existed in this repo — every other
-# permission assertion used `[ -x ]`, which cannot tell 755 from 711. Try BSD
-# first (this repo's own dev platform), fall back to GNU. If NEITHER works,
-# print nothing and return 1 so a caller comparing against an expected mode
-# sees an empty mismatch and fails loudly; a silent "" = "" would make every
+# interface: BSD/macOS spells it `-f %Lp`, GNU/coreutils spells it `-c %a`. No
+# precedent existed in this repo — every other permission assertion used
+# `[ -x ]`, which cannot tell 755 from 711. Try BSD first (this repo's own dev
+# platform), fall back to GNU (CI runs ubuntu-latest too).
+#
+# Each probe is SHAPE-VALIDATED before it is trusted, because the two forms do
+# not cleanly reject each other. GNU stat reads `-f` as --file-system and takes
+# BOTH remaining words as operands: it complains about '%Lp' on stderr (which
+# this swallows) and still prints a MULTI-LINE filesystem block for the real
+# path on stdout. Returning that raw would hand the caller a paragraph instead
+# of a mode and fail every comparison unreadably on Linux. Accepting only three
+# or four octal digits makes a wrong-platform probe fall through to the right
+# one. If NEITHER yields a valid mode, print nothing and return 1 so the caller
+# sees an empty mismatch and fails loudly — a silent "" = "" would make every
 # mode assertion vacuously pass.
 mode_of() {
-    stat -f %Lp "$1" 2>/dev/null && return 0
-    stat -c %a "$1" 2>/dev/null && return 0
+    local m
+    m=$(stat -f %Lp "$1" 2>/dev/null)
+    case "$m" in [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) printf '%s\n' "$m"; return 0 ;; esac
+    m=$(stat -c %a "$1" 2>/dev/null)
+    case "$m" in [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) printf '%s\n' "$m"; return 0 ;; esac
     return 1
 }
 
