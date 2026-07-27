@@ -3,6 +3,84 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.39.0 — 2026-07-27
+
+### Fixed
+
+- **Every installed file and directory landed with private modes — scripts
+  `0711`, data files `0600`, directories umask-dependent — breaking container
+  and multi-uid gate runs.** `_harness_copy_shipped` stages each shipped file
+  with `mktemp` (mode 0600) and copies content in with plain `cp`, which
+  preserves the *destination's* mode, so the source's mode never applied. Git
+  tracks only the executable bit, so committed trees and fresh clones look
+  normal — the defect lived purely in installed working copies, on every init
+  and every update, and bit exactly where the kit's own guidance sends people:
+  a non-root user in the documented containerized gate run cannot *read* a
+  `0711` script (bash needs read to execute a script file), and a `0600`
+  `kit-manifest` fails the drift checks for a reason that has nothing to do
+  with drift. Installed modes are now an explicit ship-contract property,
+  umask-independent end to end: files are normalized to `644` after the copy
+  (deliberately not `cp -p`, so adopters never inherit how the kit's checkout
+  was cloned), executables get absolute `755` (symbolic `+x` is umask-masked —
+  under `umask 077` it yielded `744`), and a new `_harness_mkdir_installed`
+  helper creates missing directory components at `755` atomically
+  (`mkdir -m`), refuses symlinked components by name, and touches **only
+  directories it creates** — an adopter's pre-existing directory modes are
+  theirs. Wired at all four sites that create installed-tree directories,
+  including both update-apply paths. A new maintainer-suite case installs
+  under `umask 077` and asserts the octal mode of every shipped file and
+  directory, so the contract is pinned, not assumed. (#20)
+
+- **test-check-loops.sh could not tell "the rule holds" from "the scan is
+  broken."** The structural scanner — the guard added for the here-doc
+  fail-open class (#15) — discarded awk's exit status and sent its stderr to
+  /dev/null, so a broken scan program produced empty output for every file and
+  the test printed `ok:` having scanned nothing: the same fail-open shape it
+  exists to stamp out, one level up. A scanner failure is now a loud per-file
+  FAIL carrying awk's stderr; each of the five glob roots is guarded
+  individually (a root that fails to resolve or contributes zero shell files
+  is a named FAIL — an empty `$(cd ...)` result used to silently rewrite the
+  glob and the surviving roots kept the counter positive); an unreadable swept
+  file is a named FAIL instead of being mistaken for a non-shell file; and
+  five exact-line positive-control fixtures pin every scanner rule — the
+  done-heredoc loop, the single-read form (the historical miss), the
+  line-continued redirect, and marker adjacency (a marker outside the reader's
+  own comment block does not excuse it). The structural `ok` is withheld on
+  any scan error, read error, empty root, or zero-file sweep: an empty finding
+  list is not evidence unless every root was actually swept. (#21)
+
+- **Two test-sync-adapters.sh assertions could pass without exercising what
+  they claim.** The negative "deadlock scenario" case accepted *any*
+  `sync --check` failure as proof the stripped blank line was re-flagged — an
+  unbuilt fixture or a failed mutation produced the same nonzero exit and the
+  same green line. Every setup step is now gated, `--check` must be clean
+  *before* the mutation, and the mutation is verified to have actually removed
+  the blank line, so the final nonzero exit is attributable to the one byte
+  the case changed. And the prettier "byte-for-byte" comparison ran through
+  command substitution, which strips trailing newlines from both sides —
+  blinding it to the likeliest formatter delta. It now compares files with
+  `cmp -s`, which is what byte-for-byte meant all along. (#22)
+
+- **Maintainer install suite: three of its own checks could not fail.** The
+  mktemp preflight was brace-nested inside the sha256 check's else-branch and
+  silently never ran without a sha256 tool on PATH; the clean-init inventory
+  loop read the kit-manifest from a wrong path, inspected zero files, and
+  still printed both its `ok` lines (its counter counted one blank printf
+  line); and the new mode case initially trusted `stat -f` output that GNU
+  stat pollutes (breaking Linux CI unreadably) and derived its full-count
+  floor from the helper under test. All four closed: the preflight is
+  unconditional, inventory counters count inspected paths against full-count
+  floors plus per-layer sentinel membership, and `mode_of` shape-validates
+  every probe. Maintainer-only files — adopters are unaffected.
+
+### Migration
+
+- Update mode replaces `scripts/harness/lib/install-lib.sh`,
+  `scripts/harness/tests/test-check-loops.sh`, and
+  `scripts/harness/tests/test-sync-adapters.sh` when pristine (diffed when
+  tailored). Working-copy file modes repair themselves on the next
+  init/update run; no manual chmod needed.
+
 ## 0.38.0 — 2026-07-26
 
 ### Fixed
