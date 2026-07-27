@@ -99,6 +99,7 @@ Run it before any task is complete:
 ```bash
 bash scripts/harness/verify          # every gate (shellcheck, manifests, template tests, harness)
 bash scripts/harness/verify --fast   # fast gates only (shellcheck)
+bash scripts/harness/verify --changed # skip gates proven unchanged (local only)
 ```
 
 Edit the gates in `.harness/gates.conf`, never here — this doc points, the

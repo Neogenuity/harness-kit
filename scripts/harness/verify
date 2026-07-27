@@ -7,6 +7,7 @@
 #   bash scripts/harness/verify          # every gate
 #   bash scripts/harness/verify --fast   # fast gates only — cheap enough for
 #                                        # an agent stop-hook
+#   bash scripts/harness/verify --changed # skip gates PROVEN unchanged (below)
 #   bash scripts/harness/verify --jobs 4 # cap concurrent parallel gates
 #   HARNESS_JOBS=4 bash scripts/harness/verify   # same cap, via environment
 #
@@ -26,6 +27,38 @@
 # serial gate stops immediately. A `full` gate is also a dependency barrier
 # for parallel gates declared before it. Parallel gates are reaped at the
 # final barrier with buffered output and the exact re-run command.
+#
+# CHANGE-AWARE MODE (--changed): a gate is skipped ONLY on a digest proving
+# its declared inputs are byte-identical to those of its last PASSING run.
+# Never a relevance guess from a diff: a stale path->gate map is a silent
+# skip, and a silent skip is a fake green verify. Declare inputs as a COMMENT
+# directive in .harness/gates.conf, label-keyed:
+#
+#   # inputs <gate-label> <token>...
+#
+# A comment keeps the format compatible both ways — an older runner skips '#'
+# lines and therefore RUNS the gate (the fail-closed direction), where a new
+# gate kind would have been a hard parse error. Tokens are repo-root-relative
+# files, directories (recursed) or globs, plus:
+#
+#   @git-head     include `git rev-parse HEAD`. Required for a gate that reads
+#                 COMMITTED state (an eval workspace clones HEAD) and would
+#                 otherwise be keyed on a working tree it never reads.
+#   @tool:<name>  include a binary's resolved path and first --version line.
+#
+# PRECONDITIONS, both on the annotator:
+#   1. Only annotate a gate whose sole externally visible effect is its exit
+#      status. A `full` gate is a barrier precisely so a serial gate can consume
+#      a parallel producer's output; caching a producer breaks its consumer, and
+#      no token list can prove side-effect freedom.
+#   2. The token set must COVER every input. A superset only costs cache misses;
+#      a set missing a real input is a gate reported ok: on bytes it never read.
+#      The runner keys on the environment, the gate list, itself and the declared
+#      paths — it cannot discover an input you did not name.
+#
+# --changed is a LOCAL iteration tool. The cache lives in the git-ignored
+# .harness/var/, writable by the same agent whose work verify gates, so CI and
+# releases must keep running the full mode; --changed refuses under CI=true.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -36,7 +69,7 @@ LOG_LIB_PATH="${HARNESS_LOG_LIB:-$ROOT/scripts/harness/lib/log-lib.sh}"
 [ -f "$LOG_LIB_PATH" ] && . "$LOG_LIB_PATH" 2>/dev/null || true
 
 usage() {
-    echo "usage: bash scripts/harness/verify [--fast] [--jobs N]   (or HARNESS_JOBS=N)" >&2
+    echo "usage: bash scripts/harness/verify [--fast | --changed] [--jobs N]   (or HARNESS_JOBS=N)" >&2
     exit 64
 }
 
@@ -44,7 +77,12 @@ MODE=full
 JOBS="${HARNESS_JOBS:-}"
 while [ $# -gt 0 ]; do
     case "$1" in
-        --fast) MODE=fast ;;
+        # Not "last flag wins": --fast asks for LESS coverage, --changed asks
+        # for the same coverage minus what is proven unchanged. Silently
+        # resolving the pair is how a caller ends up believing it ran more than
+        # it did.
+        --fast) [ "$MODE" = changed ] && usage; MODE=fast ;;
+        --changed) [ "$MODE" = fast ] && usage; MODE=changed ;;
         --jobs) shift; [ -n "${1:-}" ] || usage; JOBS="$1" ;;
         --jobs=*) JOBS="${1#--jobs=}" ;;
         *) usage ;;
@@ -73,6 +111,14 @@ if [ ! -f "$GATES_CONF" ]; then
     echo "FAIL: .harness/gates.conf is missing — it is the repo's gate declaration (the policy half of verify; this runner is the mechanism half). Restore it, or re-run the kit's init/update." >&2
     exit 1
 fi
+# The cache is repo-local, git-ignored, and writable by the same agent whose
+# work verify gates. That is fine for local iteration and NOT fine where the
+# green is the artifact, so the one place it must never run refuses outright.
+if [ "$MODE" = changed ] && [ "${CI:-}" = "true" ]; then
+    echo "FAIL: --changed is a local iteration mode and refuses to run under CI=true; CI must run the full gate set." >&2
+    exit 64
+fi
+
 VERIFY_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 VERIFY_CONTEXT='{}'
 if command -v harness_log_context >/dev/null 2>&1; then
@@ -82,14 +128,298 @@ if command -v harness_log_context >/dev/null 2>&1; then
         "${HARNESS_PLAN_SLUG:-}" "${HARNESS_PLAN_SLUG:+env}")
 fi
 
+# `mode` describes a gate's execution STRENGTH, not the invocation flag: a gate
+# that runs under --changed runs byte-identically to one under full mode — same
+# command, same environment, same exit-status contract. Reporting "full" keeps
+# lib/audit-log.sh's mode enum and its daily gate roll-up meaningful without a
+# schema change. A gate SKIPPED by the cache emits no event at all, matching the
+# existing rule that a full gate skipped under --fast is not fabricated as a run.
+EVENT_MODE="$MODE"
+[ "$EVENT_MODE" = changed ] && EVENT_MODE=full
+
 emit_gate_event() {
     local label="$1" outcome="$2" exit_code="$3" duration_s="$4" data
     command -v harness_log_v2 >/dev/null 2>&1 || return 0
-    data=$(jq -cn --arg name "$label" --arg mode "$MODE" --arg outcome "$outcome" \
+    data=$(jq -cn --arg name "$label" --arg mode "$EVENT_MODE" --arg outcome "$outcome" \
         --argjson exit_code "$exit_code" --argjson duration_s "$duration_s" \
         '{name:$name,mode:$mode,outcome:$outcome,exit_code:$exit_code,duration_s:$duration_s}' \
         2>/dev/null) || return 0
     harness_log_v2 "$ROOT" verify.sh gate "" "" "$VERIFY_CONTEXT" "$data"
+}
+
+CACHE_DIR="$ROOT/.harness/var/gate-cache"
+CACHED_SKIPS=0
+DECL_LABELS=(); DECL_CMDS=()
+INPUT_LABELS=(); INPUT_TOKENS=()
+
+# One sha256 ladder, mirroring lib/install-lib.sh:_harness_sha256. Empty when
+# neither tool exists, which every caller reads as "cannot prove anything —
+# run the gate".
+HASH_CMD=""
+if command -v shasum >/dev/null 2>&1; then HASH_CMD="shasum -a 256"
+elif command -v sha256sum >/dev/null 2>&1; then HASH_CMD="sha256sum"; fi
+
+_digest_file() {
+    [ -n "$HASH_CMD" ] && [ -f "$1" ] || return 1
+    # shellcheck disable=SC2086
+    $HASH_CMD "$1" 2>/dev/null | awk '{print $1; exit}'
+}
+
+# _env_material — ambient environment that can change a gate's outcome. This
+# release's other half establishes that an exported variable can silently hollow
+# out a gate, so memoizing a verdict without recording the environment that
+# produced it would reintroduce the same class. Hashed: the search path and
+# scratch dir every suite uses, the locale that decides collation, and the whole
+# HARNESS_*/EVAL_* namespace this harness reads. Anything else a gate depends on
+# must be pinned in the gate COMMAND (`env VAR=... ` / `env -u VAR`), which is
+# already key material.
+_env_material() {
+    printf 'env|PATH|%s\n' "${PATH:-}"
+    printf 'env|TMPDIR|%s\n' "${TMPDIR:-}"
+    printf 'env|LANG|%s\n' "${LANG:-}"
+    printf 'env|LC_ALL|%s\n' "${LC_ALL:-}"
+    env 2>/dev/null \
+        | LC_ALL=C sed -n 's/^\(HARNESS_[A-Za-z0-9_]*=\)/env|\1/p; s/^\(EVAL_[A-Za-z0-9_]*=\)/env|\1/p' \
+        | LC_ALL=C sort
+}
+
+# _gate_material <label> <cmd> <tokens> — the bytes a gate's identity is made
+# of, on stdout. Exit 0 = usable, 1 = cannot compute (run the gate), 2 = config
+# error (FAIL). Everything that cannot be PROVEN returns 1: an unprovable gate
+# runs, it never skips.
+_gate_material() {
+    local label="$1" cmd="$2" toks="$3" tok name ver d nfiles hashed got nul nl
+    [ -n "$HASH_CMD" ] || return 1
+    printf 'v1\nlabel|%s\ncmd|%s\ntokens|%s\n' "$label" "$cmd" "$toks"
+    _env_material || return 1
+    # Assign THEN print: `printf ... "$(cmd)" || return 1` tests printf, which
+    # always succeeds, so the guard would be dead and a failed digest would
+    # contribute an empty field to a key that is still trusted.
+    # The runner itself: it decides the environment a gate inherits and the
+    # cache semantics, so hashing $0 subsumes a hand-maintained format version.
+    d=$(_digest_file "$0") || return 1
+    printf 'self|%s\n' "$d"
+    # The whole gate list, not just this gate's line: kind changes, reordering
+    # and new neighbours all alter what a recorded pass described.
+    d=$(_digest_file "$GATES_CONF") || return 1
+    printf 'conf|%s\n' "$d"
+    if [ -n "${HARNESS_VERIFY_PRELUDE:-}" ]; then
+        d=$(_digest_file "$HARNESS_VERIFY_PRELUDE") || return 1
+        printf 'prelude|%s\n' "$d"
+    fi
+    # `for tok in $toks` already applies word splitting AND pathname expansion,
+    # so each $tok is ONE resolved path. Re-splitting it (an inner `for p in
+    # $tok`) would break a path containing a space into fragments — hashing a
+    # same-named decoy while the declared file stays invisible to the key.
+    for tok in $toks; do
+        case "$tok" in
+            @git-head)
+                command -v git >/dev/null 2>&1 || return 1
+                d=$(git rev-parse HEAD 2>/dev/null) || return 1
+                [ -n "$d" ] || return 1
+                printf 'githead|%s\n' "$d"
+                ;;
+            @tool:*)
+                name=${tok#@tool:}
+                command -v "$name" >/dev/null 2>&1 || return 1
+                ver=$("$name" --version 2>&1) || ver=""
+                # Trim to the first line by expansion; a `| head -1` here is the
+                # early-exiting-reader SIGPIPE class this repo has been bitten by.
+                ver=${ver%%$'\n'*}
+                printf 'tool|%s|%s|%s\n' "$name" "$(command -v "$name")" "$ver"
+                ;;
+            @*)
+                echo "verify: unknown '# inputs' directive '$tok' for gate '$label'" >&2
+                return 2
+                ;;
+            *)
+                # An unmatched glob stays literal, so a token resolving to
+                # nothing is caught here. That IS a config error: an input set
+                # resolving to nothing would make every run a cache hit.
+                if [ ! -e "$tok" ]; then
+                    echo "verify: '# inputs' token '$tok' for gate '$label' matched no files — an input set that resolves to nothing would make every run a cache hit; fix the token in .harness/gates.conf" >&2
+                    return 2
+                fi
+                # shasum FOLLOWS symlinks, so a link silently widens the real
+                # footprint past what the annotation declares, and a newline in a
+                # filename truncates the inventory (a false HIT, not a miss).
+                # Neither is a config ERROR — an ordinary source tree may hold
+                # both, and failing the mandatory full verify over one would let
+                # the optimization break the primary command. They are simply
+                # unprovable: return 1 and the gate runs. `wc` consumes all of
+                # its input, so no pipe here can take the SIGPIPE path.
+                if [ "$(find "$tok" -type l -print 2>/dev/null | wc -l | tr -d ' ')" != "0" ]; then
+                    return 1
+                fi
+                nul=$(find "$tok" -print0 2>/dev/null | tr -dc '\0' | wc -c | tr -d ' ')
+                nl=$(find "$tok" -print 2>/dev/null | wc -l | tr -d ' ')
+                [ "$nul" = "$nl" ] || return 1
+                # Directories appear in the path list so that creating an empty
+                # one is visible; a content hash alone cannot see it.
+                find "$tok" \( -type f -o -type d \) -print 2>/dev/null | LC_ALL=C sort
+                # A content hash is also blind to chmod, and losing an exec bit
+                # is exactly what check #5 fails on. -perm -100 is the octal form
+                # both BSD and GNU find accept.
+                find "$tok" -type f -perm -100 -print 2>/dev/null | LC_ALL=C sort | sed 's/^/exec /'
+                nfiles=$(find "$tok" -type f -print 2>/dev/null | wc -l | tr -d ' ')
+                if [ "$nfiles" != "0" ]; then
+                    # shellcheck disable=SC2086
+                    hashed=$(find "$tok" -type f -print0 2>/dev/null | xargs -0 $HASH_CMD 2>/dev/null | LC_ALL=C sort)
+                    # An unreadable file makes the hasher skip it while `find`
+                    # still counted it. Silently, that yields a STABLE key that
+                    # no longer describes those bytes — a false hit. Prove every
+                    # counted file was actually hashed.
+                    got=$(printf '%s\n' "$hashed" | grep -c .)
+                    [ "$got" = "$nfiles" ] || return 1
+                    printf '%s\n' "$hashed"
+                fi
+                ;;
+        esac
+    done
+}
+
+# _gate_key <label> <cmd> <tokens> — prints the digest, or nothing when the key
+# cannot be computed. Exit 2 is a config error the caller turns into a FAIL.
+_gate_key() {
+    local material status
+    material=$(_gate_material "$1" "$2" "$3"); status=$?
+    [ "$status" -eq 0 ] || return "$status"
+    # shellcheck disable=SC2086
+    printf '%s\n' "$material" | $HASH_CMD 2>/dev/null | awk '{print $1; exit}'
+}
+
+# _live_key <label> — the key as of NOW. Deliberately recomputed at the moment
+# of the hit test rather than reused from the prescan: the prescan runs before
+# the first gate, and on a minutes-long run an edit landing in between would
+# otherwise be served a hit keyed on bytes the gate never saw.
+_live_key() {
+    local toks
+    toks=$(_toks_for "$1") || return 1
+    _gate_key "$1" "$(_cmd_for "$1")" "$toks"
+}
+
+# Content-addressed: the FILENAME is the key. The hit test is one atomic [ -f ],
+# concurrent parallel gates writing the same key write identical bytes (no race
+# and no need for atomic rename), and reverting a change re-hits its old entry.
+_cache_hit() { [ -n "$1" ] && [ -f "$CACHE_DIR/$1" ]; }
+_cache_write() {
+    [ -n "$1" ] || return 0
+    mkdir -p "$CACHE_DIR" 2>/dev/null || return 0
+    printf '%s\n' "$2" > "$CACHE_DIR/$1" 2>/dev/null || return 0
+}
+
+# Written on a pass in EVERY mode, so an ordinary full run warms the cache; only
+# --changed ever READS it. Recomputing after the command and writing only on an
+# unchanged digest NARROWS the write-side window in which the agent verify is
+# gating edits the very files the gate declared, and gives "a gate that mutates
+# its own declared inputs is never cached" for free. It cannot close that window
+# completely: an input that changes and is reverted mid-run (ABA) hashes the
+# same before and after. That residue is accepted — --changed is a local
+# iteration mode, and CI and releases run the full gate set.
+_cache_record() {
+    local label="$1" key="$2" after
+    [ -n "$key" ] || return 0
+    after=$(_live_key "$label" 2>/dev/null) || return 0
+    [ "$after" = "$key" ] || return 0
+    _cache_write "$key" "$label"
+}
+
+_toks_for() {
+    local i
+    for ((i = 0; i < ${#INPUT_LABELS[@]}; i++)); do
+        [ "${INPUT_LABELS[$i]}" = "$1" ] && { printf '%s' "${INPUT_TOKENS[$i]}"; return 0; }
+    done
+    return 1
+}
+_cmd_for() {
+    local i
+    for ((i = 0; i < ${#DECL_LABELS[@]}; i++)); do
+        [ "${DECL_LABELS[$i]}" = "$1" ] && { printf '%s' "${DECL_CMDS[$i]}"; return 0; }
+    done
+    return 1
+}
+
+# Collect declarations and annotations in one pass, WITHOUT executing anything:
+# a stale annotation must fail before the first gate runs, not after half the
+# suite has. Plain file redirect, never a here-doc.
+_prescan_gates() {
+    local line rest kw lbl val
+    while IFS= read -r line; do
+        rest=${line#"${line%%[![:space:]]*}"}
+        case "$rest" in
+            '') continue ;;
+            \#*)
+                rest=${rest#\#}
+                rest=${rest#"${rest%%[![:space:]]*}"}
+                kw=${rest%%[[:space:]]*}
+                [ "$kw" = inputs ] || continue
+                rest=${rest#"$kw"}
+                rest=${rest#"${rest%%[![:space:]]*}"}
+                lbl=${rest%%[[:space:]]*}
+                val=${rest#"$lbl"}
+                val=${val#"${val%%[![:space:]]*}"}
+                val=${val%"${val##*[![:space:]]}"}
+                if [ -z "$lbl" ] || [ -z "$val" ]; then
+                    echo "FAIL: malformed '# inputs' directive in .harness/gates.conf (want '# inputs <gate-label> <token>...'): '$line'" >&2
+                    exit 1
+                fi
+                INPUT_LABELS[${#INPUT_LABELS[@]}]="$lbl"
+                INPUT_TOKENS[${#INPUT_TOKENS[@]}]="$val"
+                ;;
+            *)
+                kw=${rest%%[[:space:]]*}
+                case "$kw" in gate|full|parallel) ;; *) continue ;; esac
+                rest=${rest#"$kw"}
+                rest=${rest#"${rest%%[![:space:]]*}"}
+                lbl=${rest%%[[:space:]]*}
+                val=${rest#"$lbl"}
+                val=${val#"${val%%[![:space:]]*}"}
+                val=${val%"${val##*[![:space:]]}"}
+                DECL_LABELS[${#DECL_LABELS[@]}]="$lbl"
+                DECL_CMDS[${#DECL_CMDS[@]}]="$val"
+                ;;
+        esac
+    done < "$GATES_CONF"
+}
+
+_validate_inputs() {
+    local i j lbl status
+    # Two gates sharing a label share one cache key, because a key is derived
+    # from the label's annotation and its FIRST matching declaration. The
+    # passing twin would then warm a key the failing twin is served on the next
+    # run — a green verify covering a gate that fails. Duplicate labels are
+    # already meaningless (both report under one name), so refuse them outright.
+    for ((i = 0; i < ${#DECL_LABELS[@]}; i++)); do
+        for ((j = 0; j < i; j++)); do
+            if [ "${DECL_LABELS[$j]}" = "${DECL_LABELS[$i]}" ]; then
+                echo "FAIL: gate label '${DECL_LABELS[$i]}' is declared more than once in .harness/gates.conf — labels identify gates in reports and in the --changed cache; make them unique" >&2
+                exit 1
+            fi
+        done
+    done
+    for ((i = 0; i < ${#INPUT_LABELS[@]}; i++)); do
+        lbl="${INPUT_LABELS[$i]}"
+        for ((j = 0; j < i; j++)); do
+            if [ "${INPUT_LABELS[$j]}" = "$lbl" ]; then
+                echo "FAIL: '# inputs' is declared more than once for gate '$lbl' in .harness/gates.conf — which set applies is ambiguous" >&2
+                exit 1
+            fi
+        done
+        if ! _cmd_for "$lbl" >/dev/null; then
+            echo "FAIL: '# inputs' names gate '$lbl', which no gate/full/parallel line declares — a stale annotation silently never applies; fix or remove it in .harness/gates.conf" >&2
+            exit 1
+        fi
+        # --fast runs no annotated gate, so skip the hashing but keep the cheap
+        # structural checks above. The key itself is NOT kept: it is recomputed
+        # at each gate's hit test (see _live_key). This pass exists to surface a
+        # config error before the first gate runs, not to memoize.
+        [ "$MODE" = fast ] && continue
+        _gate_key "$lbl" "$(_cmd_for "$lbl")" "${INPUT_TOKENS[$i]}" >/dev/null; status=$?
+        if [ "$status" -eq 2 ]; then
+            echo "FAIL: '# inputs' for gate '$lbl' cannot be used (see the message above); fix it in .harness/gates.conf" >&2
+            exit 1
+        fi
+    done
 }
 
 # gate <label> <command...>          — runs in both modes; keep these fast (ms-s).
@@ -106,7 +436,13 @@ format_command() {
 }
 
 run_gate() {
-    local label="$1" out command status started duration outcome; shift
+    local label="$1" out command status started duration outcome key; shift
+    key=$(_live_key "$label") || key=""
+    if [ "$MODE" = changed ] && _cache_hit "$key"; then
+        CACHED_SKIPS=$((CACHED_SKIPS + 1))
+        echo "ok:   $label (cached — inputs unchanged)"
+        return 0
+    fi
     command=$(format_command "$@")
     started=$SECONDS
     if out=$("$@" 2>&1); then
@@ -114,6 +450,7 @@ run_gate() {
         outcome=pass
         duration=$((SECONDS - started))
         emit_gate_event "$label" "$outcome" "$status" "$duration"
+        _cache_record "$label" "$key"
         echo "ok:   $label"
     else
         status=$?
@@ -136,7 +473,9 @@ full_gate() {
 
 # Bash 3.2-compatible parallel gate queue (macOS still ships Bash 3.2). Output
 # is buffered per gate so concurrent commands cannot interleave unreadably.
-# Declaration order controls reporting order, not execution order. Concurrency
+# Declaration order controls reporting order, not execution order — with one
+# exception: a gate skipped by the --changed cache never enters this queue, so
+# it reports at its declaration point rather than at the barrier. Concurrency
 # is bounded to $JOBS without `wait -n` (not in Bash 3.2): when the queue is
 # full, spawning blocks on the OLDEST still-running job and records its status
 # for the barrier.
@@ -192,7 +531,14 @@ throttle_parallel_gates() {
 
 parallel_full_gate() {
     [ "$MODE" = "fast" ] && return 0
-    local label="$1" index out meta; shift
+    local label="$1" index out meta key; shift
+    # Hit test in the PARENT, before forking: a cached gate costs no process.
+    key=$(_live_key "$label") || key=""
+    if [ "$MODE" = changed ] && _cache_hit "$key"; then
+        CACHED_SKIPS=$((CACHED_SKIPS + 1))
+        echo "ok:   $label (cached — inputs unchanged)"
+        return 0
+    fi
     if [ -z "$PARALLEL_DIR" ]; then
         PARALLEL_DIR=$(mktemp -d "${TMPDIR:-/tmp}/harness-verify.XXXXXX") || {
             echo "FAIL: could not create parallel-gate scratch directory" >&2
@@ -208,6 +554,9 @@ parallel_full_gate() {
         "$@" >"$out" 2>&1
         status=$?
         duration=$((SECONDS - started))
+        # Recorded by the CHILD, which is the process that knows the command
+        # actually ran to completion here.
+        [ "$status" -eq 0 ] && _cache_record "$label" "$key"
         printf '%s %s\n' "$status" "$duration" >"$meta" 2>/dev/null || true
         exit "$status"
     ) &
@@ -265,6 +614,9 @@ wait_parallel_gates() {
 # shellcheck source=/dev/null
 [ -n "${HARNESS_VERIFY_PRELUDE:-}" ] && . "$HARNESS_VERIFY_PRELUDE"
 
+_prescan_gates
+_validate_inputs
+
 # Read the repo's gate declarations. `read kind label cmdstr` leaves the
 # command (with its internal spacing) in cmdstr.
 while IFS= read -r _line; do
@@ -321,5 +673,9 @@ while IFS= read -r _line; do
 done < "$GATES_CONF"
 
 wait_parallel_gates || exit 1
-echo "OK: all quality gates passed ($MODE)"
+if [ "$MODE" = changed ]; then
+    echo "OK: all quality gates passed ($MODE; $CACHED_SKIPS cached)"
+else
+    echo "OK: all quality gates passed ($MODE)"
+fi
 exit 0

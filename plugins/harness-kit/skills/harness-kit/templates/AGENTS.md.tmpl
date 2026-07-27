@@ -81,6 +81,7 @@ Run it before any task is complete:
 ```bash
 bash scripts/harness/verify          # every gate (format, lint, typecheck, tests)
 bash scripts/harness/verify --fast   # fast gates only (formatter/linter)
+bash scripts/harness/verify --changed # skip gates proven unchanged (local only)
 ```
 
 Edit the gates in `.harness/gates.conf`, never here and never in the runner —

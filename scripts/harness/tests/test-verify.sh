@@ -341,6 +341,271 @@ else
     printf '%s\n' "$out" | sed 's/^/        /'
 fi
 
+# --- --changed: memoization on proof ------------------------------------------
+# A gate is skipped ONLY on a digest proving its declared inputs are unchanged.
+# Every case below pins a FAIL-CLOSED property: the cost of a wrong skip is a
+# green verify that proved nothing, so each hazard must produce a run (or a
+# hard failure), never a silent hit.
+
+# changed_fixture <name> — a fixture whose gate appends to a run-log, so "did
+# the gate body actually execute" is a fact on disk rather than an inference
+# from the transcript.
+changed_fixture() {
+    local dir="$WORK/$1" v
+    mkdir -p "$dir/scripts/harness" "$dir/.harness" "$dir/inputs"
+    cp "$VERIFY" "$dir/scripts/harness/verify"
+    chmod +x "$dir/scripts/harness/verify"
+    printf 'one\n' > "$dir/inputs/a.txt"
+    printf 'two\n' > "$dir/inputs/b.txt"
+    printf '# inputs probe inputs\nparallel probe bash -c "echo ran >> %s/%s.ran; true"\n' \
+        "$WORK" "$1" > "$dir/.harness/gates.conf"
+    v="$dir/scripts/harness/verify"
+    printf '%s' "$v"
+}
+ran_count() { [ -f "$WORK/$1.ran" ] && wc -l < "$WORK/$1.ran" | tr -d ' ' || echo 0; }
+
+V_C=$(changed_fixture hit)
+out=$(bash "$V_C" --changed 2>&1)
+out2=$(bash "$V_C" --changed 2>&1)
+if has "$out2" "(cached" && [ "$(ran_count hit)" = "1" ]; then
+    pass "a second --changed run skips the gate on proof and says so out loud"
+else
+    fail "expected a loud cached skip on the second run (ran=$(ran_count hit))"
+    printf '%s\n' "$out2" | sed 's/^/        /'
+fi
+
+printf 'mutated\n' > "$WORK/hit/inputs/a.txt"
+out=$(bash "$V_C" --changed 2>&1)
+if ! has "$out" "(cached" && [ "$(ran_count hit)" = "2" ]; then
+    pass "touching a declared input re-runs the gate"
+else
+    fail "a changed declared input did not re-run the gate (ran=$(ran_count hit))"
+fi
+
+printf 'x\n' > "$WORK/hit/unrelated.txt"
+out=$(bash "$V_C" --changed 2>&1)
+if has "$out" "(cached"; then
+    pass "a file outside the declared input set does not invalidate"
+else
+    fail "an undeclared file wrongly invalidated the cache"
+fi
+
+# The runner and the whole gate list are key material: a runner upgrade or a
+# neighbouring gate's edit both change what a recorded pass described.
+printf '\n# touched\n' >> "$WORK/hit/scripts/harness/verify"
+out=$(bash "$V_C" --changed 2>&1)
+if ! has "$out" "(cached"; then
+    pass "editing the runner invalidates every cached gate"
+else
+    fail "a modified runner still served a cached result"
+fi
+bash "$V_C" --changed >/dev/null 2>&1
+printf 'parallel other bash -c "true"\n' >> "$WORK/hit/.harness/gates.conf"
+out=$(bash "$V_C" --changed 2>&1)
+if ! has "$out" "probe (cached"; then
+    pass "editing an unrelated gates.conf line invalidates (ordering and neighbours are key material)"
+else
+    fail "an edited gates.conf still served a cached result"
+fi
+
+# A failing gate must never be recorded: a cached failure would be permanent.
+V_C=$(changed_fixture failing)
+printf '# inputs probe inputs\nparallel probe bash -c "exit 3"\n' > "$WORK/failing/.harness/gates.conf"
+bash "$V_C" --changed >/dev/null 2>&1
+out=$(bash "$V_C" --changed 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && ! has "$out" "(cached"; then
+    pass "a failing gate is never cached"
+else
+    fail "a failing gate was cached or stopped failing (rc=$rc)"
+fi
+
+# A gate that rewrites its own declared inputs cannot be proven: the digest
+# after the run differs from the one before it, so nothing is recorded.
+V_C=$(changed_fixture selfmutating)
+printf '# inputs probe inputs\nparallel probe bash -c "date >> inputs/a.txt; true"\n' \
+    > "$WORK/selfmutating/.harness/gates.conf"
+bash "$V_C" --changed >/dev/null 2>&1
+out=$(bash "$V_C" --changed 2>&1)
+if ! has "$out" "(cached"; then
+    pass "a gate that mutates its own declared inputs is never cached"
+else
+    fail "a self-mutating gate was cached"
+fi
+
+# Config errors fail the run BEFORE any gate executes; a silently inert or
+# vacuous annotation is the whole hazard this feature has to avoid.
+for probe_case in \
+    "nomatch:# inputs probe does/not/exist:matched no files" \
+    "orphan:# inputs typoed src:no gate/full/parallel line declares" \
+    "dup:# inputs probe inputs\n# inputs probe inputs:declared more than once" \
+    "bogus:# inputs probe @nope inputs:unknown"; do
+    name=${probe_case%%:*}
+    rest=${probe_case#*:}
+    decl=${rest%:*}
+    want=${rest##*:}
+    V_C=$(changed_fixture "cfg$name")
+    # shellcheck disable=SC2059
+    printf "$decl\nparallel probe bash -c \"true\"\n" > "$WORK/cfg$name/.harness/gates.conf"
+    out=$(bash "$V_C" --changed 2>&1); rc=$?
+    if [ "$rc" -ne 0 ] && has "$out" "$want"; then
+        pass "a $name '# inputs' annotation fails the run instead of skipping silently"
+    else
+        fail "$name annotation did not fail loudly (rc=$rc)"
+        printf '%s\n' "$out" | sed 's/^/        /'
+    fi
+done
+
+# --fast asks for LESS coverage, --changed for the same coverage minus what is
+# proven: resolving the pair silently is how a caller over-trusts a run.
+V_C=$(changed_fixture modes)
+out=$(bash "$V_C" --fast --changed 2>&1); rc=$?
+if [ "$rc" -eq 64 ] && has "$out" "usage:"; then
+    pass "--fast and --changed together are a usage error, not a silent winner"
+else
+    fail "--fast --changed was accepted (rc=$rc)"
+fi
+out=$(CI=true bash "$V_C" --changed 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && has "$out" "CI"; then
+    pass "--changed refuses under CI=true, where the green is the artifact"
+else
+    fail "--changed ran under CI=true (rc=$rc)"
+fi
+
+# A skipped gate is not fabricated as a run, and a gate that DOES run under
+# --changed reports mode "full" — same command, same exit-status contract — so
+# the audit log's mode enum needs no widening.
+V_C=$(changed_fixture telemetry)
+: > "$HARNESS_LOG_FILE"
+bash "$V_C" --changed >/dev/null 2>&1
+before=$(wc -l < "$HARNESS_LOG_FILE" | tr -d ' ')
+bash "$V_C" --changed >/dev/null 2>&1
+after=$(wc -l < "$HARNESS_LOG_FILE" | tr -d ' ')
+if [ "$before" = "$after" ]; then
+    pass "a cached skip emits no gate event"
+else
+    fail "a cached skip fabricated a gate event ($before -> $after)"
+fi
+if command -v jq >/dev/null 2>&1; then
+    if [ "$(jq -r 'select(.data.name=="probe") | .data.mode' "$HARNESS_LOG_FILE" | sort -u)" = "full" ]; then
+        pass "a gate that runs under --changed reports mode \"full\""
+    else
+        fail "a --changed run emitted a mode outside the audit log's enum"
+    fi
+fi
+: > "$HARNESS_LOG_FILE"
+
+# The separation between "a warmed cache" and "a skipped CI gate" is one mode
+# test in each hit site. Nothing else stops full mode from serving hits, and CI
+# runs full mode — so pin it directly.
+V_C=$(changed_fixture fullmode)
+bash "$V_C" --changed >/dev/null 2>&1
+bash "$V_C" --changed >/dev/null 2>&1
+before=$(ran_count fullmode)
+out=$(bash "$V_C" 2>&1)
+if [ "$(ran_count fullmode)" != "$before" ] && ! has "$out" "(cached"; then
+    pass "full mode warms the cache but never serves a hit from it"
+else
+    fail "full mode served a cached result — CI would stop running gates"
+fi
+
+# Two gates sharing a label share one key: the passing twin warms it and the
+# failing twin is served it, turning a red run green on the next pass.
+V_C=$(changed_fixture duplabel)
+printf '# inputs probe inputs\nparallel probe bash -c "true"\nparallel probe bash -c "exit 7"\n' \
+    > "$WORK/duplabel/.harness/gates.conf"
+out=$(bash "$V_C" --changed 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && has "$out" "declared more than once"; then
+    pass "a duplicate gate label is rejected before it can share a cache key"
+else
+    fail "duplicate gate labels were accepted (rc=$rc)"
+fi
+
+# `for tok in $toks` already pathname-expands, so a second split would break a
+# path containing a space into fragments — hashing a same-named decoy while the
+# declared file stays invisible.
+V_C=$(changed_fixture spaced)
+printf 'original\n' > "$WORK/spaced/inputs/a b.txt"
+bash "$V_C" --changed >/dev/null 2>&1
+before=$(ran_count spaced)
+printf 'mutated\n' > "$WORK/spaced/inputs/a b.txt"
+out=$(bash "$V_C" --changed 2>&1)
+if [ "$(ran_count spaced)" != "$before" ] && ! has "$out" "(cached"; then
+    pass "a declared path containing a space is real key material"
+else
+    fail "a spaced filename was invisible to the key"
+fi
+
+# Ambient environment is not otherwise in the key, and this release's other half
+# exists because ambient variables can hollow out a gate.
+V_C=$(changed_fixture envkey)
+bash "$V_C" --changed >/dev/null 2>&1
+out=$(HARNESS_PROBE_SWITCH=1 bash "$V_C" --changed 2>&1)
+if ! has "$out" "(cached"; then
+    pass "a changed HARNESS_* variable invalidates the cache"
+else
+    fail "the environment is not key material"
+fi
+
+# The serial kinds have their own hit/record sites, and the shipped template
+# aims adopters at `full` — so exercise them, not just `parallel`.
+V_C=$(changed_fixture serial)
+printf '# inputs probe inputs\ngate probe bash -c "echo ran >> %s/serial.ran; true"\n' "$WORK" \
+    > "$WORK/serial/.harness/gates.conf"
+bash "$V_C" --changed >/dev/null 2>&1
+before=$(ran_count serial)
+out=$(bash "$V_C" --changed 2>&1)
+if has "$out" "(cached" && [ "$(ran_count serial)" = "$before" ]; then
+    pass "a serial gate takes the same proof-based skip as a parallel one"
+else
+    fail "the serial cache path did not hit (ran=$(ran_count serial))"
+fi
+
+# @tool: pins a binary's identity; a different resolved path must invalidate.
+V_C=$(changed_fixture tooltok)
+printf '# inputs probe inputs @tool:git\nparallel probe bash -c "true"\n' \
+    > "$WORK/tooltok/.harness/gates.conf"
+if command -v git >/dev/null 2>&1; then
+    bash "$V_C" --changed >/dev/null 2>&1
+    out=$(bash "$V_C" --changed 2>&1)
+    if has "$out" "(cached"; then
+        mkdir -p "$WORK/tooltok/fakebin"
+        printf '#!/bin/sh\nexec %s "$@"\n' "$(command -v git)" > "$WORK/tooltok/fakebin/git"
+        chmod +x "$WORK/tooltok/fakebin/git"
+        out=$(PATH="$WORK/tooltok/fakebin:$PATH" bash "$V_C" --changed 2>&1)
+        if ! has "$out" "(cached"; then
+            pass "@tool: makes a binary's resolved identity key material"
+        else
+            fail "@tool: did not notice a different binary on PATH"
+        fi
+    else
+        fail "@tool: fixture never cached on the second run"
+    fi
+fi
+
+# @git-head exists because a gate reading COMMITTED state would otherwise be
+# keyed on a working tree it never reads: a commit that leaves the tree
+# byte-identical must still invalidate.
+if command -v git >/dev/null 2>&1; then
+    V_C=$(changed_fixture githead)
+    G="$WORK/githead"
+    printf '# inputs probe inputs @git-head\nparallel probe bash -c "true"\n' > "$G/.harness/gates.conf"
+    ( cd "$G" && git init -q . && git config user.email t@e.st && git config user.name t \
+        && git add -A && git commit -qm one ) >/dev/null 2>&1
+    bash "$V_C" --changed >/dev/null 2>&1
+    out=$(bash "$V_C" --changed 2>&1)
+    if has "$out" "(cached"; then
+        ( cd "$G" && git commit -q --allow-empty -m two ) >/dev/null 2>&1
+        out=$(bash "$V_C" --changed 2>&1)
+        if ! has "$out" "(cached"; then
+            pass "@git-head invalidates on a commit that leaves the working tree identical"
+        else
+            fail "@git-head did not track HEAD"
+        fi
+    else
+        fail "@git-head fixture never cached on the second run"
+    fi
+fi
+
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails verify orchestration test(s)"
     exit 1

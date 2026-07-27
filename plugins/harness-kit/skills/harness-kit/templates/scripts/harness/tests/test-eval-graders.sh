@@ -13,8 +13,12 @@
 #
 # An empty bank is the default for a fresh install (the shipped _template is
 # skipped by eval_list_tasks), and this exits 0 with a note — the cost appears
-# only once this repo authors real tasks. Set EVAL_TEST_QUICK=1 to skip the
-# per-task workspace clones for a fast local loop.
+# only once this repo authors real tasks. Pass --quick to skip the per-task
+# workspace clones for a fast local loop. Deliberately an ARGUMENT, not an
+# environment variable: this file runs as a gate via `parallel-each`, where the
+# command is generated and has nowhere to put an `env -u`, so an inherited
+# variable here would be an escape hatch a gate could not close — one exported
+# value would turn the gate into a vacuous pass.
 #
 # The maintainer-only conformance suite for the eval MACHINERY itself (pass@k
 # math, results-JSON schema, the eval-harness.sh scorer, eval.sh runner guards)
@@ -44,8 +48,8 @@ if [ -z "$BANK_TASKS" ]; then
     finish
 fi
 
-if [ "${EVAL_TEST_QUICK:-0}" = 1 ]; then
-    ok "grader validity (skipped: EVAL_TEST_QUICK=1)"
+if [ "${1:-}" = "--quick" ]; then
+    ok "grader validity (skipped: --quick)"
     finish
 fi
 

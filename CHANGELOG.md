@@ -3,6 +3,97 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.40.0 — 2026-07-27
+
+### Added
+
+- **`verify --changed` skips a gate only on proof that its declared inputs are
+  byte-identical to its last passing run.** Measured on this repo: a warm run
+  goes from **326s to 81s**, matching the ablation ceiling (removing those
+  gates outright gives 67s from a 243s baseline). Inputs are declared as a
+  COMMENT directive in `.harness/gates.conf`, so the format stays compatible
+  both ways — an older runner skips `#` lines and therefore *runs* the gate,
+  the fail-closed direction, where a new gate kind would have been a hard parse
+  error:
+
+  ```
+  # inputs <gate-label> <file|dir|glob|@git-head|@tool:name>...
+  ```
+
+  This is memoization on a digest, never relevance guessed from a diff: a stale
+  path-to-gate map is a silent skip, and a silent skip is a fake green verify.
+  The key covers the whole gate list (so a kind change, a reorder, or a new
+  neighbour invalidates), the runner itself via `$0` (which subsumes a
+  hand-maintained cache-format version), the sorted inventory of files *and*
+  directories (an empty directory is invisible to a content hash), per-file
+  executable bits (so is `chmod`, and check #5 fails on a lost one), and any
+  `@git-head` / `@tool:` material. `@git-head` exists because a gate whose
+  workspaces clone committed HEAD would otherwise be keyed on a working tree it
+  never reads.
+
+  Fail-closed throughout: a token matching nothing, an annotation naming no
+  declared gate, a duplicate annotation, an unknown `@directive`, or a symlink
+  in a resolved set all fail the run *before* the first gate executes; a
+  missing sha256 tool, an unreadable input, or an unwritable cache runs the
+  gate. A failing gate is never recorded. The digest is recomputed after the
+  command and written only if unchanged, which narrows the window in which the
+  agent being gated edits the files a 190-second gate declared, and gives "a
+  gate that mutates its own declared inputs is never cached" for free. It does
+  not close that window completely: an input changed and reverted mid-run (ABA)
+  hashes the same before and after. That residue is accepted — `--changed` is a
+  local mode and CI runs the full set.
+
+  The cache is content-addressed under the git-ignored `.harness/var/gate-cache/`,
+  written on a pass in *every* mode so ordinary full runs warm it, and read only
+  under `--changed`. Because it is writable by the same agent whose work verify
+  gates, `--changed` refuses to run under `CI=true`, and `--fast --changed` is a
+  usage error rather than a silent winner. Skips announce themselves and emit no
+  telemetry event; a gate that *runs* under `--changed` reports `mode: "full"`,
+  so `lib/audit-log.sh`'s enum and daily roll-up need no schema change.
+
+  The key also covers the ambient environment (`PATH`, `TMPDIR`, locale, and the
+  whole `HARNESS_*`/`EVAL_*` namespace), because this release's other half
+  establishes that an exported variable can hollow out a gate — memoizing a
+  verdict without recording the environment that produced it would reintroduce
+  exactly that class.
+
+  Ships **inert**: `.harness/gates.conf` is diff-only policy, so no existing
+  install gains an annotation without an explicit edit.
+
+  Three review rounds (the repo's `code-reviewer`, an adversarial false-green
+  hunt, and Codex) found five reproduced false greens in the first cut, all
+  fixed before release and each now pinned by a regression case: duplicate gate
+  labels sharing one key so a passing twin warmed it for a failing one; keys
+  reused from the prescan instead of recomputed at the hit test; `printf ...
+  "$(cmd)" || return 1` guards that tested `printf` and so never fired, silently
+  dropping the runner from its own key; a second word-split of an already
+  pathname-expanded token, which hashed a same-named decoy while a declared path
+  containing a space stayed invisible; and an unreadable file that `find` counted
+  but the hasher skipped, yielding a stable key that no longer described those
+  bytes. `tests/test-verify.sh` grew from 25 to 47 assertions.
+
+  Two guards were also *relaxed* on review: a symlink or a newline-containing
+  path under a declared token is no longer a hard failure but simply unprovable
+  (the gate runs), because failing the mandatory full verify over an ordinary
+  source tree would let the optimization break the primary command.
+
+### Fixed
+
+- **Six gates could report `ok:` having done no work at all.** `EVAL_TEST_QUICK`,
+  `EVAL_TASKS_DIR`, and `HARNESS_NESTED_FIXTURE` are honored by the suites as
+  recursion breakers and fast-loop knobs, but a gate is the TOP of a run, never
+  a nested one — so one variable exported in a developer's shell silently turned
+  the install suites, `provider-templates`, `evals`, and `eval-graders` into
+  vacuous passes. Measured: `HARNESS_NESTED_FIXTURE=1 bash
+  scripts/test-install-recovery.sh` exits 0 in 0s where the suite does 18s of
+  real work. Each gate command now clears its own hatch with `env -u`, which is
+  safe because every suite re-exports the breaker for its children after the
+  entry check, and which makes the outcome independent of ambient environment by
+  construction rather than by hoping nobody exports it. New root-only
+  `scripts/test-gate-env-hygiene.sh` derives the hatches by scanning the suites
+  rather than hard-coding them, so a hatch added to a new suite fails the gate
+  until its declaration clears it.
+
 ## 0.39.0 — 2026-07-27
 
 ### Fixed
