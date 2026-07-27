@@ -39,6 +39,37 @@ $2
     esac
 }
 
+# assert_layer_sentinels <inventory> <label> — every shipped LAYER is present.
+#
+# The full-count floors elsewhere in this file derive their expected count from
+# harness_kit_shipped_paths, the very helper under test. That makes them blind
+# to the failure that matters most: if the helper stops emitting a whole layer,
+# expected and observed shrink together and the floor passes over the survivors.
+# A hardcoded total would rot on the next shipped file, so instead pin a stable
+# REPRESENTATIVE of each layer and require it by name. Adding a file to a layer
+# never touches this list; deleting a layer, or a manifest-parsing regression
+# that silently drops one, fails here by name.
+assert_layer_sentinels() {
+    local inv="$1" label="$2" s missing_s=""
+    for s in scripts/harness/kit-manifest \
+             scripts/harness/verify \
+             scripts/harness/lib/install-lib.sh \
+             scripts/harness/hooks/guard-secrets.sh \
+             scripts/harness/tests/test-log.sh \
+             .harness/gates.conf \
+             .harness/hooks/guard-project-policy.sh; do
+        case $'\n'"$inv"$'\n' in
+            *$'\n'"$s"$'\n'*) ;;
+            *) missing_s="$missing_s $s" ;;
+        esac
+    done
+    if [ -z "$missing_s" ]; then
+        pass "$label: the shipped inventory carries a representative of every layer"
+    else
+        fail "$label: the shipped inventory dropped a whole layer —$missing_s"
+    fi
+}
+
 # --- runtime-prerequisite preflight detection ---------------------------------
 # harness_missing_prereqs is the deterministic core of init/update's early
 # preflight: it NAMES any missing hard dependency so the user can acknowledge
@@ -157,6 +188,7 @@ while IFS= read -r p; do
         *) unpinned="$unpinned $p" ;;
     esac
 done < <(printf '%s\n' "$shipped_inventory")
+assert_layer_sentinels "$shipped_inventory" "clean init"
 if [ "$inventory_total" -eq 0 ]; then
     fail "clean init: the shipped inventory is EMPTY — the two assertions below would have passed without examining a single shipped path"
 elif [ "$inventory_read" -ne "$inventory_total" ]; then
@@ -213,8 +245,9 @@ F2=$(mktemp -d "$WORK/modes.XXXXXX") || exit 1
 # below rather than flagged. Checking rc AND the full-count floors means a
 # partial install fails here twice over instead of reporting green modes for
 # whatever happened to land.
+install_ok=1
 ( umask 077; harness_install_mechanism "$SCRIPTS_DIR" "$F2" ) \
-    || fail "clean init modes: install failed under umask 077"
+    || { install_ok=0; fail "clean init modes: install failed under umask 077"; }
 badmodes=""
 baddirs=""
 # Process substitution + counted floors, not a pipe or a here-doc: same SIGPIPE
