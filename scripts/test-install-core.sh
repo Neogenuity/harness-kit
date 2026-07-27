@@ -71,14 +71,13 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
         fail "preflight: sha256sum reported missing though a sha256 tool is on PATH"
     else
         pass "preflight: harness_missing_prereqs stays silent about a present sha256 tool"
-
+    fi
+fi
 if command -v mktemp >/dev/null 2>&1; then
     if emits_line "$present_missing" mktemp; then
         fail "preflight: mktemp reported missing though it is on PATH"
     else
         pass "preflight: harness_missing_prereqs stays silent about a present mktemp"
-    fi
-fi
     fi
 fi
 EMPTYPATH=$(mktemp -d "$WORK/emptypath.XXXXXX") || exit 1
