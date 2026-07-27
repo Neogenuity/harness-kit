@@ -144,6 +144,7 @@ skipped=""
 # otherwise yield empty hits on every file and print the "ok" below).
 scanned=0
 scan_errors=0
+read_errors=0
 root_gaps=0
 # _scan_root <label> <path…> — sweep ONE glob root and require it to have
 # yielded at least one shell file. Per-root is the only honest unit: a single
@@ -156,8 +157,26 @@ _scan_root() {
     for _f in "$@"; do
         [ -f "$_f" ] || continue
         # Shell files only: kit-manifest, provider-caps and harness.conf carry
-        # no shebang and are not code this scan can reason about.
-        head -n 1 "$_f" 2>/dev/null | grep -q '^#!.*sh' || continue
+        # no shebang and are not code this scan can reason about. The READ and
+        # the MATCH are separate steps on purpose: `head … | grep -q` made both
+        # "could not open the file" and "not a shell file" the same nonzero
+        # status under pipefail, so an unreadable mechanism file was skipped in
+        # silence while the other files kept this root's counter positive — and
+        # an unreadable mechanism file is exactly what the mode defect in issue
+        # #20 produced. The match itself is a case, not a grep pipe, per the
+        # no-grep-pipes rule at the top of this file.
+        _first=$(head -n 1 "$_f" 2>/dev/null)
+        _hrc=$?
+        if [ "$_hrc" -ne 0 ]; then
+            echo "FAIL: test-check-loops — could not read $_f (head rc=$_hrc); an unreadable mechanism file is not the same thing as a non-shell one, and skipping it silently is the fail-open this test exists to stop"
+            read_errors=$((read_errors + 1))
+            fails=$((fails + 1))
+            continue
+        fi
+        case "$_first" in
+        '#!'*sh*) ;;
+        *) continue ;;
+        esac
         n=$((n + 1))
         scanned=$((scanned + 1))
         _hits=$(awk -v marker="$MARKER" "$scan_prog" "$_f" 2>"$WORK/scan.err")
@@ -201,8 +220,9 @@ if [ -n "$skipped" ]; then
     echo "note: test-check-loops — repo-owned ('# tailored' or locally drifted) file(s) not held to this rule; the kit's update mode does not replace them, so folding the fix forward is the repo's call:"
     printf '%s\n' "$skipped" | sed 's/^/        /'
 fi
-if [ "$scan_errors" -ne 0 ] || [ "$scanned" -eq 0 ] || [ "$root_gaps" -ne 0 ]; then
-    echo "FAIL: test-check-loops — structural ok withheld: $scanned file(s) examined, $root_gaps glob root(s) empty, $scan_errors file(s) unreadable by the scanner (see above); an empty finding list is not evidence"
+if [ "$scan_errors" -ne 0 ] || [ "$read_errors" -ne 0 ] || [ "$scanned" -eq 0 ] \
+    || [ "$root_gaps" -ne 0 ]; then
+    echo "FAIL: test-check-loops — structural ok withheld: $scanned file(s) examined, $root_gaps glob root(s) empty, $read_errors file(s) that could not be opened, $scan_errors file(s) the scanner could not process (see above); an empty finding list is not evidence"
 elif [ -z "$undocumented" ]; then
     echo "ok: test-check-loops — every surviving here-doc-fed reader is marked deliberate"
 fi
