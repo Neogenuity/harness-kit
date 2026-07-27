@@ -139,9 +139,17 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    helpers alone does not prove gate outcomes are emitted; if that migration
    is declined, audit reports gate trends as no-data/N/A while continuing to
    read existing v1 hook/reviewer lines.
-4. Rewrite the manifest with the new version/checksums — `harness_repin_manifest`
-   in `install-lib.sh` regenerates it while preserving every ` # tailored`
-   marker — then persist the new templates as the NEXT update's diff base with
+4. Rewrite the manifest with the new version/checksums —
+   `bash <new_src>/harness/bootstrap repin <root> <new_version>` validates
+   both arguments, then writes `scripts/harness/.harness-manifest` atomically
+   (temp file + mv) while preserving every ` # tailored` marker. Do not call
+   the underlying `harness_repin_manifest` by hand: the function prints the
+   regenerated manifest to **stdout** and writes nothing itself, so a bare
+   call is an exit-0 no-op that leaves the old version header and stale
+   checksums in place — and redirecting it straight onto
+   `scripts/harness/.harness-manifest` truncates the very file it reads the
+   existing ` # tailored` markers back from, silently un-forking every
+   tailored line. Then persist the new templates as the NEXT update's diff base with
    `harness_persist_base <new_src_scripts> <repo_root> <new_version>` (prune the
    superseded `.harness/var/base/<old_version>/`), and re-run `check-harness` and
    all hook tests.
@@ -162,8 +170,9 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    so adopting survivors would silently bless a deletion — surface any resulting
    declared-but-missing config as the ERROR it is. Record the confirmed value
    with `harness_conf_declare` (idempotent — a second update neither duplicates
-   the line nor resets an edited value), then re-pin the manifest so the new
-   `harness.conf` checksum is captured. `EXECUTION_PROFILE_PROVIDERS` stays a
+   the line nor resets an edited value), then re-pin the manifest with the
+   same `bash <new_src>/harness/bootstrap repin <root> <new_version>` (step 4)
+   so the new `harness.conf` checksum is captured. `EXECUTION_PROFILE_PROVIDERS` stays a
    separate opt-in (never derived) — see the paragraph below.
 
    `EXECUTION_PROFILE_PROVIDERS` is different because profiles are optional.

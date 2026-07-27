@@ -294,10 +294,23 @@ harness_generate_manifest() {
 # may pin its own local gates (e.g. a packaging or template-sync check) as
 # '# tailored'; a re-pin must not silently drop those integrity pins. Emits a
 # path-sorted union of the shipped mechanism set and any still-present
-# previously-tailored path. Pure stdout — the caller redirects it.
+# previously-tailored path. Pure stdout — the caller redirects it (to a TEMP
+# file, then mv: `bootstrap repin` is the safe entry point — redirecting
+# straight onto .harness-manifest truncates the input this function reads its
+# tailored markers from). A missing/empty <kit_version> is a diagnosed error,
+# not an empty version header.
 harness_repin_manifest() {
-    local root="$1" version="$2" mf="$1/scripts/harness/.harness-manifest"
+    # "${2:-}" (not "$2"): under a caller's `set -u` a bare "$2" would abort on
+    # the unbound variable before this guard could diagnose it. An empty
+    # <kit_version> must be an error, not silence: pure-stdout means a version-
+    # less call would emit a "# harness-kit " header with no version at exit 0,
+    # and the caller's redirect would then pin that corrupt manifest.
+    local root="${1:-}" version="${2:-}" mf="${1:-}/scripts/harness/.harness-manifest"
     local old tailored=" " path allpaths
+    if [ -z "$version" ]; then
+        echo "harness_repin_manifest: missing <kit_version> (usage: harness_repin_manifest <repo_root> <kit_version>) — pass the kit's version, or use 'bootstrap repin <root> <version>', which validates arguments and writes the manifest atomically" >&2
+        return 1
+    fi
     if [ ! -f "$root/scripts/harness/kit-manifest" ]; then
         echo "harness_repin_manifest: $root/scripts/harness/kit-manifest missing — run update mode first (it installs the kit-manifest a re-pin derives its file set from)" >&2
         return 1
@@ -807,8 +820,10 @@ harness_update_decision() {
 #      target doesn't have yet — the old manifest can't list a file the
 #      previous kit version didn't ship.
 # Prints one "replace|keep|remove|retire-keep|add <path>" line per file. Does
-# NOT re-pin the manifest — call harness_repin_manifest afterward (it pins the
-# newly-added files and drops the removed ones).
+# NOT re-pin the manifest — run `bootstrap repin <root> <version>` afterward
+# (it pins the newly-added files and drops the removed ones, written atomically;
+# the underlying harness_repin_manifest only prints to stdout, and redirecting
+# it onto the manifest by hand truncates the tailored markers it reads back).
 #
 # --dry-run prints the SAME decision table without mutating anything: one code
 # path computes both (the plan can never diverge from what apply would do).

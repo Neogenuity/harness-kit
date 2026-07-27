@@ -195,6 +195,36 @@ _10e_add_kit_path() {
 $1" ;;
     esac
 }
+
+# Representative DESCENDANT files (one flat newline list). The collapse to
+# bare directories above is only safe for prefix-style IGNORE matching
+# ("scripts/harness/" covers everything under it, and a missed match there
+# fails toward a warning — noise, this check's accepted direction). On an
+# INCLUDE side it inverts (issue #16): an extension-style include like
+# "**/*.md" can never string-match the bare directory "scripts/harness", so
+# every kit path read as "not reached" and the check stayed SILENT while the
+# formatter really would rewrite the pinned/generated .md files — the exact
+# failure direction _10e_biome_included's own header calls the dangerous one.
+# So include-side matching asks a second question (see _10e_reached below):
+# does the include reach the directory (kept — a dir-shaped include must
+# still count) OR any representative descendant file under it? Pinned
+# formatter-parseable paths are their own representatives, captured here
+# before the collapse discards them; the generated dirs the manifest cannot
+# see get a synthesized stand-in, so the answer stays sensible in a repo
+# whose stubs are not yet generated on disk (adapters and stub files are .md
+# — codex agent stubs are TOML, approximated as .md here, which errs toward
+# warning: noise again, the accepted side). The same list is what the
+# pre-commit branch probes a hook-level regex against (issue #17): a
+# 'files:' pattern anchors against the file paths pre-commit passes it, so
+# testing it on bare directories has this same blind spot.
+_10e_kit_reps=""
+_10e_add_kit_rep() {
+    case $'\n'"$_10e_kit_reps"$'\n' in
+        *$'\n'"$1"$'\n'*) ;;
+        *) _10e_kit_reps="$_10e_kit_reps
+$1" ;;
+    esac
+}
 if [ -f "$MANIFEST" ]; then
     # Every loop from here to the end of #10e reads through process
     # substitution and asserts it consumed its input — see assert_loop_ran in
@@ -207,6 +237,7 @@ if [ -f "$MANIFEST" ]; then
         _10e_pins_read=$((_10e_pins_read + 1))
         [ -n "$_10e_p" ] || continue
         _10e_formatter_parseable "$_10e_p" || continue
+        _10e_add_kit_rep "$_10e_p"
         case "$_10e_p" in
             scripts/harness/*) _10e_add_kit_path "scripts/harness" ;;
             .harness/*) _10e_add_kit_path ".harness" ;;
@@ -216,11 +247,14 @@ if [ -f "$MANIFEST" ]; then
     assert_loop_ran "$_10e_pins_read" "kit-owned path collection for formatter check #10e"
 fi
 _10e_add_kit_path ".harness/adapters"
+_10e_add_kit_rep ".harness/adapters/x.md"
 for _10e_prov in $PROVIDERS; do
     _10e_add_kit_path "$_10e_prov/skills"
+    _10e_add_kit_rep "$_10e_prov/skills/x/SKILL.md"
 done
 for _10e_prov in ${AGENT_PROVIDERS:-}; do
     _10e_add_kit_path "$_10e_prov/agents"
+    _10e_add_kit_rep "$_10e_prov/agents/x.md"
 done
 
 # A nested checkout of this repo holds a SECOND copy of every kit path above,
@@ -246,6 +280,11 @@ done
 _10e_nested=0
 if [ -d "$ROOT/.claude/worktrees" ]; then
     _10e_add_kit_path ".claude/worktrees"
+    # The nested checkout holds a full second copy of the pinned tree, so its
+    # representative is a kit .md at nested depth — which also mirrors the
+    # real matching semantics: a root-anchored "scripts/harness/**" include
+    # does not reach it, a depth-agnostic "**/*.md" one does.
+    _10e_add_kit_rep ".claude/worktrees/x/scripts/harness/x.md"
     _10e_nested=1
 fi
 
@@ -280,7 +319,34 @@ _10e_nested_note() {
 }
 
 _10e_kit_paths=$(printf '%s\n' "$_10e_kit_paths" | sed '/^$/d')
+_10e_kit_reps=$(printf '%s\n' "$_10e_kit_reps" | sed '/^$/d')
 _10e_kit_list=$(printf '%s' "$_10e_kit_paths" | tr '\n' ' ')
+
+# _10e_reached <matcher> <entries> <kit-path> — the include-side verdict
+# (issue #16): <kit-path> is reached if <matcher> reaches the directory
+# itself (a dir-shaped include — the pre-#16 behavior, kept) OR any
+# representative descendant file under it (an extension-shaped include the
+# bare directory can never match). <matcher> is _10e_covers (dprint,
+# unordered) or _10e_biome_included (biome, ordered); negations keep working
+# on representatives because both matchers treat a directory entry as
+# covering everything under it. A `for` over word-split lists, NOT a
+# `while read`: this loop returns on the first hit, the shape
+# assert_loop_ran's header says must never be fed by process substitution,
+# and a `for` has no redirection to lose, so there is no silent-skip mode to
+# guard against. The word-splitting (and the deliberately unquoted case
+# suffix below) is safe: every representative is either a manifest path awk
+# already split out of column 2 or a synthesized literal — space-free and
+# glob-free by construction.
+_10e_reached() {
+    local _fn="$1" _entries="$2" _kp="$3" _rep
+    "$_fn" "$_entries" "$_kp" && return 0
+    for _rep in $_10e_kit_reps; do
+        case "$_rep" in
+            "$_kp"/*) "$_fn" "$_entries" "$_rep" && return 0 ;;
+        esac
+    done
+    return 1
+}
 
 # -- prettier: .prettierignore is the exclusion mechanism (plain text, one
 #    glob per line, '#' comments; no jq needed) --
@@ -424,7 +490,12 @@ if [ -n "$_10e_biome_cfg" ]; then
                 while IFS= read -r _10e_kp; do
                     _10e_read=$((_10e_read + 1))
                     [ -n "$_10e_kp" ] || continue
-                    _10e_biome_included "$_10e_all" "$_10e_kp" && _10e_missing="$_10e_missing $_10e_kp"
+                    # Reached = the directory OR a representative descendant
+                    # (issue #16): an extension include like "**/*.md" never
+                    # matches the bare directory, and a miss on this side is
+                    # silence, not noise. The warning still names the
+                    # collapsed kit path — that is what the reader excludes.
+                    _10e_reached _10e_biome_included "$_10e_all" "$_10e_kp" && _10e_missing="$_10e_missing $_10e_kp"
                 done < <(printf '%s\n' "$_10e_kit_paths")
                 assert_loop_ran "$_10e_read" "$_10e_rel formatter-coverage check #10e"
                 [ -n "$_10e_missing" ] \
@@ -455,7 +526,11 @@ if [ -n "$_10e_dprint_cfg" ]; then
             while IFS= read -r _10e_kp; do
                 _10e_read=$((_10e_read + 1))
                 [ -n "$_10e_kp" ] || continue
-                if _10e_covers "$_10e_inc" "$_10e_kp"; then
+                # The include side asks reached-by-representative (issue
+                # #16); the exclude side stays on the collapsed directory —
+                # an excludes list holds prefix-style entries, and a miss
+                # there fails toward noise, this check's accepted direction.
+                if _10e_reached _10e_covers "$_10e_inc" "$_10e_kp"; then
                     _10e_covers "$_10e_exc" "$_10e_kp" || _10e_missing="$_10e_missing $_10e_kp"
                 fi
             done < <(printf '%s\n' "$_10e_kit_paths")
@@ -466,35 +541,94 @@ if [ -n "$_10e_dprint_cfg" ]; then
     fi
 fi
 
-# _10e_pc_hook_unscoped <cfg-file> — prints "1" if some pre-commit hook
-# matching a known formatter name lacks its OWN 'files:' restriction (i.e.
-# would run over the whole tree), else "0". Best-effort block scan, not a
-# real YAML/indentation parser: a hook item starts at a '- id:' line; a
-# '- repo:' line carries the formatter-name signal forward (a repo's own
-# hooks can share a generic 'id:' with no formatter keyword in it) but is
-# never itself checked for 'files:' (that field lives on the id: entry in
-# real pre-commit YAML, never directly on repo:). This exists so an
-# UNRELATED hook's 'files:' a few lines away in the same file can no longer
-# be misattributed to a different, actually-unscoped formatter hook — the
-# prior version's whole-file "does 'files:' appear anywhere" grep conflated
-# the two, which is exactly as unsafe as the substring bug below.
-_10e_pc_hook_unscoped() {
+# _10e_pc_formatter_hooks <cfg-file> — one line per pre-commit hook matching
+# a known formatter name: "unscoped" (no 'files:' of its own — would run
+# over the whole tree), "files <pattern>" (a 'files:' key whose pattern text
+# was recovered, printed for the caller to probe), or "unevaluable" (a
+# 'files:' key whose value this text scan cannot recover — e.g. a block
+# scalar continuing on the next line). Best-effort block scan, not a real
+# YAML/indentation parser: a hook item starts at a '- id:' line; a '- repo:'
+# line carries the formatter-name signal forward (a repo's own hooks can
+# share a generic 'id:' with no formatter keyword in it) but is never itself
+# checked for 'files:' (that field lives on the id: entry in real pre-commit
+# YAML, never directly on repo:). Per-hook attribution exists so an
+# UNRELATED hook's 'files:' a few lines away in the same file cannot be
+# misattributed to a different, actually-unscoped formatter hook. The
+# pattern is printed rather than judged here because the mere PRESENCE of a
+# 'files:' key proves nothing (issue #17): 'files: \.md$' is a real scope
+# that still matches every pinned/generated kit .md file pre-commit would
+# pass it, so treating the key as an alibi skipped the entire coverage block
+# for exactly the configs it exists to catch. The quote strip uses
+# sprintf("%c", 39) for the single-quote character: a literal one inside the
+# single-quoted awk program would end the shell quoting.
+_10e_pc_formatter_hooks() {
     awk '
-        BEGIN { repo_fmt = 0; in_id = 0; is_fmt = 0; has_files = 0; unscoped = 0 }
+        function flush() {
+            if (in_id && is_fmt) {
+                if (!has_files) print "unscoped"
+                else if (pat == "") print "unevaluable"
+                else print "files " pat
+            }
+        }
+        # yaml_dq_decode <double-quoted scalar body> — the regex pre-commit
+        # actually receives. A YAML double-quoted scalar processes escapes
+        # before the value reaches the tool, so the file text "\\.md$" IS the
+        # regex \.md$ — stripping only the quotes leaves a DIFFERENT regex
+        # (literal backslash, any char, md) that matches no kit file, which
+        # sent this whole check silent for a hook that really does reformat
+        # them. Note a single backslash before an ordinary character is not
+        # valid YAML there at all, so anything this cannot decode (\n, \t,
+        # \xNN, a trailing lone backslash) returns the empty string and the
+        # caller reports it as unevaluable — a hedged warning, never silence.
+        function yaml_dq_decode(s,   out, i, n, c, d) {
+            out = ""; i = 1; n = length(s)
+            while (i <= n) {
+                c = substr(s, i, 1)
+                if (c != "\\") { out = out c; i++; continue }
+                if (i == n) return ""
+                d = substr(s, i + 1, 1)
+                if (d == "\\") out = out "\\"
+                else if (d == "\"") out = out "\""
+                else if (d == "/") out = out "/"
+                else return ""
+                i += 2
+            }
+            return out
+        }
+        BEGIN { repo_fmt = 0; in_id = 0; is_fmt = 0; has_files = 0; pat = "" }
         /^[[:space:]]*-[[:space:]]*repo:/ {
-            if (in_id && is_fmt && !has_files) unscoped = 1
-            in_id = 0; is_fmt = 0; has_files = 0; repo_fmt = 0
+            flush()
+            in_id = 0; is_fmt = 0; has_files = 0; pat = ""; repo_fmt = 0
             if ($0 ~ /(prettier|biome|dprint|black|yapf|autopep8|isort|clang-format|rustfmt|gofmt|terraform_fmt)/) repo_fmt = 1
             next
         }
         /^[[:space:]]*-[[:space:]]*id:/ {
-            if (in_id && is_fmt && !has_files) unscoped = 1
-            in_id = 1; is_fmt = repo_fmt; has_files = 0
+            flush()
+            in_id = 1; is_fmt = repo_fmt; has_files = 0; pat = ""
             if ($0 ~ /(prettier|biome|dprint|black|yapf|autopep8|isort|clang-format|rustfmt|gofmt|terraform_fmt)/) is_fmt = 1
             next
         }
-        in_id && /^[[:space:]]*files:/ { has_files = 1 }
-        END { if (in_id && is_fmt && !has_files) unscoped = 1; print unscoped }
+        in_id && /^[[:space:]]*files:/ {
+            has_files = 1
+            line = $0
+            sub(/^[[:space:]]*files:[[:space:]]*/, "", line)
+            sub(/[[:space:]]+#.*$/, "", line)
+            sub(/[[:space:]]+$/, "", line)
+            q = substr(line, 1, 1)
+            sq = sprintf("%c", 39)
+            if (length(line) >= 2 && (q == "\"" || q == sq) && substr(line, length(line), 1) == q) {
+                line = substr(line, 2, length(line) - 2)
+                # Quoting style decides the decoding, and getting it backwards
+                # in EITHER direction reintroduces the silence this check
+                # exists to prevent: a double-quoted scalar processes escapes
+                # (so "\\.md$" is the regex \.md$), while a single-quoted one
+                # is literal apart from a doubled quote standing for one.
+                if (q == "\"") line = yaml_dq_decode(line)
+                else gsub(sq sq, sq, line)
+            }
+            pat = line
+        }
+        END { flush() }
     ' "$1" 2>/dev/null
 }
 
@@ -502,19 +636,70 @@ _10e_pc_hook_unscoped() {
 #    coverage is no longer inferred from the word "harness" merely appearing
 #    somewhere in the pattern — that let an exclude naming only two of five
 #    required paths silently clear all five), or the formatter hook's OWN
-#    'files:' (fix: now block-attributed via _10e_pc_hook_unscoped instead of
-#    "does any 'files:' appear anywhere in the file"). No YAML parser
-#    dependency (best-effort text scan only, like the rest of this check).
-#    Per the warning-only principle: when per-path coverage genuinely can't
-#    be proven (no YAML parser here), this WARNs with hedged wording instead
-#    of silently assuming it. --
+#    'files:' — which is a scope to EVALUATE, not an alibi (issue #17): the
+#    mere presence of the key used to skip this whole block, yet
+#    'files: \.md$' still matches every pinned/generated kit .md file. Since
+#    a 'files:' value is a Python regex largely compatible with grep -E, the
+#    extracted pattern is probed against the representative kit DESCENDANT
+#    files (those regexes anchor against the file paths pre-commit passes,
+#    so bare directories have the same blind spot issue #16 fixed on the
+#    include sides above): a match falls through to the coverage logic below
+#    with hedged wording, no match is genuinely scoped (the common
+#    'files: ^src/' case) and stays silent, and a pattern grep -E rejects
+#    (Python-only syntax some greps cannot parse) warns hedged — per the
+#    warning-only principle: when per-path coverage genuinely can't be
+#    proven (no YAML parser or Python regex engine here), this WARNs with
+#    hedged wording instead of silently assuming it. Hook records stay
+#    block-attributed via _10e_pc_formatter_hooks, never a whole-file
+#    "does any 'files:' appear anywhere" grep. --
 _10e_pc_cfg=""
 [ -f "$ROOT/.pre-commit-config.yaml" ] && _10e_pc_cfg="$ROOT/.pre-commit-config.yaml"
 [ -f "$ROOT/.pre-commit-config.yml" ] && _10e_pc_cfg="$ROOT/.pre-commit-config.yml"
 if [ -n "$_10e_pc_cfg" ]; then
     _10e_rel=${_10e_pc_cfg#"$ROOT"/}
     if grep -qE '(repo:|id:)[[:space:]]*.*(prettier|biome|dprint|black|yapf|autopep8|isort|clang-format|rustfmt|gofmt|terraform_fmt)' "$_10e_pc_cfg" 2>/dev/null; then
-        if [ "$(_10e_pc_hook_unscoped "$_10e_pc_cfg")" = "1" ]; then
+        _10e_pc_hooks=$(_10e_pc_formatter_hooks "$_10e_pc_cfg")
+        _10e_pc_unscoped=0
+        _10e_pc_kitpat=""
+        _10e_pc_uneval=0
+        _10e_pc_read=0
+        while IFS= read -r _10e_h; do
+            _10e_pc_read=$((_10e_pc_read + 1))
+            [ -n "$_10e_h" ] || continue
+            case "$_10e_h" in
+                unscoped) _10e_pc_unscoped=1 ;;
+                unevaluable) _10e_pc_uneval=1 ;;
+                'files '*)
+                    _10e_pat=${_10e_h#files }
+                    # grep runs WITHOUT -q so it reads its whole input: -q
+                    # exits on the first match, and the writer's EPIPE
+                    # becomes a phantom pipefail failure under an
+                    # inherited-ignored SIGPIPE (the same reason the test
+                    # suite bans `printf | grep -q`). Exit 0 = the pattern
+                    # reaches a representative kit file; 1 = provably
+                    # scoped away from all of them; anything else = a
+                    # pattern this grep cannot evaluate. Under pipefail the
+                    # pipeline status is still grep's whenever grep fails,
+                    # because grep is the rightmost command.
+                    printf '%s\n' "$_10e_kit_reps" | grep -E -- "$_10e_pat" >/dev/null 2>&1
+                    _10e_pc_rc=$?
+                    if [ "$_10e_pc_rc" -eq 0 ]; then
+                        _10e_pc_kitpat="$_10e_pat"
+                    elif [ "$_10e_pc_rc" -ne 1 ]; then
+                        _10e_pc_uneval=1
+                    fi
+                    ;;
+            esac
+        done < <(printf '%s\n' "$_10e_pc_hooks")
+        assert_loop_ran "$_10e_pc_read" "$_10e_rel formatter-hook scoping scan #10e"
+        [ "$_10e_pc_uneval" = "1" ] \
+            && echo "WARNING: $_10e_rel has a formatter hook whose 'files:' pattern could not be evaluated as an extended regex (unsupported syntax, or a value this text scan cannot recover) — this check cannot prove the hook stays off kit-owned path(s) ($_10e_kit_list), so verify its scope manually or add a top-level 'exclude:' covering them"
+        if [ "$_10e_pc_unscoped" = "1" ] || [ -n "$_10e_pc_kitpat" ]; then
+            if [ "$_10e_pc_unscoped" = "1" ]; then
+                _10e_pc_why="runs a formatter hook not scoped by its own 'files:'"
+            else
+                _10e_pc_why="runs a formatter hook whose 'files:' pattern ('$_10e_pc_kitpat') matches a representative kit file — a best-effort regex probe, not pre-commit's own matcher, so treat this as hedged"
+            fi
             _10e_global_exclude=$(grep -E '^exclude:' "$_10e_pc_cfg" 2>/dev/null | head -n1)
             _10e_missing=""
             _10e_read=0
@@ -528,7 +713,7 @@ if [ -n "$_10e_pc_cfg" ]; then
             done < <(printf '%s\n' "$_10e_kit_paths")
             assert_loop_ran "$_10e_read" "$_10e_rel formatter-coverage check #10e"
             [ -n "$_10e_missing" ] \
-                && echo "WARNING: $_10e_rel runs a formatter hook not scoped by its own 'files:' — no real YAML parser here, so coverage can only be checked against a top-level 'exclude:', which does not demonstrably cover kit-owned path(s):$_10e_missing — pre-commit will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail unless they are actually excluded$(_10e_nested_note "extend the exclude: regex, e.g. (^|/)[\\].claude/worktrees/ — note a glob '**/' is meaningless in a regex" "$_10e_missing")"
+                && echo "WARNING: $_10e_rel $_10e_pc_why — no real YAML parser here, so coverage can only be checked against a top-level 'exclude:', which does not demonstrably cover kit-owned path(s):$_10e_missing — pre-commit will rewrite these checksum-pinned/generated files and check-harness's drift check will hard-fail unless they are actually excluded$(_10e_nested_note "extend the exclude: regex, e.g. (^|/)[\\].claude/worktrees/ — note a glob '**/' is meaningless in a regex" "$_10e_missing")"
         fi
     fi
 fi

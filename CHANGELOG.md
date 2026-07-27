@@ -3,6 +3,80 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.38.0 — 2026-07-26
+
+### Fixed
+
+- **Check #10e stayed silent for biome and dprint configs scoped by file
+  extension — the exact configs it exists to catch.** The check collapses every
+  manifest-pinned path into the two directories nearly everything funnels
+  through (`scripts/harness`, `.harness`) and compares include patterns against
+  those strings. Both matchers strip a leading `**/` and trailing glob noise
+  first, so an include of `**/*.md` reduces to `*.md`, which can never
+  string-match a bare directory name. Every kit path then read as "the
+  formatter does not reach this", and the branch emitted nothing — while
+  dprint or biome would in fact rewrite the checksum-pinned
+  `scripts/harness/hooks/README.md` and every generated `.harness/adapters/*.md`
+  and provider `SKILL.md` stub, breaking the integrity pin and hard-failing
+  `check-harness`'s drift check on an otherwise clean tree.
+
+  The collapse is only sound for prefix-style **ignore** matching, where a
+  missed match fails toward an extra warning — noise, which this check
+  deliberately prefers. On an **include** side the same miss fails toward
+  silence, the one direction it cannot afford. Include-side matching now also
+  asks whether a pattern reaches any representative *descendant file* under a
+  kit path: formatter-parseable manifest pins serve as their own
+  representatives, and the generated directories the manifest cannot see get
+  synthesized stand-ins, so the answer stays correct in a repo whose stubs are
+  not generated yet. Directory-shaped includes keep matching exactly as before,
+  ordered `!` negations still exclude as before, and the warning still names
+  the collapsed kit path — that is what a reader adds to their config. The
+  prettier branch is unchanged; `.prettierignore` matching was never affected.
+
+- **A pre-commit formatter hook silenced #10e merely by carrying a `files:`
+  key, even when that key still matched kit files.** The scan treated the
+  presence of the key as proof the hook was scoped away from kit-owned paths,
+  so `files: \.md$` — which matches every pinned and generated Markdown file
+  pre-commit would hand it — skipped the entire coverage check. This
+  contradicted the check's own stated rule that when coverage cannot be proven
+  it warns with hedged wording rather than assuming safety. The scan now
+  extracts each formatter hook's pattern and probes it against representative
+  kit file paths: a pattern that reaches one falls through to the coverage
+  logic with hedged wording naming the probe as best-effort, a pattern that
+  reaches none is genuinely scoped and stays silent (`files: ^src/` does not
+  warn), and a pattern this scan cannot recover or the local `grep -E` cannot
+  parse warns that it could not be evaluated. Per-hook block attribution is
+  unchanged, so an unrelated hook's `files:` still cannot suppress a warning
+  for a different, actually-unscoped formatter hook.
+
+  Quoted patterns are decoded the way the YAML loader would, because the
+  quoting style changes the regex: a double-quoted scalar processes escapes
+  before pre-commit ever sees it, so `files: "\\.md$"` **is** the regex
+  `\.md$`, and probing the raw text instead tested a pattern matching no kit
+  file — reintroducing the same silence through a different spelling. Single
+  quotes stay literal apart from a doubled quote, and a double-quoted escape
+  this scanner cannot decode (`\t`, `\n`, `\xNN`, a trailing lone backslash)
+  is reported as unevaluable rather than guessed at.
+
+### Changed
+
+- **Update mode's manifest re-pin now points at `bootstrap repin`, and a
+  version-less re-pin is a diagnosed error instead of a corrupt manifest.**
+  `harness_repin_manifest` is a pure-stdout producer by design — it prints the
+  regenerated manifest and writes nothing — but update mode's step 4 named the
+  function as though it rewrote the file. Followed literally it exits 0,
+  prints to the terminal, and leaves the old version header and now-stale
+  checksums in place, which silently mis-classifies pristine files as drifted
+  on the *next* upgrade. The obvious repair is also wrong: redirecting the
+  function straight onto `.harness-manifest` truncates the very file it reads
+  ` # tailored` markers back from, un-forking every tailored line. Both steps
+  that re-pin now direct the reader to
+  `bash <new_src>/harness/bootstrap repin <root> <version>`, which already
+  existed — it validates both arguments, gates on a sha256 tool, and writes
+  atomically via a temp file. The underlying function additionally rejects a
+  missing or empty `<kit_version>` with a message naming the fix, rather than
+  emitting a header with no version behind an exit code of 0.
+
 ## 0.37.0 — 2026-07-26
 
 ### Fixed

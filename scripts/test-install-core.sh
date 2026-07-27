@@ -244,6 +244,39 @@ else
 fi
 rm -rf "$F"
 
+# --- (f2) harness_repin_manifest: a missing version fails loudly, stdout empty -
+# The function is pure-stdout by contract (issue #19): the caller redirects it
+# onto the manifest, so before the guard a missing/empty <kit_version> emitted
+# a "# harness-kit " header with no version at exit 0 -- and the redirect then
+# pinned that corrupt manifest silently. The guard must return nonzero, name
+# the version argument on stderr, and print NOTHING to stdout, so no redirect
+# of the failure can produce a corrupt manifest.
+# Sourced fresh from the TEMPLATE library in a bash -c subshell (same shape as
+# the (l2) case above) rather than calling the copy this suite sourced at
+# startup -- that one is the root's installed mirror -- and under `set -u`,
+# because the guard's "${2:-}" exists precisely so a version-less call reaches
+# the diagnostic instead of dying on an unbound $2.
+F=$(make_fixture) || exit 1
+out=$(bash -c 'set -uo pipefail; . "$1"; harness_repin_manifest "$2"' \
+    _ "$SCRIPTS_DIR/harness/lib/install-lib.sh" "$F" 2>"$WORK/repin-nover.err"); rc=$?
+err=$(cat "$WORK/repin-nover.err")
+case "$err" in *version*) named_version=1 ;; *) named_version=0 ;; esac
+if [ "$rc" -ne 0 ] && [ -z "$out" ] && [ "$named_version" -eq 1 ]; then
+    pass "repin guard: a missing <kit_version> returns nonzero, names the argument on stderr, and emits no stdout"
+else
+    fail "repin guard: a version-less call was accepted or wrote to stdout (rc=$rc, stdout=${out:-<empty>})" "$err"
+fi
+# Explicit-empty is the same defect through a different caller shape
+# (VERSION="" from a failed lookup): the guard must catch "" too.
+out=$(bash -c 'set -uo pipefail; . "$1"; harness_repin_manifest "$2" ""' \
+    _ "$SCRIPTS_DIR/harness/lib/install-lib.sh" "$F" 2>/dev/null); rc=$?
+if [ "$rc" -ne 0 ] && [ -z "$out" ]; then
+    pass "repin guard: an explicitly empty version is rejected the same way"
+else
+    fail "repin guard: an empty-string version was accepted (rc=$rc, stdout=${out:-<empty>})"
+fi
+rm -rf "$F"
+
 # --- (g) ship-contract validation: a bad manifest aborts BEFORE any copy ------
 # harness_install_mechanism must reject unknown layers, traversal/absolute
 # paths, duplicate destinations, and missing declared sources up front. The

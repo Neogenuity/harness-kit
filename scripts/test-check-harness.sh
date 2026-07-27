@@ -1264,6 +1264,118 @@ YAML
     . "$SCRIPTS_DIR/harness/lib/install-lib.sh"
     harness_append_formatterignore "$W"
     assert_ok_without "10e / fix 8: the kit's block satisfies 10e with a .claude/worktrees/ checkout present" "$W" "does not cover kit-owned path"
+
+    # --- regression cases for issues #16/#17: extension-scoped includes and
+    #     files:-scoped pre-commit hooks that still reach kit paths ----------
+
+    # (#16) biome: an extension-style include ("**/*.md") never string-matches
+    # a collapsed bare directory like "scripts/harness", so the include side
+    # read every kit path as unreached and stayed SILENT — while biome really
+    # would rewrite the pinned scripts/harness/README.md and the generated
+    # .md stubs. Reached-by-representative matching must warn, and the warning
+    # still names the collapsed kit path, not the representative file.
+    W=$(new_10e_fixture)
+    printf '{ "formatter": { "enabled": true, "includes": ["**/*.md"] } }\n' > "$W/biome.json"
+    assert_warns "10e / #16: a biome extension include ('**/*.md') reaches kit files and warns" "$W" "path(s): scripts/harness"
+
+    # (#16) dprint: the same shape on the dprint include side, with no
+    # excludes at all — before the fix, "*.md" could not match a bare
+    # directory and the branch stayed silent.
+    W=$(new_10e_fixture)
+    printf '{ "includes": ["**/*.md"] }\n' > "$W/dprint.json"
+    assert_warns "10e / #16: a dprint extension include ('**/*.md') reaches kit files and warns" "$W" "dprint.json"
+
+    # (#17) pre-commit: 'files: \.md$' is a real scope, but one that still
+    # matches the pinned/generated kit .md files — the mere presence of the
+    # key used to skip the entire coverage block. Must warn, with the hedged
+    # representative-file wording (a regex probe, not pre-commit's matcher).
+    W=$(new_10e_fixture)
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+        files: \.md$
+YAML
+    assert_warns "10e / #17: a files: pattern matching kit .md files warns despite being scoped" "$W" "matches a representative kit file"
+
+    # (#17) the common genuinely-scoped case must STAY silent: '^src/'
+    # matches no representative kit descendant, so the hook is provably
+    # scoped away and the probe must not manufacture noise.
+    W=$(new_10e_fixture)
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+        files: ^src/
+YAML
+    assert_ok_without "10e / #17: a files: pattern scoped to ^src/ stays silent" "$W" "pre-commit-config"
+
+    # (#17) a pattern grep -E cannot evaluate warns hedged instead of
+    # silently assuming the hook is scoped. The motivating class is
+    # Python-only syntax like '(?i)\.md$' — but PCRE-capable greps (ugrep,
+    # some BSD builds) ACCEPT that form, so the fixture pins a pattern no
+    # regex engine parses (an unbalanced group, invalid in Python too) to
+    # keep the case deterministic across grep implementations.
+    W=$(new_10e_fixture)
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+        files: ([unbalanced
+YAML
+    assert_warns "10e / #17: an unevaluable files: pattern warns instead of silently assuming scoped" "$W" "could not be evaluated"
+
+    # (#17, Codex review) The SAME defect through a quoted-scalar shape. A YAML
+    # double-quoted scalar processes escapes before pre-commit sees the value,
+    # so the file text "\\.md$" is the regex \.md$ — which matches every pinned
+    # and generated kit .md file. Stripping only the quotes left the probe
+    # testing \\.md$ (literal backslash, any char, md), which matches no kit
+    # file, so the hook read as scoped and #10e went silent again for exactly
+    # the config the #17 fix was written to catch.
+    W=$(new_10e_fixture)
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+        files: "\\.md$"
+YAML
+    assert_warns "10e / #17: a DOUBLE-QUOTED files: pattern is YAML-decoded before probing, so it still warns" "$W" "matches a representative kit file"
+
+    # The decode must not manufacture noise in the other direction: a
+    # double-quoted but genuinely scoped pattern carries no escapes, so
+    # decoding is the identity and the hook stays provably scoped.
+    W=$(new_10e_fixture)
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+        files: "^src/"
+YAML
+    assert_ok_without "10e / #17: a double-quoted, genuinely scoped pattern stays silent" "$W" "pre-commit-config"
+
+    # A double-quoted escape this scanner cannot decode (\t, \n, \xNN, or a
+    # trailing lone backslash) must reach the hedged branch, never silence:
+    # guessing at the decoded regex would be the same over-trust as before.
+    W=$(new_10e_fixture)
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+        files: "\t.md$"
+YAML
+    assert_warns "10e / #17: an undecodable double-quoted escape warns hedged rather than assuming scoped" "$W" "could not be evaluated"
 fi
 
 # --- check #8d: semantic hook-wiring validation ------------------------------
