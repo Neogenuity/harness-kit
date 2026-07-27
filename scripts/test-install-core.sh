@@ -122,11 +122,18 @@ manifest_paths=$(awk '{print $2}' "$F/scripts/harness/.harness-manifest")
 # is the only thing that fills $missing and $unpinned, so a skip printed BOTH
 # "ok" lines below without having examined a single shipped path. Same defect
 # class as check #9c (harness-kit issue #15).
-shipped_inventory=$(harness_kit_shipped_paths "$SCRIPTS_DIR/kit-manifest")
+# The manifest lives at <scripts>/harness/kit-manifest. This read used the
+# wrong path ($SCRIPTS_DIR/kit-manifest) from its introduction: the inventory
+# came back EMPTY, printf still delivered one blank line, the per-line counter
+# reached 1, and both "ok" lines below printed without inspecting a single
+# shipped path. The counter therefore increments only past the blank-line
+# filter — counting delivered lines cannot distinguish "56 paths inspected"
+# from "one empty line", and only one of those is good news.
+shipped_inventory=$(harness_kit_shipped_paths "$SCRIPTS_DIR/harness/kit-manifest")
 inventory_read=0
 while IFS= read -r p; do
-    inventory_read=$((inventory_read + 1))
     [ -n "$p" ] || continue
+    inventory_read=$((inventory_read + 1))
     [ -f "$F/$p" ] || missing="$missing $p(absent)"
     # Only .sh files must carry the exec bit (check-harness.sh check #5);
     # sourced configs and data files (harness.conf, kit-manifest, README.md)
