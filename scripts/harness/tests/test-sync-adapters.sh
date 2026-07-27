@@ -95,14 +95,16 @@ esac
 # an accepted, documented gap, not something this case is meant to close).
 # This is the one assertion that runs a real formatter: pipe the generated
 # adapter through prettier with no config (its shipped defaults) and require
-# byte-identical output. Gated on prettier being on PATH; skips cleanly, the
-# same way test-sync-secrets.sh skips without jq, rather than failing when it
-# is absent — this repo assumes bash+jq only, never npm, as a hard test
-# dependency.
+# byte-identical output. The comparison is file-level (`cmp`), not a shell
+# command-substitution string compare — command substitution strips ALL
+# trailing newlines from both sides, which would hide the likeliest formatter
+# delta (a final-newline add/remove/normalize) despite that being exactly the
+# kind of drift this case exists to catch. Gated on prettier being on PATH;
+# skips cleanly, the same way test-sync-secrets.sh skips without jq, rather
+# than failing when it is absent — this repo assumes bash+jq only, never npm,
+# as a hard test dependency.
 if command -v prettier >/dev/null 2>&1; then
-    formatted=$(prettier "$ADAPTER" 2>/dev/null)
-    original=$(cat "$ADAPTER" 2>/dev/null)
-    if [ -n "$formatted" ] && [ "$formatted" = "$original" ]; then
+    if prettier "$ADAPTER" > "$ADAPTER.prettier" 2>/dev/null && cmp -s "$ADAPTER.prettier" "$ADAPTER"; then
         pass "prettier (default config) reproduces the generated adapter byte-for-byte"
     else
         fail "prettier (default config) reproduces the generated adapter byte-for-byte"
@@ -122,15 +124,60 @@ fi
 # Simulates the byte-exact regression this fix prevents (a formatter, or a
 # hand-edit, dropping the blank line) — --check must catch it, proving the
 # blank line is actually enforced and not just emitted once by `sync` itself.
+# Every setup step below is gated behind setup_ok: fail() increments a counter
+# but does not exit, so an ungated setup failure could let the final --check
+# exit nonzero for the WRONG reason (a broken fixture, not the mutation) and
+# still read as a pass. setup_ok=0 routes straight to an explicit fail instead
+# of falling through to the real assertion.
+setup_ok=1
 W2=$(new_fixture ".claude")
-ADAPTER2="$W2/.harness/adapters/claude.md"
-bash "$W2/scripts/harness/sync" >/dev/null 2>&1
-awk 'NR==2 && $0=="" { next } { print }' "$ADAPTER2" > "$ADAPTER2.stripped" \
-    && mv "$ADAPTER2.stripped" "$ADAPTER2"
-if bash "$W2/scripts/harness/sync" --check >/dev/null 2>&1; then
-    fail "sync --check re-flags an adapter with the blank line stripped"
+if [ -z "$W2" ]; then
+    fail "deadlock scenario setup: fixture"
+    setup_ok=0
+fi
+
+if [ "$setup_ok" -eq 1 ]; then
+    ADAPTER2="$W2/.harness/adapters/claude.md"
+    if ! bash "$W2/scripts/harness/sync" >/dev/null 2>&1; then
+        fail "deadlock scenario setup: initial sync (write)"
+        setup_ok=0
+    fi
+fi
+
+# Prove the baseline is clean BEFORE the mutation, so a later nonzero --check
+# exit is attributable to the mutation and not to some other setup defect.
+if [ "$setup_ok" -eq 1 ] && ! bash "$W2/scripts/harness/sync" --check >/dev/null 2>&1; then
+    fail "deadlock scenario setup: --check is clean before the mutation"
+    setup_ok=0
+fi
+
+if [ "$setup_ok" -eq 1 ]; then
+    if ! { awk 'NR==2 && $0=="" { next } { print }' "$ADAPTER2" > "$ADAPTER2.stripped" \
+        && mv "$ADAPTER2.stripped" "$ADAPTER2"; }; then
+        fail "deadlock scenario setup: blank-line-stripping mutation"
+        setup_ok=0
+    fi
+fi
+
+# Confirm the mutation actually landed: in a healthy adapter line 2 is blank
+# (per the pins above); after stripping it, the old line 3 heading moves up,
+# so line 2 must now be non-blank.
+if [ "$setup_ok" -eq 1 ]; then
+    line2_mutated=$(sed -n '2p' "$ADAPTER2" 2>/dev/null)
+    if [ -z "$line2_mutated" ]; then
+        fail "deadlock scenario setup: blank line was not actually removed"
+        setup_ok=0
+    fi
+fi
+
+if [ "$setup_ok" -eq 1 ]; then
+    if bash "$W2/scripts/harness/sync" --check >/dev/null 2>&1; then
+        fail "sync --check re-flags an adapter with the blank line stripped"
+    else
+        pass "sync --check re-flags an adapter with the blank line stripped"
+    fi
 else
-    pass "sync --check re-flags an adapter with the blank line stripped"
+    fail "sync --check re-flags an adapter with the blank line stripped (not exercised — setup failed above)"
 fi
 
 if [ "$fails" -eq 0 ]; then
