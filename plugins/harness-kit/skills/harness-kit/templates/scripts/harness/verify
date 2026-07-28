@@ -159,6 +159,15 @@ HASH_CMD=""
 if command -v shasum >/dev/null 2>&1; then HASH_CMD="shasum -a 256"
 elif command -v sha256sum >/dev/null 2>&1; then HASH_CMD="sha256sum"; fi
 
+# _gate_material records permission modes, and `stat` is the only portable way
+# to read a FULL mode (find can only test bits). GNU and BSD spell the format
+# differently; detect the dialect once. Empty means neither answered — the
+# exec-bit walk in _gate_material stays as the floor so a key still moves when
+# an exec bit does.
+STAT_MODE=""
+if stat -c '%a' . >/dev/null 2>&1; then STAT_MODE="gnu"
+elif stat -f '%Lp' . >/dev/null 2>&1; then STAT_MODE="bsd"; fi
+
 _digest_file() {
     [ -n "$HASH_CMD" ] && [ -f "$1" ] || return 1
     # shellcheck disable=SC2086
@@ -188,7 +197,7 @@ _env_material() {
 # error (FAIL). Everything that cannot be PROVEN returns 1: an unprovable gate
 # runs, it never skips.
 _gate_material() {
-    local label="$1" cmd="$2" toks="$3" tok name ver d nfiles hashed got nul nl
+    local label="$1" cmd="$2" toks="$3" tok name ver d nfiles hashed got nul nl modes npaths
     [ -n "$HASH_CMD" ] || return 1
     printf 'v1\nlabel|%s\ncmd|%s\ntokens|%s\n' "$label" "$cmd" "$toks"
     _env_material || return 1
@@ -257,10 +266,32 @@ _gate_material() {
                 # Directories appear in the path list so that creating an empty
                 # one is visible; a content hash alone cannot see it.
                 find "$tok" \( -type f -o -type d \) -print 2>/dev/null | LC_ALL=C sort
-                # A content hash is also blind to chmod, and losing an exec bit
-                # is exactly what check #5 fails on. -perm -100 is the octal form
-                # both BSD and GNU find accept.
-                find "$tok" -type f -perm -100 -print 2>/dev/null | LC_ALL=C sort | sed 's/^/exec /'
+                # A content hash is also blind to chmod. Exec-bit membership
+                # alone (-perm -100) cannot see 0755 -> 0700 or 0644 -> 0600,
+                # so a gate validating exact modes would keep serving a stale
+                # pass after exactly the change it exists to catch: record the
+                # full octal mode of every file AND directory instead, via the
+                # stat dialect detected up top. Like the hash inventory below,
+                # a mode line for every path must be PROVEN present or the key
+                # is unprovable (return 1) and the gate simply runs. With no
+                # usable stat, the exec-bit walk stays as the floor so a key
+                # still moves when an exec bit does (-perm -100 is the octal
+                # form both BSD and GNU find accept).
+                if [ -n "$STAT_MODE" ]; then
+                    if [ "$STAT_MODE" = "gnu" ]; then
+                        modes=$(find "$tok" \( -type f -o -type d \) -print0 2>/dev/null \
+                            | xargs -0 stat -c '%a %n' 2>/dev/null | LC_ALL=C sort)
+                    else
+                        modes=$(find "$tok" \( -type f -o -type d \) -print0 2>/dev/null \
+                            | xargs -0 stat -f '%Lp %N' 2>/dev/null | LC_ALL=C sort)
+                    fi
+                    npaths=$(find "$tok" \( -type f -o -type d \) -print 2>/dev/null | wc -l | tr -d ' ')
+                    got=$(printf '%s\n' "$modes" | grep -c .)
+                    [ "$got" = "$npaths" ] || return 1
+                    printf '%s\n' "$modes" | sed 's/^/mode /'
+                else
+                    find "$tok" -type f -perm -100 -print 2>/dev/null | LC_ALL=C sort | sed 's/^/exec /'
+                fi
                 nfiles=$(find "$tok" -type f -print 2>/dev/null | wc -l | tr -d ' ')
                 if [ "$nfiles" != "0" ]; then
                     # shellcheck disable=SC2086

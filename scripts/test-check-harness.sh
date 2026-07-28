@@ -1038,6 +1038,43 @@ repos:
 YAML
     assert_ok_without "10e: pre-commit hook scoped via files: does not warn" "$W" "pre-commit-config"
 
+    # (l2) pre-commit: a 'files:' value that is a YAML block-scalar header
+    #     ('>-') — the real regex lives on the continuation line, which this
+    #     line-oriented scan cannot recover. Recording the literal '>-' would
+    #     ERE-match no representative and probe as "scoped away" (silence for
+    #     a hook whose continuation may reach every kit .md file); it must
+    #     surface the hedged could-not-evaluate warning instead.
+    W=$(new_10e_fixture)
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+        files: >-
+          \.md$
+YAML
+    assert_warns "10e: a block-scalar 'files:' value warns hedged instead of probing as scoped away" "$W" "could not be evaluated"
+
+    # (l3) pre-commit: an extension-scoped hook ('files: \.toml$') must still
+    #     reach the representative for a TOML-dialect agent provider — Codex
+    #     agent stubs are generated .codex/agents/*.toml (provider-caps
+    #     agent_dialect), and the former .md-only representative let exactly
+    #     this hook probe as scoped away.
+    W=$(new_10e_fixture)
+    cp "$SCRIPTS_DIR/harness/lib/provider-lib.sh" "$W/scripts/harness/lib/"
+    cp "$SCRIPTS_DIR/harness/lib/provider-caps" "$W/scripts/harness/lib/"
+    printf 'AGENT_PROVIDERS=".codex"\n' > "$W/scripts/harness/harness.conf"
+    cat > "$W/.pre-commit-config.yaml" <<'YAML'
+repos:
+  - repo: https://github.com/dprint/pre-commit
+    rev: v1.0.0
+    hooks:
+      - id: dprint
+        files: \.toml$
+YAML
+    assert_warns "10e: a toml-scoped formatter hook reaches the Codex TOML agent-stub representative" "$W" ".codex/agents"
+
     # (m) malformed config (invalid JSON: trailing comma) fails open — stays
     #     exit 0 and, per this check's contract, only ever emits a clearly
     #     hedged warning (never a bare claim that the path IS excluded)

@@ -397,6 +397,19 @@ else
     fail "an undeclared file wrongly invalidated the cache"
 fi
 
+# chmod with the content untouched: a key recording only exec-bit membership
+# is blind to 0644 -> 0600, so a gate validating exact ship-contract modes
+# would keep serving a stale pass after exactly the change it exists to catch.
+chmod 600 "$WORK/hit/inputs/b.txt"
+out=$(bash "$V_C" --changed 2>&1)
+if ! has "$out" "(cached" && [ "$(ran_count hit)" = "3" ]; then
+    pass "a permission-only change (0644 -> 0600) to a declared input re-runs the gate"
+else
+    fail "a non-exec-bit mode change did not invalidate the cache (ran=$(ran_count hit))"
+fi
+chmod 644 "$WORK/hit/inputs/b.txt"
+bash "$V_C" --changed >/dev/null 2>&1
+
 # The runner and the whole gate list are key material: a runner upgrade or a
 # neighbouring gate's edit both change what a recorded pass described.
 printf '\n# touched\n' >> "$WORK/hit/scripts/harness/verify"
