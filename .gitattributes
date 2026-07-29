@@ -1,0 +1,31 @@
+# Line endings are a ship contract here, not a formatting preference.
+#
+# harness-kit's mechanism is parsed line-by-line (kit-manifest,
+# .harness-manifest, .harness/gates.conf) and executed by bash. Git for Windows
+# defaults to core.autocrlf=true, so an ordinary Windows clone of a repo with no
+# .gitattributes rewrites all of it to CRLF. That turns the manifest's blank
+# separators into lone-CR records — which awk and `read` both see as a non-blank
+# field — and appends a CR to every trailing field, so `bootstrap install` dies
+# with ~100 `unknown layer '<CR>'` errors before it copies anything. Pinning the
+# rule here means the repository enforces it, instead of every contributor
+# having to hold their git config right.
+
+# Everything text checks out LF on every platform. `text=auto` keeps git's
+# binary detection, so this stays correct if a binary asset is ever added.
+* text=auto eol=lf
+
+# Named explicitly so that narrowing the blanket rule above can never silently
+# un-protect the files that actually break. These patterns match by basename at
+# any depth, which covers both sides of the mechanism: the shipped templates
+# under plugins/ (the product) and this repo's own installed copy (dogfood).
+*.sh              eol=lf
+kit-manifest      eol=lf
+.harness-manifest eol=lf
+gates.conf        eol=lf
+
+# Windows-native launchers would genuinely want CRLF. None exist today — the
+# kit's hooks assume a POSIX shell — but the rule belongs here so that adding
+# one later does not require rediscovering this file.
+*.cmd eol=crlf
+*.bat eol=crlf
+*.ps1 eol=crlf

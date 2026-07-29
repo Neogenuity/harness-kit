@@ -313,6 +313,28 @@ tracked per-provider in
 [provider-matrix.md](plugins/harness-kit/skills/harness-kit/references/provider-matrix.md),
 not duplicated here.
 
+**Windows: clone with LF line endings.** The repo pins `eol=lf` in
+`.gitattributes`, so a fresh clone is already correct. But `.gitattributes`
+only governs files git writes — it does **not** repair a checkout made before
+it existed, and `git status` reports such a checkout clean, so a stale clone
+stays broken with no signal. If `bootstrap` fails with any of
+
+```
+unknown layer '<CR>'
+set: pipefail: invalid option name
+/usr/bin/env: 'bash\r': No such file or directory
+```
+
+the checkout is CRLF. Repair it in place, or re-clone:
+
+```bash
+git add --renormalize . && git checkout -- .
+```
+
+`core.autocrlf=true` is Git for Windows' default and is what produces this;
+the kit's mechanism is parsed line-by-line and executed by bash, so it needs
+LF regardless of that setting.
+
 ## Repository internals
 
 The product is the canonical content model, portable mechanism, and generated

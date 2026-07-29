@@ -518,6 +518,33 @@ for bad in \
     rm -rf "$K" "$T2"
 done
 
+# --- (g2) a CRLF kit-manifest is rejected as ONE git-level error --------------
+# Cloning with core.autocrlf=true (Git for Windows' default) rewrites the ship
+# contract to CRLF. Every line then mis-parses: the blank separators become
+# lone-CR records that read as a layer named <CR>, and every other line's
+# trailing field carries a CR. The pre-fix behavior was ~100 `unknown layer`
+# findings that all pointed at the manifest's CONTENT, when the cause was the
+# CHECKOUT — so this asserts on the DIAGNOSIS, not just the exit code: exactly
+# one error, naming CRLF, with nothing copied.
+K=$(mktemp -d "$WORK/crlfkit.XXXXXX") || exit 1
+cp -R "$SCRIPTS_DIR" "$K/scripts"
+# awk, not `sed -i`/perl — neither is portable across the runners this suite
+# has to pass on.
+awk '{ printf "%s\r\n", $0 }' "$K/scripts/harness/kit-manifest" > "$K/km.crlf" \
+    && mv "$K/km.crlf" "$K/scripts/harness/kit-manifest"
+T2=$(mktemp -d "$WORK/crlftarget.XXXXXX") || exit 1
+out=$(harness_install_mechanism "$K/scripts" "$T2" 2>&1); rc=$?
+crlf_errors=$(printf '%s\n' "$out" | grep -c '^ERROR:')
+crlf_named=0
+case "$out" in *CRLF*) crlf_named=1 ;; esac
+if [ "$rc" -ne 0 ] && [ ! -d "$T2/scripts" ] \
+        && [ "$crlf_errors" -eq 1 ] && [ "$crlf_named" -eq 1 ]; then
+    pass "ship contract: a CRLF kit-manifest is one CRLF-named error, before any copy"
+else
+    fail "ship contract: CRLF kit-manifest gave rc=$rc and $crlf_errors error(s); expected exactly 1 naming CRLF, with nothing copied" "$out"
+fi
+rm -rf "$K" "$T2"
+
 # --- (h) bootstrap prereq gate: a degraded install needs explicit opt-in -------
 # The SKILL's init flow asks the user to acknowledge missing prerequisites in
 # prose; the bootstrap CLI must enforce the same contract mechanically. jq/git

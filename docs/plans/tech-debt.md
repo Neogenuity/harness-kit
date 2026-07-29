@@ -57,3 +57,20 @@ a real plan in [PLANS.md](PLANS.md)'s lifecycle.
 - **haiku reward-hacks the neuter-check** — the negative-no-neuter-check
   scenario passes ~2/3 on haiku-tier models (recorded 2026-07-12). Revisit
   when re-baselining the eval matrix on newer cheap-tier models.
+- **Adopters get no CRLF protection for their installed harness** — issue #27
+  fixed line endings for *this* repo's clone (root `.gitattributes`, plus the
+  CRLF probe in `harness_validate_ship_contract`). The shipped product still
+  has the identical defect one layer out: the kit installs `scripts/harness/**`
+  into adopter repos and integrity-pins every file by sha256, but ships them no
+  `.gitattributes`. A Windows adopter with `core.autocrlf=true` who commits the
+  installed harness gets CRLF back on their next clone, and every pin breaks at
+  once. The failure signature there is *worse* than the one #27 fixed — the
+  probe reads only the source manifest, which is always LF after #27, so the
+  adopter sees ~117 sha256 drift failures from `verify` with nothing anywhere
+  naming line endings. Precedent says this is in scope for the kit:
+  `harness_append_gitignore` and the opt-in `--formatter-ignore`
+  `.prettierignore` block already exist to protect the same byte-exact surface
+  from repo-wide tooling. Deferred because #27 as filed is about this repo's
+  clone and the fix is worth shipping without widening it. Promote on the first
+  Windows adopter report, or when adopter-side `.gitattributes` is picked up as
+  part of a broader install-time repo-config pass (trigger: either of those).

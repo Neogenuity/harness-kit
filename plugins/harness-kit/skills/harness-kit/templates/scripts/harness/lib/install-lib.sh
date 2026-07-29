@@ -128,6 +128,24 @@ harness_validate_ship_contract() {
         echo "ERROR: kit-manifest: $kmf is missing — not a valid install source" >&2
         return 1
     fi
+    # A CRLF manifest makes every finding below a lie, so name the real cause
+    # once here instead of emitting one bogus finding per line (~100 on the
+    # shipped contract). The blank separators become lone-CR records, which
+    # `read` hands over as a non-empty layer named <CR>; every other line's
+    # trailing field carries a CR into a path this function is about to pass to
+    # cp/rm.
+    #
+    # This probe is the diagnosis, NOT the defense — .gitattributes is. Its
+    # reachability is shell-dependent, so do not extend it expecting universal
+    # coverage: core.autocrlf=true converts the .sh files too, and a bash that
+    # rejects a CRLF script (macOS, Linux) dies parsing `bootstrap` well before
+    # this runs, under an unrelated signature ("set: pipefail: invalid option
+    # name"). What reaches here is a shell that TOLERATES CRLF scripts — Git
+    # Bash, where #27 was reported from — or a partially normalized checkout.
+    if LC_ALL=C grep -q $'\r' "$kmf" 2>/dev/null; then
+        echo "ERROR: kit-manifest: $kmf has CRLF line endings, but the parser requires LF — every layer and path would be read with a trailing carriage return. Most often this is a clone made with core.autocrlf=true (Git for Windows' default) from a checkout with no .gitattributes. Re-clone with 'git -c core.autocrlf=false -c core.eol=lf clone <url>', or run 'git add --renormalize .' in a checkout whose .gitattributes pins 'eol=lf'." >&2
+        return 1
+    fi
     while read -r layer path rest; do
         lineno=$((lineno + 1))
         case "$layer" in ""|\#*) continue ;; esac
