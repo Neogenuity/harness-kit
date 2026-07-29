@@ -80,12 +80,21 @@ harness_kit_shipped_paths() {
 # install pins policy templates unmarked, and repo-owned gate/format/invariant
 # policy must be reviewed, never silently replaced.
 harness_kit_is_diff_only() {
-    local kmf="$1" path="$2" p
+    local kmf="$1" path="$2" p found=1
     [ -f "$kmf" ] || return 1
+    # DRAIN the producer — never `return`/`break` out of this loop. An early
+    # exit closes the process substitution while harness_kit_manifest_paths is
+    # still writing, and on a runner that hands down an IGNORED SIGPIPE (GitHub
+    # Actions does) its printf survives the EPIPE instead of dying silently and
+    # reports "write error: Broken pipe" on stderr. That noise is scheduling-
+    # dependent, so it varies run to run and pollutes any caller capturing
+    # 2>&1 — it turned the install-update gate red on ubuntu while macOS, idle
+    # and with SIGPIPE at its default, stayed green. Draining costs nothing
+    # here: the policy layers are a handful of lines.
     while IFS= read -r p; do
-        [ "$p" = "$path" ] && return 0
+        [ "$p" = "$path" ] && found=0
     done < <(harness_kit_manifest_paths "$kmf" policy optional-policy)
-    return 1
+    return "$found"
 }
 
 # _harness_path_sane <path>

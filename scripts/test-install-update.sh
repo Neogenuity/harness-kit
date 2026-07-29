@@ -258,13 +258,15 @@ rm -rf "$F"
 # none).
 #
 # Asserted as PARITY with the POSIX plan, not against fixed counts, so the case
-# cannot rot as the ship contract grows.
+# cannot rot as the ship contract grows. stdout ONLY (the sibling cases do the
+# same): the plan is stdout by contract, and folding in stderr would compare
+# diagnostics whose volume depends on process scheduling.
 F=$(make_fixture) || exit 1
-posix_plan=$(harness_update_apply "$SCRIPTS_DIR" "$F" --dry-run 2>&1)
+posix_plan=$(harness_update_apply "$SCRIPTS_DIR" "$F" --dry-run)
 sed 's/^\([0-9a-fA-F]\{64\}\)  /\1 */' "$F/scripts/harness/.harness-manifest" > "$F/m.binmode" \
     && mv "$F/m.binmode" "$F/scripts/harness/.harness-manifest"
 starred=$(grep -c ' \*' "$F/scripts/harness/.harness-manifest")
-binary_plan=$(harness_update_apply "$SCRIPTS_DIR" "$F" --dry-run 2>&1)
+binary_plan=$(harness_update_apply "$SCRIPTS_DIR" "$F" --dry-run)
 if [ "$starred" -gt 0 ] && [ -n "$posix_plan" ] && [ "$posix_plan" = "$binary_plan" ]; then
     pass "update: a binary-mode manifest yields the same plan as a POSIX one ($starred pins rewritten)"
 else
