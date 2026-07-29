@@ -526,7 +526,7 @@ for probe_case in \
     "nomatch:# inputs probe does/not/exist:matched no files" \
     "orphan:# inputs typoed src:no gate/full/parallel line declares" \
     "dup:# inputs probe inputs\n# inputs probe inputs:declared more than once" \
-    "bogus:# inputs probe @nope inputs:unknown"; do
+    "bogus:# inputs probe @nope inputs:unknown '# inputs' directive"; do
     name=${probe_case%%:*}
     rest=${probe_case#*:}
     decl=${rest%:*}
@@ -693,6 +693,75 @@ if command -v git >/dev/null 2>&1; then
         fail "@git-head fixture never cached on the second run"
     fi
 fi
+
+# --- config validity is the same in every mode -------------------------------
+# A '# inputs' annotation is either legal or it is not; the answer must not
+# depend on which mode asked. It used to: the prescan skipped validation under
+# --fast on the belief that "--fast runs no annotated gate", but gate-kind gates
+# DO run in both modes and may carry an annotation. run_gate then swallowed the
+# error (`key=$(_live_key ...) || key=""`), so --fast printed the diagnostic to
+# stderr and still exited 0 with "OK: all quality gates passed (fast)" on a
+# gates.conf that full mode refused outright.
+#
+# Both invalid classes are covered: a token matching no path, and an unknown
+# '@' directive. The valid case is covered too — the modes must agree on
+# ACCEPTANCE, not merely both reject, or a blanket refusal would pass.
+# '|' separates token from needle, not ':' — one of the tokens under test is
+# '@tool:', so a ':' split would cut the token itself in half. The fixture is
+# named by index for the same reason: these tokens contain '/' and ':'.
+_ann_i=0
+for _case in \
+    'does/not/exist|matched no files' \
+    "@bogus|unknown '# inputs' directive" \
+    "@tool:|names no tool"; do
+    _tok=${_case%%|*}
+    _needle=${_case#*|}
+    _ann_i=$((_ann_i + 1))
+    printf 'gate probe true\n# inputs probe %s\n' "$_tok" > "$WORK/badann.gates"
+    V_BAD=$(make_fixture "badann-$_ann_i" "$WORK/badann.gates")
+    _modes_ok=1
+    _detail=""
+    for _mode in "" "--fast" "--changed"; do
+        # CI='' because --changed refuses to run under CI=true.
+        _out=$(CI='' bash "$V_BAD" $_mode 2>&1); _rc=$?
+        case "$_out" in *"$_needle"*) ;; *) _modes_ok=0 ;; esac
+        [ "$_rc" -eq 1 ] || _modes_ok=0
+        _detail="${_detail}[${_mode:-full}] rc=$_rc "
+    done
+    if [ "$_modes_ok" -eq 1 ]; then
+        pass "every mode rejects an invalid '# inputs' token ('$_tok')"
+    else
+        fail "modes disagree on an invalid '# inputs' token ('$_tok')" "$_detail"
+    fi
+    rm -rf "$WORK/badann-$_ann_i"
+done
+
+V_GOODANN_DIR="$WORK/goodann"
+printf 'gate probe true\n# inputs probe inputs\n' > "$WORK/goodann.gates"
+V_GOODANN=$(make_fixture goodann "$WORK/goodann.gates")
+mkdir -p "$V_GOODANN_DIR/inputs"
+printf 'x\n' > "$V_GOODANN_DIR/inputs/a.txt"
+_accept_ok=1
+_accept_detail=""
+for _mode in "" "--fast" "--changed"; do
+    _out=$(CI='' bash "$V_GOODANN" $_mode 2>&1); _rc=$?
+    [ "$_rc" -eq 0 ] || { _accept_ok=0; _accept_detail="${_accept_detail}[${_mode:-full}] rc=$_rc: $_out "; }
+    # rc=0 alone cannot tell "accepted" from "accepted but permanently
+    # unprovable" — a blanket `return 1` in _gate_material produces the same
+    # exit triple. The full run above warms the cache, so by the --changed
+    # iteration a genuinely usable annotation MUST serve a hit; an unprovable
+    # one reports "ok: probe" and 0 cached.
+    if [ "$_mode" = "--changed" ] && ! has "$_out" "(cached"; then
+        _accept_ok=0
+        _accept_detail="${_accept_detail}[changed] accepted but never cached: $_out "
+    fi
+done
+if [ "$_accept_ok" -eq 1 ]; then
+    pass "every mode accepts a valid '# inputs' annotation, and it stays usable"
+else
+    fail "a mode rejected a valid '# inputs' annotation, or left it unprovable" "$_accept_detail"
+fi
+rm -rf "$V_GOODANN_DIR"
 
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails verify orchestration test(s)"
