@@ -161,12 +161,17 @@ elif command -v sha256sum >/dev/null 2>&1; then HASH_CMD="sha256sum"; fi
 
 # _gate_material records permission modes, and `stat` is the only portable way
 # to read a FULL mode (find can only test bits). GNU and BSD spell the format
-# differently; detect the dialect once. Empty means neither answered — the
-# exec-bit walk in _gate_material stays as the floor so a key still moves when
-# an exec bit does.
+# differently; detect the dialect once. GNU '%a' is the whole mode & 07777,
+# but BSD '%Lp' is only the LOW three digits — it prints 755 for a 4755 file,
+# so a setuid/setgid/sticky-only change would leave the key untouched, the
+# same blindness one size down. '%Mp' supplies that leading digit; neither
+# field zero-pads, but %Mp is always exactly one character, so the
+# concatenation stays one-to-one with the mode. Empty means neither answered —
+# the exec-bit walk in _gate_material stays as the floor so a key still moves
+# when an exec bit does.
 STAT_MODE=""
 if stat -c '%a' . >/dev/null 2>&1; then STAT_MODE="gnu"
-elif stat -f '%Lp' . >/dev/null 2>&1; then STAT_MODE="bsd"; fi
+elif stat -f '%Mp%Lp' . >/dev/null 2>&1; then STAT_MODE="bsd"; fi
 
 _digest_file() {
     [ -n "$HASH_CMD" ] && [ -f "$1" ] || return 1
@@ -283,7 +288,7 @@ _gate_material() {
                             | xargs -0 stat -c '%a %n' 2>/dev/null | LC_ALL=C sort)
                     else
                         modes=$(find "$tok" \( -type f -o -type d \) -print0 2>/dev/null \
-                            | xargs -0 stat -f '%Lp %N' 2>/dev/null | LC_ALL=C sort)
+                            | xargs -0 stat -f '%Mp%Lp %N' 2>/dev/null | LC_ALL=C sort)
                     fi
                     npaths=$(find "$tok" \( -type f -o -type d \) -print 2>/dev/null | wc -l | tr -d ' ')
                     got=$(printf '%s\n' "$modes" | grep -c .)

@@ -211,12 +211,12 @@ $1" ;;
 # formatter-parseable paths are their own representatives, captured here
 # before the collapse discards them; the generated dirs the manifest cannot
 # see get a synthesized stand-in, so the answer stays sensible in a repo
-# whose stubs are not yet generated on disk (adapters and stub files are .md
-# — codex agent stubs are TOML, approximated as .md here, which errs toward
-# warning: noise again, the accepted side). The same list is what the
-# pre-commit branch probes a hook-level regex against (issue #17): a
-# 'files:' pattern anchors against the file paths pre-commit passes it, so
-# testing it on bare directories has this same blind spot.
+# whose stubs are not yet generated on disk (adapters and skill stubs are
+# .md; an agent stub carries its provider's own dialect extension, so a
+# codex agent stub is .toml — see the agent-provider loop below). The same
+# list is what the pre-commit branch probes a hook-level regex against
+# (issue #17): a 'files:' pattern anchors against the file paths pre-commit
+# passes it, so testing it on bare directories has this same blind spot.
 _10e_kit_reps=""
 _10e_add_kit_rep() {
     case $'\n'"$_10e_kit_reps"$'\n' in
