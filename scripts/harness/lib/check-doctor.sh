@@ -211,12 +211,12 @@ $1" ;;
 # formatter-parseable paths are their own representatives, captured here
 # before the collapse discards them; the generated dirs the manifest cannot
 # see get a synthesized stand-in, so the answer stays sensible in a repo
-# whose stubs are not yet generated on disk (adapters and stub files are .md
-# — codex agent stubs are TOML, approximated as .md here, which errs toward
-# warning: noise again, the accepted side). The same list is what the
-# pre-commit branch probes a hook-level regex against (issue #17): a
-# 'files:' pattern anchors against the file paths pre-commit passes it, so
-# testing it on bare directories has this same blind spot.
+# whose stubs are not yet generated on disk (adapters and skill stubs are
+# .md; an agent stub carries its provider's own dialect extension, so a
+# codex agent stub is .toml — see the agent-provider loop below). The same
+# list is what the pre-commit branch probes a hook-level regex against
+# (issue #17): a 'files:' pattern anchors against the file paths pre-commit
+# passes it, so testing it on bare directories has this same blind spot.
 _10e_kit_reps=""
 _10e_add_kit_rep() {
     case $'\n'"$_10e_kit_reps"$'\n' in
@@ -254,7 +254,21 @@ for _10e_prov in $PROVIDERS; do
 done
 for _10e_prov in ${AGENT_PROVIDERS:-}; do
     _10e_add_kit_path "$_10e_prov/agents"
-    _10e_add_kit_rep "$_10e_prov/agents/x.md"
+    # The representative must carry the extension the provider's generated
+    # stubs actually use, or an extension-scoped hook slips through: Codex
+    # agent stubs render as TOML (provider-caps agent_dialect), so against an
+    # .md-only representative a 'files: \.toml$' formatter hook probes as
+    # "scoped away" while it rewrites every generated .codex/agents/*.toml.
+    # provider-lib may be absent on a partial/legacy tree (check-common guards
+    # the source) — degrade to the historical .md representative, never error.
+    _10e_dialect=""
+    if command -v harness_caps_field >/dev/null 2>&1; then
+        _10e_dialect=$(harness_caps_field "$_10e_prov" 3) || _10e_dialect=""
+    fi
+    case "$_10e_dialect" in
+        toml) _10e_add_kit_rep "$_10e_prov/agents/x.toml" ;;
+        *)    _10e_add_kit_rep "$_10e_prov/agents/x.md" ;;
+    esac
 done
 
 # A nested checkout of this repo holds a SECOND copy of every kit path above,
@@ -614,19 +628,33 @@ _10e_pc_formatter_hooks() {
             sub(/^[[:space:]]*files:[[:space:]]*/, "", line)
             sub(/[[:space:]]+#.*$/, "", line)
             sub(/[[:space:]]+$/, "", line)
-            q = substr(line, 1, 1)
-            sq = sprintf("%c", 39)
-            if (length(line) >= 2 && (q == "\"" || q == sq) && substr(line, length(line), 1) == q) {
-                line = substr(line, 2, length(line) - 2)
-                # Quoting style decides the decoding, and getting it backwards
-                # in EITHER direction reintroduces the silence this check
-                # exists to prevent: a double-quoted scalar processes escapes
-                # (so "\\.md$" is the regex \.md$), while a single-quoted one
-                # is literal apart from a doubled quote standing for one.
-                if (q == "\"") line = yaml_dq_decode(line)
-                else gsub(sq sq, sq, line)
+            if (line ~ /^[|>]/) {
+                # An unquoted value opening with "|" or ">" is a YAML
+                # block-scalar header, not the regex — the pattern lives on
+                # continuation lines this line-oriented scan cannot recover,
+                # and YAML forbids a plain scalar from STARTING with either
+                # indicator, so the first-char dispatch is unambiguous.
+                # Recording the literal marker instead would be an ERE that
+                # matches no representative path, which downstream reads as
+                # PROOF the hook is scoped away — the exact silence issue #17
+                # exists to prevent. Empty pat is the established
+                # unevaluable channel (see yaml_dq_decode above).
+                pat = ""
+            } else {
+                q = substr(line, 1, 1)
+                sq = sprintf("%c", 39)
+                if (length(line) >= 2 && (q == "\"" || q == sq) && substr(line, length(line), 1) == q) {
+                    line = substr(line, 2, length(line) - 2)
+                    # Quoting style decides the decoding, and getting it backwards
+                    # in EITHER direction reintroduces the silence this check
+                    # exists to prevent: a double-quoted scalar processes escapes
+                    # (so "\\.md$" is the regex \.md$), while a single-quoted one
+                    # is literal apart from a doubled quote standing for one.
+                    if (q == "\"") line = yaml_dq_decode(line)
+                    else gsub(sq sq, sq, line)
+                }
+                pat = line
             }
-            pat = line
         }
         END { flush() }
     ' "$1" 2>/dev/null

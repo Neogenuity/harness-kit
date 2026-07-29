@@ -397,6 +397,41 @@ else
     fail "an undeclared file wrongly invalidated the cache"
 fi
 
+# chmod with the content untouched: a key recording only exec-bit membership
+# is blind to 0644 -> 0600, so a gate validating exact ship-contract modes
+# would keep serving a stale pass after exactly the change it exists to catch.
+chmod 600 "$WORK/hit/inputs/b.txt"
+out=$(bash "$V_C" --changed 2>&1)
+if ! has "$out" "(cached" && [ "$(ran_count hit)" = "3" ]; then
+    pass "a permission-only change (0644 -> 0600) to a declared input re-runs the gate"
+else
+    fail "a non-exec-bit mode change did not invalidate the cache (ran=$(ran_count hit))"
+fi
+# The special bits are mode too, and they are the same blindness one size
+# down: BSD `stat -f %Lp` prints only the LOW three digits, so a 4755 file
+# reads as 755 and a setuid-only change moves nothing in the key. The low
+# digits must be held CONSTANT across the change or the case proves nothing —
+# 0600 -> 4755 moves 600 to 755 and re-runs even on a %Lp key — so prime at
+# 0755 first and flip only the special digit. Guarded: a filesystem that
+# refuses the bit cannot stage the precondition, and a test that cannot
+# arrange its setup must say so rather than fail. `[ -u ]` is POSIX, so the
+# guard needs no stat dialect of its own.
+chmod 755 "$WORK/hit/inputs/b.txt"
+bash "$V_C" --changed >/dev/null 2>&1
+chmod 4755 "$WORK/hit/inputs/b.txt" 2>/dev/null
+if [ -u "$WORK/hit/inputs/b.txt" ]; then
+    out=$(bash "$V_C" --changed 2>&1)
+    if ! has "$out" "(cached" && [ "$(ran_count hit)" = "5" ]; then
+        pass "a setuid-only mode change (0755 -> 4755) to a declared input re-runs the gate"
+    else
+        fail "a special-bit-only mode change did not invalidate the cache (ran=$(ran_count hit))"
+    fi
+else
+    echo "skip: test-verify — this filesystem does not keep the setuid bit, so the special-bit cache case cannot be set up here"
+fi
+chmod 644 "$WORK/hit/inputs/b.txt"
+bash "$V_C" --changed >/dev/null 2>&1
+
 # The runner and the whole gate list are key material: a runner upgrade or a
 # neighbouring gate's edit both change what a recorded pass described.
 printf '\n# touched\n' >> "$WORK/hit/scripts/harness/verify"
