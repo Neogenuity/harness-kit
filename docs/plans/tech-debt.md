@@ -67,7 +67,13 @@ a real plan in [PLANS.md](PLANS.md)'s lifecycle.
   once. The failure signature there is *worse* than the one #27 fixed — the
   probe reads only the source manifest, which is always LF after #27, so the
   adopter sees ~117 sha256 drift failures from `verify` with nothing anywhere
-  naming line endings. Precedent says this is in scope for the kit:
+  naming line endings. Confirmed while fixing #25: with a CRLF *and* binary-mode
+  manifest the reported path now reads `lists 'scripts/mech.sh' but it does not
+  exist` — the `*` is stripped but the trailing CR is invisible, so the message
+  shows a correct-looking path being reported missing. Any fix here should probe
+  the manifest for CR the way `harness_validate_ship_contract` probes
+  kit-manifest, not just harden another reader. Precedent says this is in scope
+  for the kit:
   `harness_append_gitignore` and the opt-in `--formatter-ignore`
   `.prettierignore` block already exist to protect the same byte-exact surface
   from repo-wide tooling. Deferred because #27 as filed is about this repo's

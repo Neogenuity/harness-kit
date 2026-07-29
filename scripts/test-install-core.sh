@@ -492,6 +492,66 @@ else
 fi
 rm -rf "$F"
 
+# --- (f3) binary-mode manifests: the '*' path marker ---------------------------
+# Git Bash and Cygwin default BOTH shasum and sha256sum to binary mode, which
+# writes "<sha> *<path>" instead of the documented "<sha>  <path>". The '*' then
+# lands in awk's field 2 at every manifest reader, so paths resolve to nothing.
+# The loud symptom was drift noise (issue #25: 10 real findings became 122); the
+# quiet one was worse — repin stopped matching its own tailored set and dropped
+# every '# tailored' marker, the one thing keeping update mode from overwriting
+# a deliberate fork.
+#
+# (i) A manifest ALREADY written in binary mode must keep its markers, and the
+#     re-pin must normalize the format rather than propagate it.
+F=$(make_fixture) || exit 1
+pick=scripts/harness/tests/test-log.sh
+printf '# harness-kit 0.0.0\n%s *%s # tailored\n' \
+    "$(_harness_sha256 "$F/$pick" | awk '{print $1}')" "$pick" \
+    > "$F/scripts/harness/.harness-manifest"
+out=$(harness_repin_manifest "$F" 0.0.0)
+kept=$(printf '%s\n' "$out" | grep -c '# tailored')
+starred=$(printf '%s\n' "$out" | grep -c ' \*')
+if [ "$kept" -eq 1 ] && [ "$starred" -eq 0 ]; then
+    pass "repin: a binary-mode manifest keeps its '# tailored' marker and is normalized"
+else
+    fail "repin: binary-mode manifest lost tailoring or kept the '*' (tailored=$kept starred=$starred)"
+fi
+rm -rf "$F"
+
+# (ii) The WRITER must never emit the marker in the first place, whatever the
+#      local tool does. Stub a binary-mode shasum onto PATH so this pins the
+#      Git Bash behavior on a POSIX runner too — otherwise the fix is untested
+#      everywhere it actually matters.
+F=$(make_fixture) || exit 1
+ZERO_SHA=$(printf '0%.0s' $(seq 64))
+STUBBIN=$(mktemp -d "$WORK/binmode.XXXXXX") || exit 1
+# A canned emitter, not a wrapper around the local shasum: this must pin Git
+# Bash's output shape on any runner, including one with no perl (debian-slim,
+# alpine) where `command -v shasum` is empty and a wrapper would exec its own
+# path and fail — blaming code that is fine. The digest is irrelevant here;
+# only the "<sha> *<path>" marker under test is.
+{
+    printf '#!/bin/sh\n'
+    printf 'for a in "$@"; do\n'
+    printf '    case "$a" in -*|256) continue ;; esac\n'
+    printf '    printf "%%s *%%s\\n" %s "$a"\n' "$ZERO_SHA"
+    printf 'done\n'
+} > "$STUBBIN/shasum"
+chmod +x "$STUBBIN/shasum"
+# Prove the stub really does emit binary format, or the assertion below is vacuous.
+stub_out=$(PATH="$STUBBIN:$PATH" shasum -a 256 "$F/$pick")
+stub_named=0
+case "$stub_out" in *" *"*) stub_named=1 ;; esac
+writer_out=$(PATH="$STUBBIN:$PATH" _harness_sha256 "$F/$pick")
+writer_starred=0
+case "$writer_out" in *" *"*) writer_starred=1 ;; esac
+if [ "$stub_named" -eq 1 ] && [ "$writer_starred" -eq 0 ]; then
+    pass "_harness_sha256: a binary-mode hash tool is normalized to '<sha>  <path>'"
+else
+    fail "_harness_sha256: binary-mode normalization failed (stub emitted marker=$stub_named, writer kept marker=$writer_starred)" "$writer_out"
+fi
+rm -rf "$F" "$STUBBIN"
+
 # --- (g) ship-contract validation: a bad manifest aborts BEFORE any copy ------
 # harness_install_mechanism must reject unknown layers, traversal/absolute
 # paths, duplicate destinations, and missing declared sources up front. The

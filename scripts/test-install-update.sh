@@ -247,4 +247,30 @@ else
 fi
 rm -rf "$F"
 
+# --- (i) binary-mode manifest: the update plan is pin-format-blind ------------
+# Git Bash and Cygwin default both hash tools to binary mode, pinning
+# "<sha> *<path>". That '*' used to ride into $path in the replace loop, so
+# $srcfile never resolved and EVERY entry fell through to `keep`: update was a
+# silent no-op that still exited 0, and `keep <path>` looks like a legitimate
+# outcome, so nothing signalled it. Worse in combination — the retirement pass
+# reads its pin separately, so hardening one without the other turns a binary-
+# mode update from inert into destructive (removes retired files, replaces
+# none).
+#
+# Asserted as PARITY with the POSIX plan, not against fixed counts, so the case
+# cannot rot as the ship contract grows.
+F=$(make_fixture) || exit 1
+posix_plan=$(harness_update_apply "$SCRIPTS_DIR" "$F" --dry-run 2>&1)
+sed 's/^\([0-9a-fA-F]\{64\}\)  /\1 */' "$F/scripts/harness/.harness-manifest" > "$F/m.binmode" \
+    && mv "$F/m.binmode" "$F/scripts/harness/.harness-manifest"
+starred=$(grep -c ' \*' "$F/scripts/harness/.harness-manifest")
+binary_plan=$(harness_update_apply "$SCRIPTS_DIR" "$F" --dry-run 2>&1)
+if [ "$starred" -gt 0 ] && [ -n "$posix_plan" ] && [ "$posix_plan" = "$binary_plan" ]; then
+    pass "update: a binary-mode manifest yields the same plan as a POSIX one ($starred pins rewritten)"
+else
+    fail "update: binary-mode manifest changed the update plan (rewritten pins=$starred)" \
+        "$(printf -- '--- posix ---\n%s\n--- binary ---\n%s\n' "$posix_plan" "$binary_plan")"
+fi
+rm -rf "$F"
+
 finish "install-update"

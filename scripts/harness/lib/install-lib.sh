@@ -222,9 +222,37 @@ harness_validate_ship_contract() {
 # _harness_sha256 <file...> — prints "<sha256>  <path>" lines, the manifest's
 # own line format. Mirrors check-harness.sh's sha256_of tool selection.
 _harness_sha256() {
-    if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$@"
-    elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"
-    fi
+    # The trailing sed normalizes the TOOL's line format to the manifest's
+    # documented one. On a platform that distinguishes text from binary reads
+    # (Git Bash, Cygwin) both tools default to BINARY and emit "<sha> *<path>".
+    # That '*' becomes part of field 2 for every awk reader of the manifest, so
+    # each path resolves to nothing: check-drift reports every mechanism file
+    # both missing and unpinned, and — worse — a re-pin stops matching its own
+    # tailored set and silently drops every '# tailored' marker, which is what
+    # keeps update mode from overwriting a deliberate fork.
+    #
+    # Deliberately NOT `shasum -t` / `sha256sum --text`. Those change how the
+    # file is READ (CRLF translation), while the verifier — sha256_of() in
+    # lib/check-common.sh — stays on the default mode. A text-mode writer with
+    # a binary-mode verifier would disagree about the digest of any file
+    # containing CR: the same failure, with a much harder cause to find. Only
+    # the marker is rewritten here; the bytes hashed are untouched.
+    #
+    # sed, not `grep -q`-style early exit: it drains its input, so there is no
+    # SIGPIPE/pipefail phantom-failure exposure. With no hash tool at all the
+    # block prints nothing and so does sed, preserving the documented
+    # "prints nothing" contract that bootstrap's dry-run path depends on.
+    #
+    # What the pipe DOES change: the exit status is now sed's unless the caller
+    # set `pipefail`, so an unreadable file returns 0 rather than 1 in a shell
+    # without it. Every production entry point (bootstrap, verify, check-harness)
+    # sets pipefail, and no caller branches on this function's status — they all
+    # read stdout and treat empty as failure. Check that before adding one.
+    {
+        if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$@"
+        elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"
+        fi
+    } | sed 's/^\([0-9a-fA-F]\{64\}\) \*/\1  /'
 }
 
 # harness_missing_prereqs
@@ -336,7 +364,7 @@ harness_repin_manifest() {
     if [ -f "$mf" ]; then
         while IFS= read -r old; do
             case "$old" in *"# tailored"*) ;; *) continue ;; esac
-            path=$(printf '%s\n' "$old" | awk '{print $2}')
+            path=$(printf '%s\n' "$old" | awk '{ p=$2; sub(/^\*/,"",p); print p }')
             [ -n "$path" ] && tailored="${tailored}${path} "
         done < "$mf"
     fi
@@ -893,7 +921,7 @@ harness_update_decision() {
     local root="$1" line="$2" kmf="${3:-$1/scripts/harness/kit-manifest}" want path have
     case "$line" in \#*|"") return 0 ;; esac
     case "$line" in *"# tailored"*) printf 'diff\n'; return 0 ;; esac
-    path=$(printf '%s\n' "$line" | awk '{print $2}')
+    path=$(printf '%s\n' "$line" | awk '{ p=$2; sub(/^\*/,"",p); print p }')
     [ -n "$path" ] || return 0
     # Policy layers are diff-only even when pristine and unmarked (step 3).
     if harness_kit_is_diff_only "$kmf" "$path"; then
@@ -971,7 +999,7 @@ harness_update_apply() {
     if [ -f "$mf_read" ]; then
         while IFS= read -r line; do
             case "$line" in \#*|"") continue ;; esac
-            path=$(printf '%s\n' "$line" | awk '{print $2}')
+            path=$(printf '%s\n' "$line" | awk '{ p=$2; sub(/^\*/,"",p); print p }')
             [ -n "$path" ] || continue
             # Retired paths are handled (and reported) by the pass below.
             case "$retired" in *" $path "*) continue ;; esac
@@ -1024,7 +1052,7 @@ harness_update_apply() {
     for path in $retired; do
         [ -f "$root/$path" ] || continue
         pinline=""
-        [ -f "$mf_read" ] && pinline=$(awk -v p="$path" '$2 == p {print; exit}' "$mf_read")
+        [ -f "$mf_read" ] && pinline=$(awk -v p="$path" '{ f=$2; sub(/^\*/,"",f) } f == p {print; exit}' "$mf_read")
         case "$pinline" in
             ""|*"# tailored"*)
                 # never pinned (unknown provenance) or a deliberate fork
