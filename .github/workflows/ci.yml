@@ -118,15 +118,11 @@ jobs:
           done
           exit $fails
 
-      # Regression guard for #25: the pins this repo ships must verify on a
-      # host whose hash tools default to binary mode ("<sha> *<path>").
-      - name: Integrity manifest verifies
-        run: bash scripts/harness/check-harness
-
       # Regression guard for #26: the floor an adopter runs. Cases whose
       # fixture Windows cannot build must SKIP loudly, never fail — and never
       # pass silently either, which is why the skips are echoed back here.
       - name: Shipped test floor
+        if: always()
         run: |
           fails=0
           skipped=0
@@ -136,7 +132,7 @@ jobs:
             skipped=$((skipped + n))
             if printf '%s\n' "$out" | grep -qE '^(FAILED|FAIL:)'; then
               echo "=== $t ==="
-              printf '%s\n' "$out" | tail -30
+              printf '%s\n' "$out"
             else
               printf 'ok:   %-34s %s\n' "$(basename "$t")" "$([ "$n" -gt 0 ] && echo "($n skipped)")"
             fi
@@ -144,10 +140,22 @@ jobs:
           echo "--- $skipped case(s) skipped for missing platform capabilities ---"
           exit $fails
 
+      # Regression guard for #25: the pins this repo ships must verify on a
+      # host whose hash tools default to binary mode ("<sha> *<path>").
+      #
+      # HARNESS_SKIP_TESTS_FAMILY=1 mirrors the adopter's own gates.conf: their
+      # `parallel-each` runs the floor, so check-harness must not re-run it.
+      # Without it this step swallowed the floor and reported only the last few
+      # lines of each failing suite, hiding which case failed.
+      - name: Integrity manifest verifies
+        if: always()
+        run: env HARNESS_SKIP_TESTS_FAMILY=1 bash scripts/harness/check-harness
+
       # Regression guard for #27's second half: bootstrap must parse the ship
       # contract and install cleanly here, which is the exact command that
       # failed with ~90 `unknown layer '<CR>'` errors.
       - name: bootstrap install into a scratch repo
+        if: always()
         run: |
           target="$RUNNER_TEMP/adopter"
           mkdir -p "$target"
