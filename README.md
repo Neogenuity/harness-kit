@@ -304,10 +304,15 @@ the guards guard nothing.
 
 **Supported platforms:** the installed hooks are bash + `jq`.
 **CI-tested:** macOS and Linux (Ubuntu) — every gate runs on both.
-**Best-effort:** WSL (treated as Linux-equivalent; no dedicated runner) and
-Git Bash on Windows (no CI coverage yet — bash-3.2-compatible by
-construction, but not machine-verified). There is no native-Windows hook
-execution — the kit's bash hooks assume a POSIX shell.
+**Windows / Git Bash:** the *adopter floor* is CI-tested — the shipped test
+suites, `check-harness`, and `bootstrap install`, which is what an adopter's own
+`gates.conf` runs. The full `verify` is not: its eval, live-runtime and
+prettier-backed gates assume a POSIX toolchain the kit does not claim on
+Windows. Three shipped suites are known to fail there and are excluded by name
+from that job; see [tech-debt.md](docs/plans/tech-debt.md).
+**Best-effort:** WSL (treated as Linux-equivalent; no dedicated runner). There
+is no native-Windows hook execution — the kit's bash hooks assume a POSIX
+shell.
 
 The shipped test floor runs everywhere, and cases whose *fixture* the platform
 cannot build report `SKIP:` with a reason and are counted in the summary,

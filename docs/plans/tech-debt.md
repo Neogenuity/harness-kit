@@ -57,6 +57,34 @@ a real plan in [PLANS.md](PLANS.md)'s lifecycle.
 - **haiku reward-hacks the neuter-check** — the negative-no-neuter-check
   scenario passes ~2/3 on haiku-tier models (recorded 2026-07-12). Revisit
   when re-baselining the eval matrix on newer cheap-tier models.
+- **Three shipped suites fail on Windows / Git Bash** — found by the
+  `adopter floor (windows / git bash)` CI job added in v0.41.0, which excludes
+  them by name so the gate can be green and honest. All three are pre-existing,
+  none introduced by the v0.41.0 fixes, and none reported by an adopter yet. 16
+  of 19 suites plus `check-harness` and `bootstrap install` pass.
+  - `test-verify.sh` — `FAIL: a non-exec-bit mode change did not invalidate the
+    cache (ran=2)`. A `chmod 644 -> 600` on a declared input does not move the
+    `--changed` key there. Most likely `verify`'s `STAT_MODE` dialect detection
+    finds no usable `stat` on Git Bash and falls back to the exec-bit-only floor
+    (`-perm -100`), which structurally cannot see that change. Exactly issue
+    #26's class — asserting on a fixture the platform cannot construct — and the
+    same file already SKIPs the setuid case two lines below for the same reason.
+    Fix = capability probe + `skip`, once the cause is confirmed on a runner.
+  - `test-audit-log.sh` — `FAIL: table output drifted from the mixed-log golden
+    rendering`, yet the printed table is visually identical to the golden, so
+    the drift is invisible characters. The suite's own git fixture emits
+    `warning: in the working copy of 'x', LF will be replaced by CRLF`, so the
+    fixture repo inherits the system `core.autocrlf=true`. Suspect a CRLF
+    round-trip; unconfirmed. The failure message should print a byte-level diff
+    rather than just the actual table — that alone would have diagnosed it.
+  - `test-eval-graders.sh` — `verify-live-runtime: reference/apply.sh errored`.
+    That scenario needs a live dev runtime; it is environmental rather than a
+    Windows defect (it also fails in a linked worktree on macOS). Likeliest
+    resolution is scoping the scenario out of the adopter floor, not fixing it
+    for Windows.
+
+  Promote when an adopter reports any of them, or when the Windows job is
+  promoted to a required check (trigger: either).
 - **Maintainer suites still build PATH shims with `ln -s` + `command -v`** —
   six sites (`scripts/test-check-harness.sh:791`, `:857`, `:1115`;
   `scripts/test-install-core.sh:619`, `:643`, `:661`) carry the pattern issue
