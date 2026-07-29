@@ -170,14 +170,19 @@ fi
 # wall clock: the pairwise form re-listed the tracked Markdown set once per
 # deleted path (12 actionable deletions here => 13 listings), so any regression
 # back to it shows up as an invocation count that tracks Git history.
-_real_git=$(command -v git) || _real_git=""
+# `type -P`, not `command -v`: the latter would also answer for a function or
+# builtin, and an empty resolution here used to produce a shim whose body was
+# `exec  "$@"` — the counting case then reported a PERFORMANCE REGRESSION for a
+# fixture that was never built. Resolve first, and skip if it cannot be.
+_real_git=$(type -P -- git 2>/dev/null) || _real_git=""
 mkdir -p "$WORK/shim"
 {
     printf '#!/usr/bin/env bash\n'
     printf 'case " $* " in *" ls-files "*) echo x >> %s ;; esac\n' "$WORK/ls-files-calls"
-    printf 'exec %s "$@"\n' "$_real_git"
+    printf 'exec "%s" "$@"\n' "$_real_git"
 } > "$WORK/shim/git"
-chmod +x "$WORK/shim/git"
+# 755, not `chmod +x`: the latter is masked by the caller's umask.
+chmod 755 "$WORK/shim/git"
 : > "$WORK/ls-files-calls"
 PATH="$WORK/shim:$PATH" DOC_GARDEN_NOW=2026-07 \
     bash "$WORK/gfm/scripts/harness/lib/doc-garden.sh" --repo "$WORK/gfm" --format json >/dev/null

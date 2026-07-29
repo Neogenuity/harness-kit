@@ -19,6 +19,15 @@ trap 'rm -rf "$WORK"' EXIT
 export HARNESS_LOG=0
 
 fails=0
+skips=0
+
+# skip <reason> — a fixture this environment cannot build. Reported, counted,
+# and surfaced in the summary: a case that silently vanishes is worse than one
+# that fails, because the suite would still print PASSED.
+skip() {
+    echo "SKIP: $1"
+    skips=$((skips + 1))
+}
 
 # run <expected-exit> <description> <json-payload>
 run() {
@@ -36,9 +45,30 @@ run() {
 # Real files to resolve symlinks against.
 printf 'SECRET=1\n'        > "$WORK/.env"
 printf 'EXAMPLE=1\n'       > "$WORK/.env.example"
-ln -s "$WORK/.env"         "$WORK/notes.md"          # innocuous name -> secret
-ln -s "$WORK/.env"         "$WORK/.env.example.link" # allow-ish name -> secret
-ln -s "$WORK/.env.example" "$WORK/safe.link"         # -> example (safe)
+
+# Symlink capability probe. Windows without Developer Mode (and an unprivileged
+# Git Bash) cannot create real symlinks: MSYS `ln -s` silently COPIES instead
+# and still exits 0, so a successful `ln` is NOT proof — the [ -L ] test is what
+# separates a real link from a copy.
+#
+# This matters more than portability housekeeping. Without the probe, a copy
+# named notes.md is an ordinary file with an innocuous name, the guard
+# correctly allows it, and the suite reports
+#     FAIL: symlink notes.md->.env denied — expected exit 2, got 0
+# which reads exactly like the secret guard letting a symlink through. A
+# maintainer would chase a phantom guard bypass. A fixture that cannot be built
+# must SKIP loudly; it must never assert against the degraded state.
+HAVE_SYMLINKS=0
+if ln -s "$WORK/.env" "$WORK/.symprobe" 2>/dev/null && [ -L "$WORK/.symprobe" ]; then
+    HAVE_SYMLINKS=1
+fi
+rm -f "$WORK/.symprobe"
+
+if [ "$HAVE_SYMLINKS" -eq 1 ]; then
+    ln -s "$WORK/.env"         "$WORK/notes.md"          # innocuous name -> secret
+    ln -s "$WORK/.env"         "$WORK/.env.example.link" # allow-ish name -> secret
+    ln -s "$WORK/.env.example" "$WORK/safe.link"         # -> example (safe)
+fi
 
 payload() { printf '{"tool_input":{"file_path":"%s"}}' "$1"; }
 cursor_payload() { printf '{"file_path":"%s"}' "$1"; }
@@ -63,8 +93,15 @@ run 2 "Cursor layout .env denied"    "$(cursor_payload "$WORK/.env")"
 run 2 "Grep path at .env denied"     "$(grep_payload "$WORK/.env")"
 
 # --- deny: symlink laundering ---
-run 2 "symlink notes.md->.env denied"          "$(payload "$WORK/notes.md")"
-run 2 "symlink .env.example.link->.env denied" "$(payload "$WORK/.env.example.link")"
+if [ "$HAVE_SYMLINKS" -eq 1 ]; then
+    run 2 "symlink notes.md->.env denied"          "$(payload "$WORK/notes.md")"
+    run 2 "symlink .env.example.link->.env denied" "$(payload "$WORK/.env.example.link")"
+else
+    # One skip per lost ASSERTION, not per block: the summary count is a
+    # coverage-gap number and must not understate it.
+    skip "symlink notes.md->.env denied — this filesystem cannot create symlinks"
+    skip "symlink .env.example.link->.env denied — this filesystem cannot create symlinks"
+fi
 
 # --- allow: safe files (HOOK LAYER ONLY) ---
 # These pin the hook's allow-precedence, NOT whole-system readability. The
@@ -75,7 +112,11 @@ run 0 ".env.example allowed (hook)"  "$(payload "$WORK/.env.example")"
 run 0 ".env.sample allowed"          "$(payload "$WORK/.env.sample")"
 run 0 ".env.testing allowed"         "$(payload "$WORK/.env.testing")"
 run 0 ".env.mcp.example allowed"     "$(payload "$WORK/.env.mcp.example")"
-run 0 "symlink safe.link->example allowed" "$(payload "$WORK/safe.link")"
+if [ "$HAVE_SYMLINKS" -eq 1 ]; then
+    run 0 "symlink safe.link->example allowed" "$(payload "$WORK/safe.link")"
+else
+    skip "symlink allow-precedence — this filesystem cannot create symlinks"
+fi
 run 0 "ordinary source file allowed" "$(payload "$WORK/config.php")"
 run 0 "Grep on directory allowed"    "$(grep_payload "$WORK")"
 # A Grep whose optional `path` is omitted means "search the project". Like the
@@ -109,7 +150,11 @@ codex_patch_bare() {
 run 2 "Codex shell: cat .env denied"             "$(codex_shell "cat $WORK/.env")"
 run 2 "Codex shell: compound command denied"     "$(codex_shell "ls -la && cat $WORK/auth.json")"
 run 2 "Codex shell: key file behind a flag denied" "$(codex_shell "openssl rsa -in $WORK/id_rsa -check")"
-run 2 "Codex shell: symlink token resolved and denied" "$(codex_shell "cat $WORK/notes.md")"
+if [ "$HAVE_SYMLINKS" -eq 1 ]; then
+    run 2 "Codex shell: symlink token resolved and denied" "$(codex_shell "cat $WORK/notes.md")"
+else
+    skip "Codex shell symlink resolution — this filesystem cannot create symlinks"
+fi
 run 2 "Codex shell: argv-array command denied"   "$(jq -cn --arg c "cat $WORK/.env" '{tool_input: {command: ["bash", "-lc", $c]}}')"
 run 0 "Codex shell: .env.example allowed"        "$(codex_shell "cat $WORK/.env.example")"
 run 0 "Codex shell: innocent command allowed"    "$(codex_shell "git status && ls src/")"
@@ -228,4 +273,8 @@ if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails guard-secrets case(s)"
     exit 1
 fi
-echo "PASSED: all guard-secrets cases"
+if [ "$skips" -gt 0 ]; then
+    echo "PASSED: all guard-secrets cases that ran ($skips skipped — no symlink support)"
+else
+    echo "PASSED: all guard-secrets cases"
+fi

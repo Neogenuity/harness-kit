@@ -57,6 +57,18 @@ a real plan in [PLANS.md](PLANS.md)'s lifecycle.
 - **haiku reward-hacks the neuter-check** — the negative-no-neuter-check
   scenario passes ~2/3 on haiku-tier models (recorded 2026-07-12). Revisit
   when re-baselining the eval matrix on newer cheap-tier models.
+- **Maintainer suites still build PATH shims with `ln -s` + `command -v`** —
+  six sites (`scripts/test-check-harness.sh:791`, `:857`, `:1115`;
+  `scripts/test-install-core.sh:619`, `:643`, `:661`) carry the pattern issue
+  #26 replaced in the shipped tests: `ln -s "$(command -v "$tool")"` over lists
+  that include `printf`, which is a bash builtin, so `command -v` answers a bare
+  name and the link has no resolvable source. Latent rather than live — the
+  shims end up self-referential but nothing in those cases invokes an external
+  `printf` under bash, and these suites are maintainer-only (kit-root, never
+  shipped) so they run on CI's macOS/Linux, never on Git Bash. Deliberately left
+  out of #26, whose subject is the floor adopters actually run. Promote if these
+  suites ever need to pass on Windows, or if a case starts depending on one of
+  the builtin-named shims actually executing (trigger: either).
 - **Adopters get no CRLF protection for their installed harness** — issue #27
   fixed line endings for *this* repo's clone (root `.gitattributes`, plus the
   CRLF probe in `harness_validate_ship_contract`). The shipped product still

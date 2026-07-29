@@ -307,7 +307,17 @@ the guards guard nothing.
 **Best-effort:** WSL (treated as Linux-equivalent; no dedicated runner) and
 Git Bash on Windows (no CI coverage yet — bash-3.2-compatible by
 construction, but not machine-verified). There is no native-Windows hook
-execution — the kit's bash hooks assume a POSIX shell. Codex's
+execution — the kit's bash hooks assume a POSIX shell.
+
+The shipped test floor runs everywhere, and cases whose *fixture* the platform
+cannot build report `SKIP:` with a reason and are counted in the summary,
+rather than asserting against a half-built fixture. Windows without Developer
+Mode cannot create symlinks — `ln -s` copies instead — so the four cases that
+exist to prove symlink resolution skip there. Everything else, including the
+jq-unavailable paths, runs unprivileged. A `SKIP` is a real gap in coverage on
+that machine, not a pass; it is printed loudly for exactly that reason.
+
+Codex's
 `commandWindows` override and other provider-specific Windows notes are
 tracked per-provider in
 [provider-matrix.md](plugins/harness-kit/skills/harness-kit/references/provider-matrix.md),

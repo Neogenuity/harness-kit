@@ -23,6 +23,10 @@ export HARNESS_LOG_FILE="$WORK/gates.jsonl"
 # refusal sets CI=true for its own invocation only.
 unset CI
 fails=0
+skips=0
+# skip <reason> — a case whose FIXTURE this environment cannot build. Counted
+# so it can never hide behind the suite's success line.
+skip() { echo "SKIP: $1"; skips=$((skips + 1)); }
 
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
@@ -95,11 +99,52 @@ else
     fail "telemetry failure changed successful gate output or exit behavior"
 fi
 
+# _shim <bindir> <tool> — put a runnable <tool> onto a synthetic PATH without
+# needing symlink privilege, and without trusting `command -v` for a name that
+# is ALSO a shell builtin. Two independent traps this avoids:
+#   1. MSYS/Git Bash without Developer Mode cannot create real symlinks: `ln -s`
+#      either copies or fails outright, leaving the directory short of tools.
+#      The synthetic PATH then means "nothing is available", not "jq is
+#      missing" — the assertion below stops testing what it claims to.
+#   2. `command -v` answers a bare name for anything that is also a shell
+#      builtin, which is no use as a symlink target. This list happens to be
+#      all external binaries, so only trap 1 is live here — the resolver is
+#      kept identical to test-deny-reasons.sh's, where trap 2 does bite, so the
+#      two cannot drift.
+# An exec wrapper is a plain file, so it needs no privilege anywhere.
+_shim() {
+    local dir="$1" tool="$2" target
+    # `type -P` is the correct resolver: it searches PATH for an executable FILE
+    # and deliberately skips builtins and functions, so it answers
+    # /usr/bin/printf where `command -v printf` answers `printf`. No hardcoded
+    # /bin:/usr/bin guess, which would mis-resolve on Nix or a minimal image.
+    target=$(type -P -- "$tool" 2>/dev/null)
+    # Retry on the standard utility PATH for a host whose login PATH omits
+    # coreutils' home.
+    [ -n "$target" ] || target=$( PATH=$(getconf PATH 2>/dev/null); type -P -- "$tool" 2>/dev/null )
+    [ -n "$target" ] || return 1
+    # Quote the target: an unquoted path containing whitespace yields a wrapper
+    # that builds and chmods cleanly, then fails at run time with 126 — a
+    # mis-built fixture presenting as the assertion failing, which is the exact
+    # class this helper exists to remove.
+    printf '#!/bin/sh\nexec "%s" "$@"\n' "$target" > "$dir/$tool" || return 1
+    # 755 explicitly: `chmod +x` is masked by the caller's umask.
+    chmod 755 "$dir/$tool"
+}
+
 mkdir -p "$WORK/no-jq-bin"
+shim_missing=""
 for tool in bash date dirname mktemp rm sleep touch; do
-    ln -s "$(command -v "$tool")" "$WORK/no-jq-bin/$tool"
+    _shim "$WORK/no-jq-bin" "$tool" || shim_missing="$shim_missing $tool"
 done
 rm -f "$WORK/no-jq.jsonl"
+if [ -n "$shim_missing" ]; then
+    # Checked BEFORE the run: a PATH missing its own tools is not "jq is
+    # absent", so asserting on it tests nothing and blames the runner under
+    # test. Running first and discarding the result would be the same
+    # assert-then-check ordering this case exists to remove.
+    skip "missing-jq case — could not build the stripped PATH (unresolvable:$shim_missing)"
+else
 missing_jq=$(PATH="$WORK/no-jq-bin" HARNESS_LOG_FILE="$WORK/no-jq.jsonl" \
     "$BASH" "$V_SUCCESS" --jobs 4 2>&1); missing_jq_rc=$?
 if [ "$missing_jq_rc" -eq 0 ] && [ "$missing_jq" = "$stable_disabled" ] \
@@ -107,6 +152,7 @@ if [ "$missing_jq_rc" -eq 0 ] && [ "$missing_jq" = "$stable_disabled" ] \
     pass "missing jq leaves verify output, exit behavior, and gate execution unchanged"
 else
     fail "missing jq changed verify behavior or wrote telemetry"
+fi
 fi
 
 # A serial full gate declared after a parallel producer must wait for it. This
@@ -427,7 +473,7 @@ if [ -u "$WORK/hit/inputs/b.txt" ]; then
         fail "a special-bit-only mode change did not invalidate the cache (ran=$(ran_count hit))"
     fi
 else
-    echo "skip: test-verify — this filesystem does not keep the setuid bit, so the special-bit cache case cannot be set up here"
+    skip "test-verify — this filesystem does not keep the setuid bit, so the special-bit cache case cannot be set up here"
 fi
 chmod 644 "$WORK/hit/inputs/b.txt"
 bash "$V_C" --changed >/dev/null 2>&1
@@ -652,5 +698,9 @@ if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails verify orchestration test(s)"
     exit 1
 fi
-echo "OK: verify orchestration tests passed"
+if [ "$skips" -gt 0 ]; then
+    echo "OK: verify orchestration tests passed ($skips skipped)"
+else
+    echo "OK: verify orchestration tests passed"
+fi
 exit 0
