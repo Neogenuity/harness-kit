@@ -57,25 +57,17 @@ a real plan in [PLANS.md](PLANS.md)'s lifecycle.
 - **haiku reward-hacks the neuter-check** — the negative-no-neuter-check
   scenario passes ~2/3 on haiku-tier models (recorded 2026-07-12). Revisit
   when re-baselining the eval matrix on newer cheap-tier models.
-- **`test-audit-log.sh` fails on Windows / Git Bash, cause still unknown** — the
-  golden-table case reports a mismatch while printing a table that looks
-  byte-identical to its golden, so the difference is invisible characters. Two
-  hypotheses are now RULED OUT, neither replaced:
-  - a `core.autocrlf=true` round-trip (the originally recorded suspicion) —
-    forcing it on a POSIX host via `GIT_CONFIG_GLOBAL` reproduces the suite's
-    CRLF warnings but the case still passes;
-  - a CRLF-emitting jq (jq's Windows build does open stdout in text mode) —
-    it reproduces the symptom *exactly* on a POSIX host, but under such a jq
-    nine other shipped suites also fail (`test-affected-files.sh` 13 cases,
-    `test-guard-secrets.sh` 28, `test-advise-once.sh` 13, …) and all nine pass
-    on the runner. So the runner's jq is not emitting CRLF.
-
-  The suite now dumps `od -c` for the actual and expected tables on failure, so
-  the next Git Bash run that fails reports the bytes rather than a
-  visually-identical table. It stays excluded by name from the Windows floor
-  until those bytes have been read — landing the instrument and un-excluding in
-  the same change would have been guessing. Promote as soon as any Windows run
-  produces that dump.
+- **`test-eval-graders.sh` fails on Windows / Git Bash: `verify-live-runtime:
+  reference/apply.sh errored`** — and the v0.41.0 `reference/precheck.sh` does
+  NOT fire there. Measured on the runner: the probe returns 0, so `python3`
+  resolves and a loopback bind succeeds; the prerequisites it tests are all met
+  and the real failure is elsewhere in that task's `scripts/dev.sh` path (the
+  fixture app's startup, the HTTP fetch, or the `down` teardown — the log shows
+  a lingering `rm: ... Device or resource busy` on the workspace). The probe
+  remains correct for hosts that genuinely lack python3 or bind; it simply does
+  not cover this one. Excluded by name from the Windows floor but still RUN and
+  printed, so the next run's output narrows it further. Promote when that output
+  identifies the failing step.
 - **Shipped mechanism is not uniformly CR-safe if a hash/JSON tool emits CRLF** —
   `_jq_text` in `lib/audit-log.sh` normalizes only that file's table branch. The
   same `x=$(… | jq -r …)` then exact-compare pattern is unguarded in

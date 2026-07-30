@@ -10,8 +10,12 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-audit-log.XXXXXX") || exit 1
 export GIT_CEILING_DIRECTORIES="$WORK"
 trap 'rm -rf "$WORK"' EXIT
 fails=0
+skips=0
 pass() { echo "ok:   $1"; }
 fail() { echo "FAIL: $1"; fails=$((fails + 1)); }
+# skip <reason> — a case whose FIXTURE this platform cannot build. Counted so it
+# can never hide behind the suite's success line.
+skip() { echo "SKIP: $1"; skips=$((skips + 1)); }
 
 mkdir -p "$WORK/repo/scripts/harness/lib" "$WORK/repo/.harness/var"
 cp "$SCRIPTS_DIR/audit-log.sh" "$WORK/repo/scripts/harness/lib/audit-log.sh"
@@ -228,15 +232,22 @@ EOF
     crlf_table=$(PATH="$STUBJQ:$PATH" bash "$WORK/repo/scripts/harness/lib/audit-log.sh" \
         --repo "$WORK/repo" --log "$WORK/repo/.harness/var/log.jsonl" --format table); rc=$?
     case "$crlf_table" in *"$CR"*) table_crlf=1 ;; *) table_crlf=0 ;; esac
-    if [ "$stub_crlf" -eq 1 ] && [ "$rc" -eq 0 ] \
-            && [ "$table_crlf" -eq 0 ] && [ "$crlf_table" = "$expected_table" ]; then
+    if [ "$stub_crlf" -ne 1 ]; then
+        # The FIXTURE could not be built: this platform's tools did not produce
+        # the CRLF the stub exists to inject (observed on Git Bash, where the
+        # wrapper runs but the CR does not survive to the reader). Asserting on
+        # it here would report "CR reached the table" when no CR was ever
+        # created — issue #26's class exactly, and the reason this suite spent a
+        # release excluded from the Windows floor. Skip, loudly.
+        skip "CRLF-jq case — this platform's tools do not produce a CRLF stream, so the fixture cannot be built here"
+    elif [ "$rc" -eq 0 ] && [ "$table_crlf" -eq 0 ] && [ "$crlf_table" = "$expected_table" ]; then
         pass "a text-mode jq's CRLF never reaches the rendered table"
     else
-        fail "CR from a text-mode jq reached the table (stub emitted CRLF=$stub_crlf, rc=$rc, table carries CR=$table_crlf)"
+        fail "CR from a text-mode jq reached the table (rc=$rc, table carries CR=$table_crlf)"
         printf '%s\n' "$crlf_table" | od -c | sed 's/^/        /'
     fi
 fi
 rm -rf "$STUBJQ"
 
 if [ "$fails" -gt 0 ]; then echo "FAILED: $fails audit-log test(s)"; exit 1; fi
-echo "OK: audit-log tests passed"
+if [ "$skips" -gt 0 ]; then echo "OK: audit-log tests passed ($skips skipped)"; else echo "OK: audit-log tests passed"; fi

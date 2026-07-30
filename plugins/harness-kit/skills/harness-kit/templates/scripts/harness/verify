@@ -599,7 +599,13 @@ _echo_skips() {
     # (see the heredoc note above). Almost every gate emits no SKIP at all, so
     # one substring test retires the whole cost for them and bounds the
     # quadratic term to output that actually contains a skip.
-    case "$_rest" in *SKIP:*) ;; *) return 0 ;; esac
+    # ANCHORED, to agree with the line-anchored emit below. An unanchored
+    # *SKIP:* guard is defeated by any output that merely CONTAINS the token —
+    # `go test -v` prints "    --- SKIP: TestFoo", and a 4000-line log then paid
+    # the full quadratic walk to emit nothing (measured: 13.3s vs 0.11s once
+    # anchored). Adopters are told to declare `full tests <runner>` gates, so
+    # that output is the normal case out there, not an exotic one.
+    case $'\n'"$_rest" in *$'\n'SKIP:*) ;; *) return 0 ;; esac
     while [ -n "$_rest" ]; do
         _line=${_rest%%$'\n'*}
         if [ "$_line" = "$_rest" ]; then _rest=""; else _rest=${_rest#*$'\n'}; fi

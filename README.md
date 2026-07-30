@@ -308,8 +308,9 @@ the guards guard nothing.
 suites, `check-harness`, and `bootstrap install`, which is what an adopter's own
 `gates.conf` runs. The full `verify` is not: its eval, live-runtime and
 prettier-backed gates assume a POSIX toolchain the kit does not claim on
-Windows. One shipped suite (`test-audit-log.sh`) is excluded by name there while
-its failure is diagnosed; see [tech-debt.md](docs/plans/tech-debt.md).
+Windows. One shipped suite (`test-eval-graders.sh`) is excluded from that job's
+pass/fail tally while its failure is diagnosed — it still runs and prints; see
+[tech-debt.md](docs/plans/tech-debt.md).
 **Best-effort:** WSL (treated as Linux-equivalent; no dedicated runner). There
 is no native-Windows hook execution — the kit's bash hooks assume a POSIX
 shell.

@@ -102,10 +102,12 @@ policy-layer file changed, so nothing needs a manual merge.
   issue, so a regression names itself. It also gives
   `scripts/harness/tests/` its first behavioral coverage anywhere: `.harness/gates.conf`
   globs only the templates tree, so the installed copies were verified as bytes
-  and executed nowhere. One suite (`test-audit-log.sh`) remains excluded by name
-  and printed as a `GAP:` line, with its cause still open; every other shipped
-  suite passes, and cases whose *fixture* the platform cannot build report
-  `SKIP:` with a reason and are summed in the job output.
+  and executed nowhere. One suite (`test-eval-graders.sh`) is left out of the
+  pass/fail tally with its cause still open — it still RUNS and prints in full,
+  since an excluded suite emits no diagnostic and the cause can only be seen on
+  that runner. Every other shipped suite passes, and cases whose *fixture* the
+  platform cannot build report `SKIP:` with a reason and are summed in the job
+  output.
 
 - **`verify` now re-emits `SKIP:` lines from a gate that PASSED.** A passing
   gate's stdout was captured and discarded, so a suite that skipped a case for a
@@ -117,9 +119,10 @@ policy-layer file changed, so nothing needs a manual merge.
 
 - **Eval tasks can declare their host prerequisites (`reference/precheck.sh`).**
   A task whose reference solution needs more than a POSIX shell and git — a
-  live dev server, a language runtime, a bindable port — exits non-zero from
-  this optional script with a one-line reason, and `test-eval-graders.sh` skips
-  that task's grader-validity check instead of failing it. The skip is counted
+  live dev server, a language runtime, a bindable port — exits **1** from this
+  optional script with a one-line reason, and `test-eval-graders.sh` skips that
+  task's grader-validity check instead of failing it. Any other non-zero status
+  means the probe itself is broken and is reported as a failure. The skip is counted
   and its reason printed, so a precheck that always declines cannot quietly
   retire its own task's coverage. Deliberately per-task rather than TASK.md
   metadata: this repo's `verify-live-runtime` needs `python3` and a loopback
