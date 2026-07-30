@@ -23,9 +23,12 @@ kit-manifest      eol=lf
 .harness-manifest eol=lf
 gates.conf        eol=lf
 
-# Windows-native launchers would genuinely want CRLF. None exist today — the
-# kit's hooks assume a POSIX shell — but the rule belongs here so that adding
-# one later does not require rediscovering this file.
-*.cmd eol=crlf
-*.bat eol=crlf
-*.ps1 eol=crlf
+# No CRLF exceptions are declared. The kit's hooks assume a POSIX shell, so no
+# Windows-native launcher (.cmd/.bat/.ps1) exists to need one, and a rule for a
+# file type the repository does not contain is a line-ending contract no gate
+# can test and no reviewer can check against reality — the same
+# unverified-claim rot this release is about. It would also not be uniformly
+# right if written blind: .cmd and .bat have real CRLF sensitivities, while
+# PowerShell reads LF fine and LF is the modern convention there. Whoever adds
+# the first launcher decides its line endings from what that launcher actually
+# needs, and adds the rule then.

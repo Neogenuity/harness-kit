@@ -124,12 +124,20 @@ jobs:
       - name: Shipped test floor
         if: always()
         run: |
-          # Three suites fail here for reasons this PR did not introduce and
-          # does not fix. They are excluded BY NAME and printed, never dropped
+          # Two suites fail here for reasons this PR did not introduce and does
+          # not fix. They are excluded BY NAME and printed, never dropped
           # silently — a gate that quietly covers less than it appears to is the
           # failure mode this whole release is about. Tracked in
-          # docs/plans/tech-debt.md under "Three shipped suites fail on Windows".
-          known_gaps="test-audit-log.sh test-eval-graders.sh test-verify.sh"
+          # docs/plans/tech-debt.md under "Two shipped suites fail on Windows".
+          #
+          # test-verify.sh is deliberately NOT excluded. Its one Windows failure
+          # was a fixture the platform cannot build (a 0644 -> 0600 chmod that
+          # is not recorded), and the suite now capability-probes and SKIPs that
+          # single case. Excluding the whole file also dropped the only coverage
+          # of the '# inputs' full/--fast/--changed consistency regression (#23)
+          # — a fix shipped in this very release, left unguarded on the one
+          # platform this release is about.
+          known_gaps="test-audit-log.sh test-eval-graders.sh"
           fails=0
           skipped=0
           for t in scripts/harness/tests/test-*.sh; do

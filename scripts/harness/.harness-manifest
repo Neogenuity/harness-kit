@@ -53,7 +53,7 @@ fcb1d46188347815db7ccacd29e36b97de6b0a693ffdbabaa0eed9c8c7d9042e  scripts/harnes
 11860239c84527e390d33aff803c75bed7d81d8a6410ad30a14c89e77c7db4ab  scripts/harness/tests/test-skip-tests-family.sh
 d0e5642fc915b85c58b69acd6b469ce0957528dd4852775e7d0bb9eb598081fb  scripts/harness/tests/test-sync-adapters.sh
 2e42265a4da784cdc54a885f78a959b40db8d191dbaaafe30b4a5d5bcd7faf69  scripts/harness/tests/test-sync-secrets.sh
-4e26ef3e727f552d0a4745a5abb44ec57db562d303bf19fcf3bd6dd96f619a22  scripts/harness/tests/test-verify.sh
+b1e972baa306e51a9ef6d76f7fab7ba8c9ef4eba1da62c3a11731f8467efffc4  scripts/harness/tests/test-verify.sh
 f126ca9721409b6283a792144e37bd7ba127c5b0b63534de8940d2bcf576f2c5  scripts/harness/validate-plan
 374715b4682e7137d19ffc0a390fef8abe61d86618c9fc5a97737aedadcb0c53  scripts/harness/verify
 784a83d624e756ba7b93b88d1b31fd415e22d5da21133cdfc0e39caa2ce0723b  scripts/install-test-lib.sh # tailored
@@ -62,7 +62,7 @@ b8482524d527fe809ea778b25d61d58ed25e5ed4865bc322772c91a2513a3f23  scripts/test-e
 bc61cb85fdc967f4136e87e3367888447ece5d21ac38081152139d04b7df4b63  scripts/test-fixture-isolation.sh # tailored
 4e599eff0820746ad2a6adcafb9656751f11b554912251e3ea14a86c9b8bc6f1  scripts/test-gate-env-hygiene.sh # tailored
 f19df77426cb37a7884f2faca47d67f8b44a5e21ca10bc41fe7778c1b25c00eb  scripts/test-install-core.sh # tailored
-38a6de01efd2b67e247227076bcad6a724af6126ab83da20954e37c1aaa544ee  scripts/test-install-migrate.sh # tailored
+354f6033d8f2582b31d00e99b9c82cf2056838364ba62579935770ce3a23f87e  scripts/test-install-migrate.sh # tailored
 c2d3e3d7435a5f455f520e87217793206eee8e1137d5c89d15585d2a3c5f07b7  scripts/test-install-recovery.sh # tailored
 6d67b785a5cc77d9af135bc44f35c6065bd11f1559a94d530d9e146dcda6c5b1  scripts/test-install-smoke.sh # tailored
 4372076d580ccc918b452ea07dcad9bc606c6ef4b50322cd096c2b8b8def5da6  scripts/test-install-update.sh # tailored

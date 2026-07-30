@@ -443,15 +443,56 @@ else
     fail "an undeclared file wrongly invalidated the cache"
 fi
 
+# _mode_of <path> — the file's octal permission bits via whichever stat dialect
+# this platform has, or nothing at all. Deliberately the same two-probe
+# detection `verify` does for STAT_MODE, so the guard below asks exactly the
+# question the runner asks. Each probe is SHAPE-VALIDATED before it is trusted:
+# GNU stat reads `-f` as --file-system rather than rejecting it, and prints a
+# multi-line filesystem block for the path, which would otherwise be returned
+# here as if it were a mode.
+_mode_of() {
+    local m
+    m=$(stat -c '%a' "$1" 2>/dev/null)
+    case "$m" in [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) printf '%s\n' "$m"; return 0 ;; esac
+    m=$(stat -f '%Lp' "$1" 2>/dev/null)
+    case "$m" in [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) printf '%s\n' "$m"; return 0 ;; esac
+    return 1
+}
+
 # chmod with the content untouched: a key recording only exec-bit membership
 # is blind to 0644 -> 0600, so a gate validating exact ship-contract modes
 # would keep serving a stale pass after exactly the change it exists to catch.
+#
+# Guarded like the setuid case below, and for the same reason. On a platform
+# that does not record a non-exec-bit permission change — Git Bash / MSYS over
+# NTFS is the known one — `chmod 600` leaves the reported mode at 0644, so
+# there is nothing for the key to move on and the assertion blames the runner
+# for a fixture the platform refused to build. That is issue #26's class, and
+# it is why this suite was excluded wholesale from the Windows floor, which
+# also dropped the only coverage of the mode-consistency cases at the bottom of
+# this file. The probe is cause-agnostic on purpose: it declines both when no
+# stat dialect exists (verify falls back to the exec-bit floor, which
+# structurally cannot see this change) and when the chmod does not stick. If
+# both preconditions DO hold and the key still does not move, that is a real
+# defect and this case still fails — the guard narrows the claim, it does not
+# retire it.
+#
+# The run counts here and in the setuid case are relative to a snapshot rather
+# than absolute, so a skip on either cannot silently shift the other's expected
+# total — the absolute form made the two cases a chain.
+_ran_before=$(ran_count hit)
+_mode_before=$(_mode_of "$WORK/hit/inputs/b.txt")
 chmod 600 "$WORK/hit/inputs/b.txt"
-out=$(bash "$V_C" --changed 2>&1)
-if ! has "$out" "(cached" && [ "$(ran_count hit)" = "3" ]; then
-    pass "a permission-only change (0644 -> 0600) to a declared input re-runs the gate"
+_mode_after=$(_mode_of "$WORK/hit/inputs/b.txt")
+if [ -n "$_mode_before" ] && [ -n "$_mode_after" ] && [ "$_mode_before" != "$_mode_after" ]; then
+    out=$(bash "$V_C" --changed 2>&1)
+    if ! has "$out" "(cached" && [ "$(ran_count hit)" = "$((_ran_before + 1))" ]; then
+        pass "a permission-only change (0644 -> 0600) to a declared input re-runs the gate"
+    else
+        fail "a non-exec-bit mode change did not invalidate the cache (ran=$(ran_count hit), want $((_ran_before + 1)); mode $_mode_before -> $_mode_after)"
+    fi
 else
-    fail "a non-exec-bit mode change did not invalidate the cache (ran=$(ran_count hit))"
+    skip "test-verify — this platform does not record a non-exec-bit permission change (0644 -> 0600 reads back as '${_mode_after:-no usable stat dialect}'), so that cache case cannot be set up here"
 fi
 # The special bits are mode too, and they are the same blindness one size
 # down: BSD `stat -f %Lp` prints only the LOW three digits, so a 4755 file
@@ -466,11 +507,12 @@ chmod 755 "$WORK/hit/inputs/b.txt"
 bash "$V_C" --changed >/dev/null 2>&1
 chmod 4755 "$WORK/hit/inputs/b.txt" 2>/dev/null
 if [ -u "$WORK/hit/inputs/b.txt" ]; then
+    _ran_before=$(ran_count hit)
     out=$(bash "$V_C" --changed 2>&1)
-    if ! has "$out" "(cached" && [ "$(ran_count hit)" = "5" ]; then
+    if ! has "$out" "(cached" && [ "$(ran_count hit)" = "$((_ran_before + 1))" ]; then
         pass "a setuid-only mode change (0755 -> 4755) to a declared input re-runs the gate"
     else
-        fail "a special-bit-only mode change did not invalidate the cache (ran=$(ran_count hit))"
+        fail "a special-bit-only mode change did not invalidate the cache (ran=$(ran_count hit), want $((_ran_before + 1)))"
     fi
 else
     skip "test-verify — this filesystem does not keep the setuid bit, so the special-bit cache case cannot be set up here"

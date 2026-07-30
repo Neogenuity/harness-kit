@@ -125,6 +125,96 @@ else
 fi
 rm -rf "$F" "$NEWKIT"
 
+# --- (j2) the same three outcomes under a BINARY-MODE manifest -----------------
+# Git Bash and Cygwin default both hash tools to binary mode, pinning
+# "<sha> *<path>". The retirement pass reads its pin through its OWN awk, not
+# the replace loop's, so hardening one leaves the other blind: $2 is then
+# "*scripts/..." and no pin ever matches the path, which reads to the code
+# below as "never pinned" — every retired file falls through to 'retire-keep'
+# and retirement silently stops happening on exactly the platform the v0.41.0
+# fixes are for. The combination is what makes it dangerous: a binary-mode
+# update that replaces nothing AND retires nothing still exits 0.
+#
+# Only the PRISTINE case can catch a revert of that reader — an empty pinline
+# and a '# tailored' pinline take the same branch, so the drifted and tailored
+# variants below cannot fail from a blind reader alone. They still earn their
+# runtime: they pin that stripping the '*' does not newly match a path it
+# should not, which is how a too-eager sub() would present. The tailored one
+# also carries the repin assertion, whose tailored-set scan is a SECOND
+# hardened '*'-stripping site and a genuine catcher in its own right.
+binmode_pins() {  # binmode_pins <fixture-root> — rewrite the manifest's
+                  # "<sha>  <path>" pins to Git Bash's "<sha> *<path>", and
+                  # print how many lines were rewritten, so a case whose
+                  # fixture silently rewrote nothing cannot pass vacuously.
+    local mf="$1/scripts/harness/.harness-manifest"
+    sed 's/^\([0-9a-fA-F]\{64\}\)  /\1 */' "$mf" > "$mf.bin" && mv "$mf.bin" "$mf"
+    grep -c ' \*' "$mf"
+}
+
+# (i) pristine + unmarked + binary pin: still REMOVED.
+F=$(make_fixture) || exit 1
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+retire_in_newkit "$NEWKIT/scripts" "scripts/harness/tests/test-log.sh"
+starred=$(binmode_pins "$F")
+out=$(harness_update_apply "$NEWKIT/scripts" "$F")
+if [ "$starred" -gt 0 ] && has_line "$out" "remove scripts/harness/tests/test-log.sh" \
+        && [ ! -f "$F/scripts/harness/tests/test-log.sh" ]; then
+    pass "retirement (binary pins): pristine unmarked retired file is still removed ($starred pins rewritten)"
+else
+    fail "retirement (binary pins): pristine retired file was kept — the retirement pin lookup did not strip the '*' (rewritten=$starred)" "$out"
+fi
+rm -rf "$F" "$NEWKIT"
+
+# (ii) locally DRIFTED + binary pin: still kept, still reported.
+F=$(make_fixture) || exit 1
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+retire_in_newkit "$NEWKIT/scripts" "scripts/harness/tests/test-log.sh"
+printf '\n# LOCAL DRIFT\n' >> "$F/scripts/harness/tests/test-log.sh"
+starred=$(binmode_pins "$F")
+out=$(harness_update_apply "$NEWKIT/scripts" "$F")
+if [ "$starred" -gt 0 ] && has_line "$out" "retire-keep scripts/harness/tests/test-log.sh" \
+        && [ -f "$F/scripts/harness/tests/test-log.sh" ] \
+        && grep -q "LOCAL DRIFT" "$F/scripts/harness/tests/test-log.sh"; then
+    pass "retirement (binary pins): drifted retired file is kept with its local changes"
+else
+    fail "retirement (binary pins): drifted retired file was deleted or not reported (rewritten=$starred)" "$out"
+fi
+rm -rf "$F" "$NEWKIT"
+
+# (iii) '# tailored' + binary pin: kept, and repin carries the marker forward.
+# The tailored line is written in POSIX form and converted along with every
+# other pin, so the fixture is a manifest written wholly by a binary-mode host
+# — what an adopter on Git Bash actually has — not a hand-mixed one.
+F=$(make_fixture) || exit 1
+NEWKIT=$(mktemp -d "$WORK/newkit.XXXXXX") || exit 1; cp -R "$SCRIPTS_DIR" "$NEWKIT/scripts"
+retire_in_newkit "$NEWKIT/scripts" "scripts/harness/tests/test-log.sh"
+printf '\n# LOCAL FORK\n' >> "$F/scripts/harness/tests/test-log.sh"
+forksha=$(sha_of "$F" "scripts/harness/tests/test-log.sh")
+grep -v "scripts/harness/tests/test-log.sh" "$F/scripts/harness/.harness-manifest" > "$F/scripts/.hm"
+printf '%s  scripts/harness/tests/test-log.sh # tailored\n' "$forksha" >> "$F/scripts/.hm"
+mv "$F/scripts/.hm" "$F/scripts/harness/.harness-manifest"
+starred=$(binmode_pins "$F")
+out=$(harness_update_apply "$NEWKIT/scripts" "$F")
+if [ "$starred" -gt 0 ] && has_line "$out" "retire-keep scripts/harness/tests/test-log.sh" \
+        && [ -f "$F/scripts/harness/tests/test-log.sh" ]; then
+    pass "retirement (binary pins): tailored retired file is kept and reported"
+else
+    fail "retirement (binary pins): tailored retired file was deleted or not reported (rewritten=$starred)" "$out"
+fi
+newmanifest=$(
+    # shellcheck source=/dev/null
+    . "$NEWKIT/scripts/harness/lib/install-lib.sh"
+    harness_repin_manifest "$F" "$KIT_VERSION"
+)
+line=$(printf '%s\n' "$newmanifest" | awk '{ p=$2; sub(/^\*/,"",p) } p == "scripts/harness/tests/test-log.sh" {print; exit}')
+case "$line" in *"# tailored"*) fork_marked=1 ;; *) fork_marked=0 ;; esac
+if [ -n "$line" ] && [ "$fork_marked" = 1 ] && [ "${line%% *}" = "$forksha" ]; then
+    pass "retirement (binary pins): repin carries the tailored retired pin forward with marker and sha"
+else
+    fail "retirement (binary pins): repin dropped or mis-marked the tailored retired pin — the tailored-set scan did not strip the '*'" "$line"
+fi
+rm -rf "$F" "$NEWKIT"
+
 # --- (k) v0.22.0 descope migration: a pre-descope install updates clean --------
 # Simulate the real migration this suite's own descope shipped: a
 # v0.21.0-layout install still carries the seven conformance-suite files at
