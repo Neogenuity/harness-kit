@@ -231,7 +231,7 @@ if [ -f "$MANIFEST" ]; then
     # check-common.sh. This one feeds the kit-path set the four formatter
     # branches below all compare against, so losing it does not merely drop one
     # warning: it silently narrows what every branch checks.
-    _10e_pins=$(awk '$1 ~ /^[0-9a-fA-F]{64}$/ {print $2}' "$MANIFEST" 2>/dev/null)
+    _10e_pins=$(awk '$1 ~ /^[0-9a-fA-F]{64}$/ { p=$2; sub(/^\*/,"",p); print p }' "$MANIFEST" 2>/dev/null)
     _10e_pins_read=0
     while IFS= read -r _10e_p; do
         _10e_pins_read=$((_10e_pins_read + 1))

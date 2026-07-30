@@ -28,6 +28,8 @@ trap 'rm -rf "$WORK"' EXIT
 # Keep hook_log out of the repo during tests.
 export HARNESS_LOG=0
 
+skips=0
+
 # Fixture hook: always denies with a fixed reason, so every case exercises
 # the protocol.
 cp "$HOOKS_DIR/lib.sh" "$WORK/lib.sh"
@@ -84,17 +86,56 @@ fi
 
 # --- 3: jq unavailable on a PreToolUse payload -> exit 2, fail-closed ---
 # Build a PATH containing everything hook_deny's call path needs EXCEPT jq,
-# by resolving each tool via the ambient PATH once and symlinking it in.
+# by resolving each tool once and writing an exec wrapper for it. Note that
+# printf, true and false are bash BUILTINS, which is why the resolver below
+# cannot use `command -v` — see _shim.
 # This proves the JSON deny path degrades to the portable exit-2 fallback
 # rather than crashing or — the one unacceptable outcome — failing open when
 # jq truly isn't there to build or verify the JSON.
+# _shim <bindir> <tool> — put a runnable <tool> onto a synthetic PATH without
+# needing symlink privilege, and without trusting `command -v` for a name that
+# is ALSO a shell builtin. Two independent traps this avoids:
+#   1. MSYS/Git Bash without Developer Mode cannot create real symlinks: `ln -s`
+#      either copies or fails outright, leaving the directory short of tools.
+#      The synthetic PATH then means "nothing is available", not "jq is
+#      missing" — the assertion below stops testing what it claims to.
+#   2. `command -v printf` answers `printf` in bash, not /usr/bin/printf,
+#      because printf is a builtin. `ln -s printf <dir>/printf` therefore has no
+#      resolvable source. This one bites on ANY bash, privilege or not.
+# An exec wrapper is a plain file, so it needs no privilege anywhere.
+_shim() {
+    local dir="$1" tool="$2" target
+    # `type -P` is the correct resolver: it searches PATH for an executable FILE
+    # and deliberately skips builtins and functions, so it answers
+    # /usr/bin/printf where `command -v printf` answers `printf`. No hardcoded
+    # /bin:/usr/bin guess, which would mis-resolve on Nix or a minimal image.
+    target=$(type -P -- "$tool" 2>/dev/null)
+    # Retry on the standard utility PATH for a host whose login PATH omits
+    # coreutils' home.
+    [ -n "$target" ] || target=$( PATH=$(getconf PATH 2>/dev/null); type -P -- "$tool" 2>/dev/null )
+    [ -n "$target" ] || return 1
+    # Quote the target: an unquoted path containing whitespace yields a wrapper
+    # that builds and chmods cleanly, then fails at run time with 126 — a
+    # mis-built fixture presenting as the assertion failing, which is the exact
+    # class this helper exists to remove.
+    printf '#!/bin/sh\nexec "%s" "$@"\n' "$target" > "$dir/$tool" || return 1
+    # 755 explicitly: `chmod +x` is masked by the caller's umask.
+    chmod 755 "$dir/$tool"
+}
+
 NOJQ_BIN="$WORK/nojq-bin"
 mkdir -p "$NOJQ_BIN"
+shim_missing=""
 for tool in bash sh cat dirname basename head mkdir date printf grep sed awk tr readlink env true false git; do
-    tool_path=$(command -v "$tool" 2>/dev/null) || continue
-    ln -sf "$tool_path" "$NOJQ_BIN/$tool"
+    _shim "$NOJQ_BIN" "$tool" || shim_missing="$shim_missing $tool"
 done
-if PATH="$NOJQ_BIN" bash -c 'command -v jq' >/dev/null 2>&1; then
+if [ -n "$shim_missing" ]; then
+    # Report the unbuildable fixture as itself. Asserting on a half-populated
+    # PATH is how "the harness could not be built" got reported as "the guard
+    # failed to fail closed (got 127)".
+    echo "SKIP: jq-unavailable PreToolUse — could not build the stripped PATH (unresolvable:$shim_missing)"
+    skips=$((skips + 1))
+elif PATH="$NOJQ_BIN" bash -c 'command -v jq' >/dev/null 2>&1; then
     echo "FAIL: jq-unavailable harness — jq is still resolvable on the stripped PATH; test setup is broken"
     fails=$((fails + 1))
 else
@@ -177,4 +218,8 @@ if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails deny-reasons case(s)"
     exit 1
 fi
-echo "PASSED: all deny-reasons cases"
+if [ "$skips" -gt 0 ]; then
+    echo "PASSED: all deny-reasons cases that ran ($skips skipped)"
+else
+    echo "PASSED: all deny-reasons cases"
+fi

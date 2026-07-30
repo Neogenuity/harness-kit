@@ -33,7 +33,7 @@ if [ -f "$MANIFEST" ] && [ -n "$(sha256_of "$MANIFEST")" ]; then
     while IFS= read -r line; do
         case "$line" in \#*|"") continue ;; esac
         want=${line%% *}
-        path=$(printf '%s\n' "$line" | awk '{print $2}')
+        path=$(printf '%s\n' "$line" | awk '{ p=$2; sub(/^\*/,"",p); print p }')
         if ! printf '%s' "$want" | grep -qE '^[0-9a-fA-F]{64}$' || [ -z "$path" ]; then
             echo "ERROR: scripts/harness/.harness-manifest has a malformed entry (expected '<sha256>  <path>'): '$line'"
             ERRORS=$((ERRORS + 1))
@@ -84,7 +84,7 @@ fi
 #     themselves) AND a readable kit-manifest: a missing kit-manifest is its
 #     own ERROR (#9d), so this check never guesses at the expected set.
 if [ -f "$MANIFEST" ] && [ -d "$ROOT/scripts/harness/hooks" ] && [ -f "$ROOT/scripts/harness/kit-manifest" ]; then
-    pinned_paths=$(awk '$1 ~ /^[0-9a-fA-F]{64}$/ {print $2}' "$MANIFEST")
+    pinned_paths=$(awk '$1 ~ /^[0-9a-fA-F]{64}$/ { p=$2; sub(/^\*/,"",p); print p }' "$MANIFEST")
     expected_paths=$(
         { find "$ROOT/scripts/harness" -type f \
               ! -name '.harness-manifest' ! -name '.hm.new' 2>/dev/null \
@@ -195,7 +195,7 @@ if [ -d "$ROOT/scripts/harness/hooks" ]; then
             # A ' # tailored' pin on a retired path is a deliberate,
             # integrity-verified fork — resolved, no warning.
             if [ -f "$MANIFEST" ] \
-                    && awk -v p="$rel" '$2 == p && /# tailored$/ {found=1} END {exit !found}' "$MANIFEST"; then
+                    && awk -v p="$rel" '{ f=$2; sub(/^\*/,"",f) } f == p && /# tailored$/ {found=1} END {exit !found}' "$MANIFEST"; then
                 continue
             fi
             echo "WARNING: retired path '$rel' is still present — the kit no longer ships it; update keeps drifted copies for manual review. Fold your local changes forward and delete the file (or keep it deliberately by re-pinning its line ' # tailored')"

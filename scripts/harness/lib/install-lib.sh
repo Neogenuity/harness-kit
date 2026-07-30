@@ -80,12 +80,21 @@ harness_kit_shipped_paths() {
 # install pins policy templates unmarked, and repo-owned gate/format/invariant
 # policy must be reviewed, never silently replaced.
 harness_kit_is_diff_only() {
-    local kmf="$1" path="$2" p
+    local kmf="$1" path="$2" p found=1
     [ -f "$kmf" ] || return 1
+    # DRAIN the producer — never `return`/`break` out of this loop. An early
+    # exit closes the process substitution while harness_kit_manifest_paths is
+    # still writing, and on a runner that hands down an IGNORED SIGPIPE (GitHub
+    # Actions does) its printf survives the EPIPE instead of dying silently and
+    # reports "write error: Broken pipe" on stderr. That noise is scheduling-
+    # dependent, so it varies run to run and pollutes any caller capturing
+    # 2>&1 — it turned the install-update gate red on ubuntu while macOS, idle
+    # and with SIGPIPE at its default, stayed green. Draining costs nothing
+    # here: the policy layers are a handful of lines.
     while IFS= read -r p; do
-        [ "$p" = "$path" ] && return 0
+        [ "$p" = "$path" ] && found=0
     done < <(harness_kit_manifest_paths "$kmf" policy optional-policy)
-    return 1
+    return "$found"
 }
 
 # _harness_path_sane <path>
@@ -126,6 +135,24 @@ harness_validate_ship_contract() {
     local dests="" srcrel srcfile dup dup_read
     if [ ! -f "$kmf" ]; then
         echo "ERROR: kit-manifest: $kmf is missing — not a valid install source" >&2
+        return 1
+    fi
+    # A CRLF manifest makes every finding below a lie, so name the real cause
+    # once here instead of emitting one bogus finding per line (~100 on the
+    # shipped contract). The blank separators become lone-CR records, which
+    # `read` hands over as a non-empty layer named <CR>; every other line's
+    # trailing field carries a CR into a path this function is about to pass to
+    # cp/rm.
+    #
+    # This probe is the diagnosis, NOT the defense — .gitattributes is. Its
+    # reachability is shell-dependent, so do not extend it expecting universal
+    # coverage: core.autocrlf=true converts the .sh files too, and a bash that
+    # rejects a CRLF script (macOS, Linux) dies parsing `bootstrap` well before
+    # this runs, under an unrelated signature ("set: pipefail: invalid option
+    # name"). What reaches here is a shell that TOLERATES CRLF scripts — Git
+    # Bash, where #27 was reported from — or a partially normalized checkout.
+    if LC_ALL=C grep -q $'\r' "$kmf" 2>/dev/null; then
+        echo "ERROR: kit-manifest: $kmf has CRLF line endings, but the parser requires LF — every layer and path would be read with a trailing carriage return. Most often this is a clone made with core.autocrlf=true (Git for Windows' default) from a checkout with no .gitattributes. Re-clone with 'git -c core.autocrlf=false -c core.eol=lf clone <url>', or run 'git add --renormalize .' in a checkout whose .gitattributes pins 'eol=lf'." >&2
         return 1
     fi
     while read -r layer path rest; do
@@ -204,9 +231,37 @@ harness_validate_ship_contract() {
 # _harness_sha256 <file...> — prints "<sha256>  <path>" lines, the manifest's
 # own line format. Mirrors check-harness.sh's sha256_of tool selection.
 _harness_sha256() {
-    if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$@"
-    elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"
-    fi
+    # The trailing sed normalizes the TOOL's line format to the manifest's
+    # documented one. On a platform that distinguishes text from binary reads
+    # (Git Bash, Cygwin) both tools default to BINARY and emit "<sha> *<path>".
+    # That '*' becomes part of field 2 for every awk reader of the manifest, so
+    # each path resolves to nothing: check-drift reports every mechanism file
+    # both missing and unpinned, and — worse — a re-pin stops matching its own
+    # tailored set and silently drops every '# tailored' marker, which is what
+    # keeps update mode from overwriting a deliberate fork.
+    #
+    # Deliberately NOT `shasum -t` / `sha256sum --text`. Those change how the
+    # file is READ (CRLF translation), while the verifier — sha256_of() in
+    # lib/check-common.sh — stays on the default mode. A text-mode writer with
+    # a binary-mode verifier would disagree about the digest of any file
+    # containing CR: the same failure, with a much harder cause to find. Only
+    # the marker is rewritten here; the bytes hashed are untouched.
+    #
+    # sed, not `grep -q`-style early exit: it drains its input, so there is no
+    # SIGPIPE/pipefail phantom-failure exposure. With no hash tool at all the
+    # block prints nothing and so does sed, preserving the documented
+    # "prints nothing" contract that bootstrap's dry-run path depends on.
+    #
+    # What the pipe DOES change: the exit status is now sed's unless the caller
+    # set `pipefail`, so an unreadable file returns 0 rather than 1 in a shell
+    # without it. Every production entry point (bootstrap, verify, check-harness)
+    # sets pipefail, and no caller branches on this function's status — they all
+    # read stdout and treat empty as failure. Check that before adding one.
+    {
+        if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$@"
+        elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"
+        fi
+    } | sed 's/^\([0-9a-fA-F]\{64\}\) \*/\1  /'
 }
 
 # harness_missing_prereqs
@@ -318,7 +373,7 @@ harness_repin_manifest() {
     if [ -f "$mf" ]; then
         while IFS= read -r old; do
             case "$old" in *"# tailored"*) ;; *) continue ;; esac
-            path=$(printf '%s\n' "$old" | awk '{print $2}')
+            path=$(printf '%s\n' "$old" | awk '{ p=$2; sub(/^\*/,"",p); print p }')
             [ -n "$path" ] && tailored="${tailored}${path} "
         done < "$mf"
     fi
@@ -875,7 +930,7 @@ harness_update_decision() {
     local root="$1" line="$2" kmf="${3:-$1/scripts/harness/kit-manifest}" want path have
     case "$line" in \#*|"") return 0 ;; esac
     case "$line" in *"# tailored"*) printf 'diff\n'; return 0 ;; esac
-    path=$(printf '%s\n' "$line" | awk '{print $2}')
+    path=$(printf '%s\n' "$line" | awk '{ p=$2; sub(/^\*/,"",p); print p }')
     [ -n "$path" ] || return 0
     # Policy layers are diff-only even when pristine and unmarked (step 3).
     if harness_kit_is_diff_only "$kmf" "$path"; then
@@ -953,7 +1008,7 @@ harness_update_apply() {
     if [ -f "$mf_read" ]; then
         while IFS= read -r line; do
             case "$line" in \#*|"") continue ;; esac
-            path=$(printf '%s\n' "$line" | awk '{print $2}')
+            path=$(printf '%s\n' "$line" | awk '{ p=$2; sub(/^\*/,"",p); print p }')
             [ -n "$path" ] || continue
             # Retired paths are handled (and reported) by the pass below.
             case "$retired" in *" $path "*) continue ;; esac
@@ -1006,7 +1061,7 @@ harness_update_apply() {
     for path in $retired; do
         [ -f "$root/$path" ] || continue
         pinline=""
-        [ -f "$mf_read" ] && pinline=$(awk -v p="$path" '$2 == p {print; exit}' "$mf_read")
+        [ -f "$mf_read" ] && pinline=$(awk -v p="$path" '{ f=$2; sub(/^\*/,"",f) } f == p {print; exit}' "$mf_read")
         case "$pinline" in
             ""|*"# tailored"*)
                 # never pinned (unknown provenance) or a deliberate fork

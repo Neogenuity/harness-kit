@@ -10,8 +10,12 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/test-audit-log.XXXXXX") || exit 1
 export GIT_CEILING_DIRECTORIES="$WORK"
 trap 'rm -rf "$WORK"' EXIT
 fails=0
+skips=0
 pass() { echo "ok:   $1"; }
 fail() { echo "FAIL: $1"; fails=$((fails + 1)); }
+# skip <reason> — a case whose FIXTURE this platform cannot build. Counted so it
+# can never hide behind the suite's success line.
+skip() { echo "SKIP: $1"; skips=$((skips + 1)); }
 
 mkdir -p "$WORK/repo/scripts/harness/lib" "$WORK/repo/.harness/var"
 cp "$SCRIPTS_DIR/audit-log.sh" "$WORK/repo/scripts/harness/lib/audit-log.sh"
@@ -168,8 +172,82 @@ if [ "$rc" -eq 0 ] && [ "$table" = "$expected_table" ]; then
     pass "table output matches the mixed-log golden rendering"
 else
     fail "table output drifted from the mixed-log golden rendering"
-    printf '%s\n' "$table"
+    # BYTE-level, not just the rendered table. Every difference this case has
+    # ever caught was invisible on screen: a jq built for Windows terminates
+    # each line with CRLF, and command substitution leaves the CR embedded
+    # mid-row, so the printed table looked identical to the golden and the
+    # failure named nothing. `od -c` is the one dump tool present everywhere
+    # this floor runs (diff, cmp and `od -t` variants are not uniformly
+    # available on Git Bash); it renders a stray \r as plainly as a missing
+    # column.
+    printf '    --- actual (rc=%s) ---\n' "$rc"
+    printf '%s\n' "$table" | od -c | sed 's/^/    /'
+    printf '    --- expected ---\n'
+    printf '%s\n' "$expected_table" | od -c | sed 's/^/    /'
 fi
 
+# --- a CRLF-emitting jq must leave no CR in the table -------------------------
+# jq built for Windows opens stdio in TEXT mode, so every line it prints ends
+# CRLF. Command substitution strips the LF and leaves the CR, which lands
+# MID-ROW in the assembled table ("status=available<CR> v1=1<CR> ..."). On
+# screen that is invisible, while a terminal actually renders the row
+# overwritten from column 0.
+#
+# This is NOT the cause of the Git Bash failure of the golden case above. It
+# reproduces that symptom exactly, which is why it was suspected — but under a
+# CRLF-emitting jq nine other shipped suites fail too, and all nine pass on that
+# runner. This case pins the hardening; the real cause is still open.
+#
+# Stubbed rather than skipped, so the behavior is pinned on every runner and
+# not only on the one platform that ships such a jq; same technique as the
+# binary-mode sha256 case in test-install-core.sh. awk builds the CRLF, not
+# `sed 's/$/\r/'` — BSD sed's handling of \r in a replacement is not portable,
+# and test-install-core.sh's CRLF kit-manifest case set that precedent.
+CR=$(printf '\r')
+STUBJQ=$(mktemp -d "$WORK/crlfjq.XXXXXX") || exit 1
+# `type -P` searches PATH for an executable FILE and skips builtins, so the
+# wrapper always has a resolvable absolute target.
+realjq=$(type -P jq 2>/dev/null)
+if [ -z "$realjq" ]; then
+    fail "CRLF-jq case: no jq on PATH to wrap (the suite cannot have got this far without one)"
+else
+    # `set -o pipefail` in the stub, or the wrapper always exits 0 and silently
+    # converts every jq failure into a success — which would disable the
+    # `|| { ...; exit 1; }` arms inside audit-log.sh for the whole case and
+    # destroy `jq -e`'s false-means-non-zero contract for any future call site.
+    # bash, NOT /bin/sh: `set -o pipefail` is not POSIX, and /bin/sh is dash on
+    # Ubuntu — `dash -c 'set -o pipefail'` exits 2, so the stub would die before
+    # ever reaching jq and fail this case on the Linux runner.
+    cat > "$STUBJQ/jq" <<EOF
+#!/usr/bin/env bash
+set -o pipefail
+"$realjq" "\$@" | awk '{ printf "%s\r\n", \$0 }'
+EOF
+    # 755 explicitly: `chmod +x` is masked by the caller's umask.
+    chmod 755 "$STUBJQ/jq"
+    # Prove the stub really emits CRLF first, or the assertion below is vacuous
+    # — it would pass just as well against a stub that did nothing.
+    stub_raw=$(printf '{"a":1}' | PATH="$STUBJQ:$PATH" jq -r .a)
+    case "$stub_raw" in *"$CR"*) stub_crlf=1 ;; *) stub_crlf=0 ;; esac
+    crlf_table=$(PATH="$STUBJQ:$PATH" bash "$WORK/repo/scripts/harness/lib/audit-log.sh" \
+        --repo "$WORK/repo" --log "$WORK/repo/.harness/var/log.jsonl" --format table); rc=$?
+    case "$crlf_table" in *"$CR"*) table_crlf=1 ;; *) table_crlf=0 ;; esac
+    if [ "$stub_crlf" -ne 1 ]; then
+        # The FIXTURE could not be built: this platform's tools did not produce
+        # the CRLF the stub exists to inject (observed on Git Bash, where the
+        # wrapper runs but the CR does not survive to the reader). Asserting on
+        # it here would report "CR reached the table" when no CR was ever
+        # created — issue #26's class exactly, and the reason this suite spent a
+        # release excluded from the Windows floor. Skip, loudly.
+        skip "CRLF-jq case — this platform's tools do not produce a CRLF stream, so the fixture cannot be built here"
+    elif [ "$rc" -eq 0 ] && [ "$table_crlf" -eq 0 ] && [ "$crlf_table" = "$expected_table" ]; then
+        pass "a text-mode jq's CRLF never reaches the rendered table"
+    else
+        fail "CR from a text-mode jq reached the table (rc=$rc, table carries CR=$table_crlf)"
+        printf '%s\n' "$crlf_table" | od -c | sed 's/^/        /'
+    fi
+fi
+rm -rf "$STUBJQ"
+
 if [ "$fails" -gt 0 ]; then echo "FAILED: $fails audit-log test(s)"; exit 1; fi
-echo "OK: audit-log tests passed"
+if [ "$skips" -gt 0 ]; then echo "OK: audit-log tests passed ($skips skipped)"; else echo "OK: audit-log tests passed"; fi

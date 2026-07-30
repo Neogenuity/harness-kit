@@ -492,6 +492,66 @@ else
 fi
 rm -rf "$F"
 
+# --- (f3) binary-mode manifests: the '*' path marker ---------------------------
+# Git Bash and Cygwin default BOTH shasum and sha256sum to binary mode, which
+# writes "<sha> *<path>" instead of the documented "<sha>  <path>". The '*' then
+# lands in awk's field 2 at every manifest reader, so paths resolve to nothing.
+# The loud symptom was drift noise (issue #25: 10 real findings became 122); the
+# quiet one was worse — repin stopped matching its own tailored set and dropped
+# every '# tailored' marker, the one thing keeping update mode from overwriting
+# a deliberate fork.
+#
+# (i) A manifest ALREADY written in binary mode must keep its markers, and the
+#     re-pin must normalize the format rather than propagate it.
+F=$(make_fixture) || exit 1
+pick=scripts/harness/tests/test-log.sh
+printf '# harness-kit 0.0.0\n%s *%s # tailored\n' \
+    "$(_harness_sha256 "$F/$pick" | awk '{print $1}')" "$pick" \
+    > "$F/scripts/harness/.harness-manifest"
+out=$(harness_repin_manifest "$F" 0.0.0)
+kept=$(printf '%s\n' "$out" | grep -c '# tailored')
+starred=$(printf '%s\n' "$out" | grep -c ' \*')
+if [ "$kept" -eq 1 ] && [ "$starred" -eq 0 ]; then
+    pass "repin: a binary-mode manifest keeps its '# tailored' marker and is normalized"
+else
+    fail "repin: binary-mode manifest lost tailoring or kept the '*' (tailored=$kept starred=$starred)"
+fi
+rm -rf "$F"
+
+# (ii) The WRITER must never emit the marker in the first place, whatever the
+#      local tool does. Stub a binary-mode shasum onto PATH so this pins the
+#      Git Bash behavior on a POSIX runner too — otherwise the fix is untested
+#      everywhere it actually matters.
+F=$(make_fixture) || exit 1
+ZERO_SHA=$(printf '0%.0s' $(seq 64))
+STUBBIN=$(mktemp -d "$WORK/binmode.XXXXXX") || exit 1
+# A canned emitter, not a wrapper around the local shasum: this must pin Git
+# Bash's output shape on any runner, including one with no perl (debian-slim,
+# alpine) where `command -v shasum` is empty and a wrapper would exec its own
+# path and fail — blaming code that is fine. The digest is irrelevant here;
+# only the "<sha> *<path>" marker under test is.
+{
+    printf '#!/bin/sh\n'
+    printf 'for a in "$@"; do\n'
+    printf '    case "$a" in -*|256) continue ;; esac\n'
+    printf '    printf "%%s *%%s\\n" %s "$a"\n' "$ZERO_SHA"
+    printf 'done\n'
+} > "$STUBBIN/shasum"
+chmod +x "$STUBBIN/shasum"
+# Prove the stub really does emit binary format, or the assertion below is vacuous.
+stub_out=$(PATH="$STUBBIN:$PATH" shasum -a 256 "$F/$pick")
+stub_named=0
+case "$stub_out" in *" *"*) stub_named=1 ;; esac
+writer_out=$(PATH="$STUBBIN:$PATH" _harness_sha256 "$F/$pick")
+writer_starred=0
+case "$writer_out" in *" *"*) writer_starred=1 ;; esac
+if [ "$stub_named" -eq 1 ] && [ "$writer_starred" -eq 0 ]; then
+    pass "_harness_sha256: a binary-mode hash tool is normalized to '<sha>  <path>'"
+else
+    fail "_harness_sha256: binary-mode normalization failed (stub emitted marker=$stub_named, writer kept marker=$writer_starred)" "$writer_out"
+fi
+rm -rf "$F" "$STUBBIN"
+
 # --- (g) ship-contract validation: a bad manifest aborts BEFORE any copy ------
 # harness_install_mechanism must reject unknown layers, traversal/absolute
 # paths, duplicate destinations, and missing declared sources up front. The
@@ -517,6 +577,33 @@ for bad in \
     fi
     rm -rf "$K" "$T2"
 done
+
+# --- (g2) a CRLF kit-manifest is rejected as ONE git-level error --------------
+# Cloning with core.autocrlf=true (Git for Windows' default) rewrites the ship
+# contract to CRLF. Every line then mis-parses: the blank separators become
+# lone-CR records that read as a layer named <CR>, and every other line's
+# trailing field carries a CR. The pre-fix behavior was ~100 `unknown layer`
+# findings that all pointed at the manifest's CONTENT, when the cause was the
+# CHECKOUT — so this asserts on the DIAGNOSIS, not just the exit code: exactly
+# one error, naming CRLF, with nothing copied.
+K=$(mktemp -d "$WORK/crlfkit.XXXXXX") || exit 1
+cp -R "$SCRIPTS_DIR" "$K/scripts"
+# awk, not `sed -i`/perl — neither is portable across the runners this suite
+# has to pass on.
+awk '{ printf "%s\r\n", $0 }' "$K/scripts/harness/kit-manifest" > "$K/km.crlf" \
+    && mv "$K/km.crlf" "$K/scripts/harness/kit-manifest"
+T2=$(mktemp -d "$WORK/crlftarget.XXXXXX") || exit 1
+out=$(harness_install_mechanism "$K/scripts" "$T2" 2>&1); rc=$?
+crlf_errors=$(printf '%s\n' "$out" | grep -c '^ERROR:')
+crlf_named=0
+case "$out" in *CRLF*) crlf_named=1 ;; esac
+if [ "$rc" -ne 0 ] && [ ! -d "$T2/scripts" ] \
+        && [ "$crlf_errors" -eq 1 ] && [ "$crlf_named" -eq 1 ]; then
+    pass "ship contract: a CRLF kit-manifest is one CRLF-named error, before any copy"
+else
+    fail "ship contract: CRLF kit-manifest gave rc=$rc and $crlf_errors error(s); expected exactly 1 naming CRLF, with nothing copied" "$out"
+fi
+rm -rf "$K" "$T2"
 
 # --- (h) bootstrap prereq gate: a degraded install needs explicit opt-in -------
 # The SKILL's init flow asks the user to acknowledge missing prerequisites in

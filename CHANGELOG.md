@@ -3,6 +3,143 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.41.0 — 2026-07-30
+
+Windows / Git Bash portability. Every fix here came from one adopter running
+the kit on Git Bash, on surfaces no CI job could see — so the release also adds
+the CI job that can see them.
+
+All changed files are mechanism-layer: update mode **replaces** them when your
+copy still matches its pin, and diffs any you have marked `# tailored`. No
+policy-layer file changed, so nothing needs a manual merge.
+
+### Fixed
+
+- **A Windows clone could not install the kit at all.** The repo shipped no
+  `.gitattributes`, and Git for Windows defaults to `core.autocrlf=true`, so an
+  ordinary clone rewrote every shipped script and the `kit-manifest` ship
+  contract to CRLF; `bootstrap install` then died before copying anything. The
+  8 blank separator lines become lone-CR records, which both `awk`'s `NF` and
+  bash `read` treat as a non-blank field, and 99 of 117 shippable entries pick
+  up a trailing CR on their path. `.gitattributes` now pins `* text=auto
+  eol=lf` with basename tripwires for the files whose parsers break first, and
+  `harness_validate_ship_contract` probes for CR and names *that* as the cause
+  once, instead of emitting ~100 bogus `unknown layer` findings that all point
+  at the manifest's content when the fault is the checkout. (#27)
+
+- **Binary-mode sha256 pins made drift reports lie and update silently do
+  nothing.** Git Bash and Cygwin default both `shasum` and `sha256sum` to
+  binary mode, writing `<sha> *<path>` rather than the documented
+  `<sha>  <path>`. The `*` lands in field 2 at every manifest reader, so pinned
+  paths resolve to nothing — one adopter's 10 real drift findings became 122
+  failures. Two further consequences the report did not cover, both reproduced
+  against fixtures first: re-pin dropped **every** `# tailored` marker (the one
+  thing keeping update mode from overwriting a deliberate fork), and update's
+  replace loop fell through to `keep` for every entry — a silent no-op that
+  still exited 0. The writer now normalizes the marker, and all eight reader
+  sites tolerate it. (#25)
+
+- **Shipped tests asserted on fixtures Windows cannot build.** Five cases
+  across four suites failed for environmental reasons, and presented as
+  product defects: `FAIL: symlink notes.md->[secret] denied — expected exit 2,
+  got 0` reads as the secret guard admitting a symlink to a secret, when in
+  fact MSYS `ln -s` had copied the file and the guard correctly evaluated an
+  ordinary one. PATH shims no longer need symlinks at all (they are `exec`
+  wrapper files, so those cases now *run* on Git Bash rather than skip), and
+  genuinely symlink-dependent fixtures capability-probe and `SKIP`. Skips are
+  counted and named in every suite summary — a skipped case can no longer hide
+  behind `PASSED`. (#26)
+
+- **`verify --fast` accepted a `gates.conf` that `verify` refused.** Given a
+  `# inputs` token matching no files, full mode exited 1 with a FAIL while
+  `--fast` printed the identical diagnostic to stderr and exited 0 with "OK:
+  all quality gates passed (fast)". Validation had been skipped under `--fast`
+  for cost, on the belief that `--fast` runs no annotated gate — but gate-kind
+  gates run in both modes and may carry an annotation. The config checks are
+  now split from the hashing and run in every mode: 0.036s against the 6.05s of
+  hashing they replace. Deleting the prescan's discarded key computation also
+  takes a warm `--changed` run on this repo from 93.8s to 84.6s. A bare
+  `@tool:` is now rejected too — unlike `@tool:absent-binary`, it can never
+  resolve anywhere. (#23)
+
+- **`audit-log.sh --format table` is now robust to a CRLF-emitting jq.** jq's
+  Windows build opens stdout in TEXT mode, so every line it prints ends CRLF.
+  Command substitution strips the LF and leaves the CR, which lands MID-ROW in
+  the assembled table (`status=available<CR> v1=1<CR> …`), and a terminal then
+  renders the row overwritten from column 0. The text branch normalizes every
+  interpolated value; the `--format json` branch is untouched, since a CR there
+  is insignificant JSON whitespace and a blanket strip could reach inside string
+  values.
+
+  This is **hardening, not a diagnosed fix**. It was written while chasing the
+  one Git Bash failure in the shipped `test-audit-log.sh`, whose printed table
+  looks byte-identical to its golden — but that cause is still unknown, and a
+  CRLF-emitting jq is *not* it: under one, nine other shipped suites fail too
+  (`test-affected-files.sh` 13 cases, `test-guard-secrets.sh` 28, …) and all
+  nine pass on that runner. The earlier `core.autocrlf` suspicion is likewise
+  unconfirmed — forcing `autocrlf=true` on a POSIX host does not reproduce it,
+  which rules that path out without promoting any other. The suite now dumps
+  `od -c` for both sides on failure so the next Git Bash run reports the actual
+  bytes, and it stays excluded from the Windows floor until they are read.
+
+- **Broken-pipe noise on stderr could fail an unrelated gate.** `harness_kit_is_diff_only`
+  returned out of a `while read` loop fed by a process substitution, closing the
+  pipe while the producer was still writing. On a runner that hands down an
+  *ignored* SIGPIPE (GitHub Actions does), the producer's `printf` survives the
+  EPIPE and reports `write error: Broken pipe` instead of dying silently. The
+  volume is scheduling-dependent, so it varied run to run and turned the
+  install-update gate red on ubuntu while macOS stayed green. The reader now
+  drains.
+
+### Added
+
+- **CI covers the adopter floor on Windows / Git Bash.** Deliberately not a
+  third leg of the existing matrix: that job runs the full `verify`, whose
+  eval, live-runtime and prettier-backed gates assume a POSIX toolchain the kit
+  has never claimed on Windows, and a red-and-ignored job teaches nothing. This
+  one covers what the kit *does* claim — the floor an adopter's own
+  `gates.conf` runs, needing only git, jq and a sha256 tool. One step per
+  issue, so a regression names itself. It also gives
+  `scripts/harness/tests/` its first behavioral coverage anywhere: `.harness/gates.conf`
+  globs only the templates tree, so the installed copies were verified as bytes
+  and executed nowhere. One suite (`test-eval-graders.sh`) is left out of the
+  pass/fail tally with its cause still open — it still RUNS and prints in full,
+  since an excluded suite emits no diagnostic and the cause can only be seen on
+  that runner. Every other shipped suite passes, and cases whose *fixture* the
+  platform cannot build report `SKIP:` with a reason and are summed in the job
+  output.
+
+- **`verify` now re-emits `SKIP:` lines from a gate that PASSED.** A passing
+  gate's stdout was captured and discarded, so a suite that skipped a case for a
+  missing platform capability reported it to nobody — the operator saw only
+  `ok:   <label>`. Every shipped suite counts and names its skips precisely so a
+  narrowed run is visible, and the only consumer that ever read them was the
+  Windows CI step. That made "the skip is counted, so coverage loss cannot hide"
+  true on one runner and false under `verify` itself.
+
+- **Eval tasks can declare their host prerequisites (`reference/precheck.sh`).**
+  A task whose reference solution needs more than a POSIX shell and git — a
+  live dev server, a language runtime, a bindable port — exits **1** from this
+  optional script with a one-line reason, and `test-eval-graders.sh` skips that
+  task's grader-validity check instead of failing it. Any other non-zero status
+  means the probe itself is broken and is reported as a failure. The skip is counted
+  and its reason printed, so a precheck that always declines cannot quietly
+  retire its own task's coverage. Deliberately per-task rather than TASK.md
+  metadata: this repo's `verify-live-runtime` needs `python3` and a loopback
+  bind because *its* fixture app is Python, and the shipped floor must stay
+  agnostic about what any one task's runtime is. Without it the suite reported
+  `reference/apply.sh errored`, which reads as a broken grader when the real
+  answer was that Git for Windows bundles no python.
+
+- **`test-verify.sh` capability-probes the `0644 -> 0600` cache case.** On a
+  platform that does not record a non-exec-bit permission change, there is
+  nothing for the `--changed` key to move on, so the case `SKIP`s with its
+  reason instead of failing. The probe declines on both candidate causes — no
+  usable `stat` dialect, or a chmod that does not stick — so a failure that
+  survives it is a real defect. This is what lets the suite run on the Windows
+  floor at all; excluding the whole file had also dropped the only coverage of
+  the `# inputs` mode-consistency regression above.
+
 ## 0.40.1 — 2026-07-27
 
 ### Fixed

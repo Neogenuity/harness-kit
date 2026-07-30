@@ -60,6 +60,8 @@ done
 [ "$_root_fail" -eq 0 ] || exit 1
 PIN_FILE="$ROOT_DIR/scripts/harness/.harness-manifest"
 fails=0
+# Counted so a skipped case can never hide behind a silent exit 0.
+skips=0
 
 # has <haystack> <needle> — pure-shell substring test. `printf | grep -qF` is
 # banned here for the same reason as in the check families: grep -q exits on
@@ -409,7 +411,8 @@ mkdir -p "$NOTEMP" && chmod 500 "$NOTEMP"
 if ( : > "$NOTEMP/.probe" ) 2>/dev/null; then
     rm -f "$NOTEMP/.probe"
     chmod 700 "$NOTEMP"
-    echo "skip: test-check-loops — this process can write to a mode-500 directory (DAC override, e.g. running as root), so the no-writable-temp case cannot be set up here"
+    skips=$((skips + 1))
+    echo "SKIP: test-check-loops — this process can write to a mode-500 directory (DAC override, e.g. running as root), so the no-writable-temp case cannot be set up here"
 else
     # check-doctor.sh takes its ROOT from $0 and opens no temp file of its own,
     # so the CWD here only supplies the here-doc fallback the failure needs.
@@ -428,4 +431,5 @@ else
 fi
 
 [ "$fails" -eq 0 ] || exit 1
+[ "$skips" -eq 0 ] || echo "PASSED: all check-loops cases that ran ($skips skipped)"
 exit 0

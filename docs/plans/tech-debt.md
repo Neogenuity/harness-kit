@@ -57,3 +57,73 @@ a real plan in [PLANS.md](PLANS.md)'s lifecycle.
 - **haiku reward-hacks the neuter-check** — the negative-no-neuter-check
   scenario passes ~2/3 on haiku-tier models (recorded 2026-07-12). Revisit
   when re-baselining the eval matrix on newer cheap-tier models.
+- **`test-eval-graders.sh` fails on Windows / Git Bash: `verify-live-runtime:
+  reference/apply.sh errored`** — and the v0.41.0 `reference/precheck.sh` does
+  NOT fire there. Measured on the runner: the probe returns 0, so `python3`
+  resolves and a loopback bind succeeds; the prerequisites it tests are all met
+  and the real failure is elsewhere in that task's `scripts/dev.sh` path (the
+  fixture app's startup, the HTTP fetch, or the `down` teardown — the log shows
+  a lingering `rm: ... Device or resource busy` on the workspace). The probe
+  remains correct for hosts that genuinely lack python3 or bind; it simply does
+  not cover this one. Excluded by name from the Windows floor but still RUN and
+  printed, so the next run's output narrows it further. Promote when that output
+  identifies the failing step.
+- **Shipped mechanism is not uniformly CR-safe if a hash/JSON tool emits CRLF** —
+  `_jq_text` in `lib/audit-log.sh` normalizes only that file's table branch. The
+  same `x=$(… | jq -r …)` then exact-compare pattern is unguarded in
+  `lib/check-doctor.sh:498` (a `true\r` silently disables the whole biome
+  formatter-coverage check #10e — a silent gate no-op, worse than a corrupt
+  table), `lib/eval-harness.sh` (regression/violation markers and table rows),
+  `hooks/lib.sh` (tool names, event names, file paths), and the maintainer-only
+  `scripts/check-packaging.sh`. Deliberately NOT fixed: the class is currently
+  hypothetical — no runner we test on emits CRLF from jq (see the entry above) —
+  and a repo-wide normalizer is a large change to justify on a cause that has
+  been falsified once already. Promote if any host is ever observed emitting
+  CRLF from jq, or if check #10e is reported as silently not running.
+- **The version-bump policy hook cannot tell a released HEAD from an unreleased
+  one** — `.harness/hooks/guard-project-policy.sh` warns when shipped templates
+  change while `VERSION` still equals `git show HEAD:...VERSION`. That is right
+  when HEAD is a released state, but during release prep HEAD is the
+  `release: v<x>` commit itself and is not yet tagged, so further fixes that
+  belong *in* that unreleased version trip the warning and the only way to
+  silence it is a wrong second bump. Hit twice while preparing v0.41.0. A fix
+  would compare against the newest `v*` TAG rather than HEAD, and stay silent
+  when `VERSION` is ahead of it. Low priority: the hook is advisory, the
+  workaround (commit, which clears the `git status` trigger) is normal
+  workflow, and the false positive is loud rather than silent. Promote if it
+  ever fires on a path where committing is not the next step.
+- **Maintainer suites still build PATH shims with `ln -s` + `command -v`** —
+  six sites (`scripts/test-check-harness.sh:791`, `:857`, `:1115`;
+  `scripts/test-install-core.sh:619`, `:643`, `:661`) carry the pattern issue
+  #26 replaced in the shipped tests: `ln -s "$(command -v "$tool")"` over lists
+  that include `printf`, which is a bash builtin, so `command -v` answers a bare
+  name and the link has no resolvable source. Latent rather than live — the
+  shims end up self-referential but nothing in those cases invokes an external
+  `printf` under bash, and these suites are maintainer-only (kit-root, never
+  shipped) so they run on CI's macOS/Linux, never on Git Bash. Deliberately left
+  out of #26, whose subject is the floor adopters actually run. Promote if these
+  suites ever need to pass on Windows, or if a case starts depending on one of
+  the builtin-named shims actually executing (trigger: either).
+- **Adopters get no CRLF protection for their installed harness** — issue #27
+  fixed line endings for *this* repo's clone (root `.gitattributes`, plus the
+  CRLF probe in `harness_validate_ship_contract`). The shipped product still
+  has the identical defect one layer out: the kit installs `scripts/harness/**`
+  into adopter repos and integrity-pins every file by sha256, but ships them no
+  `.gitattributes`. A Windows adopter with `core.autocrlf=true` who commits the
+  installed harness gets CRLF back on their next clone, and every pin breaks at
+  once. The failure signature there is *worse* than the one #27 fixed — the
+  probe reads only the source manifest, which is always LF after #27, so the
+  adopter sees ~117 sha256 drift failures from `verify` with nothing anywhere
+  naming line endings. Confirmed while fixing #25: with a CRLF *and* binary-mode
+  manifest the reported path now reads `lists 'scripts/mech.sh' but it does not
+  exist` — the `*` is stripped but the trailing CR is invisible, so the message
+  shows a correct-looking path being reported missing. Any fix here should probe
+  the manifest for CR the way `harness_validate_ship_contract` probes
+  kit-manifest, not just harden another reader. Precedent says this is in scope
+  for the kit:
+  `harness_append_gitignore` and the opt-in `--formatter-ignore`
+  `.prettierignore` block already exist to protect the same byte-exact surface
+  from repo-wide tooling. Deferred because #27 as filed is about this repo's
+  clone and the fix is worth shipping without widening it. Promote on the first
+  Windows adopter report, or when adopter-side `.gitattributes` is picked up as
+  part of a broader install-time repo-config pass (trigger: either of those).

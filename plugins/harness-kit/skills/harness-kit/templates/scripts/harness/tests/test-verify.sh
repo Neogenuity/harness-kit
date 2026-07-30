@@ -23,6 +23,10 @@ export HARNESS_LOG_FILE="$WORK/gates.jsonl"
 # refusal sets CI=true for its own invocation only.
 unset CI
 fails=0
+skips=0
+# skip <reason> — a case whose FIXTURE this environment cannot build. Counted
+# so it can never hide behind the suite's success line.
+skip() { echo "SKIP: $1"; skips=$((skips + 1)); }
 
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
@@ -95,11 +99,52 @@ else
     fail "telemetry failure changed successful gate output or exit behavior"
 fi
 
+# _shim <bindir> <tool> — put a runnable <tool> onto a synthetic PATH without
+# needing symlink privilege, and without trusting `command -v` for a name that
+# is ALSO a shell builtin. Two independent traps this avoids:
+#   1. MSYS/Git Bash without Developer Mode cannot create real symlinks: `ln -s`
+#      either copies or fails outright, leaving the directory short of tools.
+#      The synthetic PATH then means "nothing is available", not "jq is
+#      missing" — the assertion below stops testing what it claims to.
+#   2. `command -v` answers a bare name for anything that is also a shell
+#      builtin, which is no use as a symlink target. This list happens to be
+#      all external binaries, so only trap 1 is live here — the resolver is
+#      kept identical to test-deny-reasons.sh's, where trap 2 does bite, so the
+#      two cannot drift.
+# An exec wrapper is a plain file, so it needs no privilege anywhere.
+_shim() {
+    local dir="$1" tool="$2" target
+    # `type -P` is the correct resolver: it searches PATH for an executable FILE
+    # and deliberately skips builtins and functions, so it answers
+    # /usr/bin/printf where `command -v printf` answers `printf`. No hardcoded
+    # /bin:/usr/bin guess, which would mis-resolve on Nix or a minimal image.
+    target=$(type -P -- "$tool" 2>/dev/null)
+    # Retry on the standard utility PATH for a host whose login PATH omits
+    # coreutils' home.
+    [ -n "$target" ] || target=$( PATH=$(getconf PATH 2>/dev/null); type -P -- "$tool" 2>/dev/null )
+    [ -n "$target" ] || return 1
+    # Quote the target: an unquoted path containing whitespace yields a wrapper
+    # that builds and chmods cleanly, then fails at run time with 126 — a
+    # mis-built fixture presenting as the assertion failing, which is the exact
+    # class this helper exists to remove.
+    printf '#!/bin/sh\nexec "%s" "$@"\n' "$target" > "$dir/$tool" || return 1
+    # 755 explicitly: `chmod +x` is masked by the caller's umask.
+    chmod 755 "$dir/$tool"
+}
+
 mkdir -p "$WORK/no-jq-bin"
+shim_missing=""
 for tool in bash date dirname mktemp rm sleep touch; do
-    ln -s "$(command -v "$tool")" "$WORK/no-jq-bin/$tool"
+    _shim "$WORK/no-jq-bin" "$tool" || shim_missing="$shim_missing $tool"
 done
 rm -f "$WORK/no-jq.jsonl"
+if [ -n "$shim_missing" ]; then
+    # Checked BEFORE the run: a PATH missing its own tools is not "jq is
+    # absent", so asserting on it tests nothing and blames the runner under
+    # test. Running first and discarding the result would be the same
+    # assert-then-check ordering this case exists to remove.
+    skip "missing-jq case — could not build the stripped PATH (unresolvable:$shim_missing)"
+else
 missing_jq=$(PATH="$WORK/no-jq-bin" HARNESS_LOG_FILE="$WORK/no-jq.jsonl" \
     "$BASH" "$V_SUCCESS" --jobs 4 2>&1); missing_jq_rc=$?
 if [ "$missing_jq_rc" -eq 0 ] && [ "$missing_jq" = "$stable_disabled" ] \
@@ -107,6 +152,7 @@ if [ "$missing_jq_rc" -eq 0 ] && [ "$missing_jq" = "$stable_disabled" ] \
     pass "missing jq leaves verify output, exit behavior, and gate execution unchanged"
 else
     fail "missing jq changed verify behavior or wrote telemetry"
+fi
 fi
 
 # A serial full gate declared after a parallel producer must wait for it. This
@@ -397,15 +443,56 @@ else
     fail "an undeclared file wrongly invalidated the cache"
 fi
 
+# _mode_of <path> — the file's octal permission bits via whichever stat dialect
+# this platform has, or nothing at all. Deliberately the same two-probe
+# detection `verify` does for STAT_MODE, so the guard below asks exactly the
+# question the runner asks. Each probe is SHAPE-VALIDATED before it is trusted:
+# GNU stat reads `-f` as --file-system rather than rejecting it, and prints a
+# multi-line filesystem block for the path, which would otherwise be returned
+# here as if it were a mode.
+_mode_of() {
+    local m
+    m=$(stat -c '%a' "$1" 2>/dev/null)
+    case "$m" in [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) printf '%s\n' "$m"; return 0 ;; esac
+    m=$(stat -f '%Lp' "$1" 2>/dev/null)
+    case "$m" in [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) printf '%s\n' "$m"; return 0 ;; esac
+    return 1
+}
+
 # chmod with the content untouched: a key recording only exec-bit membership
 # is blind to 0644 -> 0600, so a gate validating exact ship-contract modes
 # would keep serving a stale pass after exactly the change it exists to catch.
+#
+# Guarded like the setuid case below, and for the same reason. On a platform
+# that does not record a non-exec-bit permission change — Git Bash / MSYS over
+# NTFS is the known one — `chmod 600` leaves the reported mode at 0644, so
+# there is nothing for the key to move on and the assertion blames the runner
+# for a fixture the platform refused to build. That is issue #26's class, and
+# it is why this suite was excluded wholesale from the Windows floor, which
+# also dropped the only coverage of the mode-consistency cases at the bottom of
+# this file. The probe is cause-agnostic on purpose: it declines both when no
+# stat dialect exists (verify falls back to the exec-bit floor, which
+# structurally cannot see this change) and when the chmod does not stick. If
+# both preconditions DO hold and the key still does not move, that is a real
+# defect and this case still fails — the guard narrows the claim, it does not
+# retire it.
+#
+# The run counts here and in the setuid case are relative to a snapshot rather
+# than absolute, so a skip on either cannot silently shift the other's expected
+# total — the absolute form made the two cases a chain.
+_ran_before=$(ran_count hit)
+_mode_before=$(_mode_of "$WORK/hit/inputs/b.txt")
 chmod 600 "$WORK/hit/inputs/b.txt"
-out=$(bash "$V_C" --changed 2>&1)
-if ! has "$out" "(cached" && [ "$(ran_count hit)" = "3" ]; then
-    pass "a permission-only change (0644 -> 0600) to a declared input re-runs the gate"
+_mode_after=$(_mode_of "$WORK/hit/inputs/b.txt")
+if [ -n "$_mode_before" ] && [ -n "$_mode_after" ] && [ "$_mode_before" != "$_mode_after" ]; then
+    out=$(bash "$V_C" --changed 2>&1)
+    if ! has "$out" "(cached" && [ "$(ran_count hit)" = "$((_ran_before + 1))" ]; then
+        pass "a permission-only change (0644 -> 0600) to a declared input re-runs the gate"
+    else
+        fail "a non-exec-bit mode change did not invalidate the cache (ran=$(ran_count hit), want $((_ran_before + 1)); mode $_mode_before -> $_mode_after)"
+    fi
 else
-    fail "a non-exec-bit mode change did not invalidate the cache (ran=$(ran_count hit))"
+    skip "test-verify — this platform does not record a non-exec-bit permission change (0644 -> 0600 reads back as '${_mode_after:-no usable stat dialect}'), so that cache case cannot be set up here"
 fi
 # The special bits are mode too, and they are the same blindness one size
 # down: BSD `stat -f %Lp` prints only the LOW three digits, so a 4755 file
@@ -420,14 +507,15 @@ chmod 755 "$WORK/hit/inputs/b.txt"
 bash "$V_C" --changed >/dev/null 2>&1
 chmod 4755 "$WORK/hit/inputs/b.txt" 2>/dev/null
 if [ -u "$WORK/hit/inputs/b.txt" ]; then
+    _ran_before=$(ran_count hit)
     out=$(bash "$V_C" --changed 2>&1)
-    if ! has "$out" "(cached" && [ "$(ran_count hit)" = "5" ]; then
+    if ! has "$out" "(cached" && [ "$(ran_count hit)" = "$((_ran_before + 1))" ]; then
         pass "a setuid-only mode change (0755 -> 4755) to a declared input re-runs the gate"
     else
-        fail "a special-bit-only mode change did not invalidate the cache (ran=$(ran_count hit))"
+        fail "a special-bit-only mode change did not invalidate the cache (ran=$(ran_count hit), want $((_ran_before + 1)))"
     fi
 else
-    echo "skip: test-verify — this filesystem does not keep the setuid bit, so the special-bit cache case cannot be set up here"
+    skip "test-verify — this filesystem does not keep the setuid bit, so the special-bit cache case cannot be set up here"
 fi
 chmod 644 "$WORK/hit/inputs/b.txt"
 bash "$V_C" --changed >/dev/null 2>&1
@@ -480,7 +568,7 @@ for probe_case in \
     "nomatch:# inputs probe does/not/exist:matched no files" \
     "orphan:# inputs typoed src:no gate/full/parallel line declares" \
     "dup:# inputs probe inputs\n# inputs probe inputs:declared more than once" \
-    "bogus:# inputs probe @nope inputs:unknown"; do
+    "bogus:# inputs probe @nope inputs:unknown '# inputs' directive"; do
     name=${probe_case%%:*}
     rest=${probe_case#*:}
     decl=${rest%:*}
@@ -648,9 +736,82 @@ if command -v git >/dev/null 2>&1; then
     fi
 fi
 
+# --- config validity is the same in every mode -------------------------------
+# A '# inputs' annotation is either legal or it is not; the answer must not
+# depend on which mode asked. It used to: the prescan skipped validation under
+# --fast on the belief that "--fast runs no annotated gate", but gate-kind gates
+# DO run in both modes and may carry an annotation. run_gate then swallowed the
+# error (`key=$(_live_key ...) || key=""`), so --fast printed the diagnostic to
+# stderr and still exited 0 with "OK: all quality gates passed (fast)" on a
+# gates.conf that full mode refused outright.
+#
+# Both invalid classes are covered: a token matching no path, and an unknown
+# '@' directive. The valid case is covered too — the modes must agree on
+# ACCEPTANCE, not merely both reject, or a blanket refusal would pass.
+# '|' separates token from needle, not ':' — one of the tokens under test is
+# '@tool:', so a ':' split would cut the token itself in half. The fixture is
+# named by index for the same reason: these tokens contain '/' and ':'.
+_ann_i=0
+for _case in \
+    'does/not/exist|matched no files' \
+    "@bogus|unknown '# inputs' directive" \
+    "@tool:|names no tool"; do
+    _tok=${_case%%|*}
+    _needle=${_case#*|}
+    _ann_i=$((_ann_i + 1))
+    printf 'gate probe true\n# inputs probe %s\n' "$_tok" > "$WORK/badann.gates"
+    V_BAD=$(make_fixture "badann-$_ann_i" "$WORK/badann.gates")
+    _modes_ok=1
+    _detail=""
+    for _mode in "" "--fast" "--changed"; do
+        # CI='' because --changed refuses to run under CI=true.
+        _out=$(CI='' bash "$V_BAD" $_mode 2>&1); _rc=$?
+        case "$_out" in *"$_needle"*) ;; *) _modes_ok=0 ;; esac
+        [ "$_rc" -eq 1 ] || _modes_ok=0
+        _detail="${_detail}[${_mode:-full}] rc=$_rc "
+    done
+    if [ "$_modes_ok" -eq 1 ]; then
+        pass "every mode rejects an invalid '# inputs' token ('$_tok')"
+    else
+        fail "modes disagree on an invalid '# inputs' token ('$_tok')" "$_detail"
+    fi
+    rm -rf "$WORK/badann-$_ann_i"
+done
+
+V_GOODANN_DIR="$WORK/goodann"
+printf 'gate probe true\n# inputs probe inputs\n' > "$WORK/goodann.gates"
+V_GOODANN=$(make_fixture goodann "$WORK/goodann.gates")
+mkdir -p "$V_GOODANN_DIR/inputs"
+printf 'x\n' > "$V_GOODANN_DIR/inputs/a.txt"
+_accept_ok=1
+_accept_detail=""
+for _mode in "" "--fast" "--changed"; do
+    _out=$(CI='' bash "$V_GOODANN" $_mode 2>&1); _rc=$?
+    [ "$_rc" -eq 0 ] || { _accept_ok=0; _accept_detail="${_accept_detail}[${_mode:-full}] rc=$_rc: $_out "; }
+    # rc=0 alone cannot tell "accepted" from "accepted but permanently
+    # unprovable" — a blanket `return 1` in _gate_material produces the same
+    # exit triple. The full run above warms the cache, so by the --changed
+    # iteration a genuinely usable annotation MUST serve a hit; an unprovable
+    # one reports "ok: probe" and 0 cached.
+    if [ "$_mode" = "--changed" ] && ! has "$_out" "(cached"; then
+        _accept_ok=0
+        _accept_detail="${_accept_detail}[changed] accepted but never cached: $_out "
+    fi
+done
+if [ "$_accept_ok" -eq 1 ]; then
+    pass "every mode accepts a valid '# inputs' annotation, and it stays usable"
+else
+    fail "a mode rejected a valid '# inputs' annotation, or left it unprovable" "$_accept_detail"
+fi
+rm -rf "$V_GOODANN_DIR"
+
 if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails verify orchestration test(s)"
     exit 1
 fi
-echo "OK: verify orchestration tests passed"
+if [ "$skips" -gt 0 ]; then
+    echo "OK: verify orchestration tests passed ($skips skipped)"
+else
+    echo "OK: verify orchestration tests passed"
+fi
 exit 0

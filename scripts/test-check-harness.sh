@@ -265,6 +265,31 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
     printf '# harness-kit 9.9.9\n%s  scripts/gone.sh\n' "$ZEROS" > "$W/scripts/harness/.harness-manifest"
     assert_flags "manifest: missing pinned file is flagged" "$W" "does not exist"
 
+    # Git Bash and Cygwin default both hash tools to BINARY mode, writing
+    # "<sha> *<path>". The '*' used to become part of awk's field 2, so every
+    # pinned path resolved to nothing and check-drift reported each mechanism
+    # file BOTH missing (#9a) and unpinned (#9c) — one adopter's 10 real
+    # findings became 122. A manifest already written that way must verify.
+    W=$(new_fixture)
+    printf 'echo ok\n' > "$W/scripts/mech.sh"; chmod +x "$W/scripts/mech.sh"
+    printf '# harness-kit 9.9.9\n%s *scripts/mech.sh\n' "$(sha "$W/scripts/mech.sh")" > "$W/scripts/harness/.harness-manifest"
+    assert_ok "manifest: a binary-mode pin ('<sha> *<path>') still verifies" "$W"
+
+    # ...but tolerating the marker must not turn the check into a no-op: once
+    # the path resolves it is still checksum-verified, tailored or not.
+    W=$(new_fixture)
+    printf 'echo ok\n' > "$W/scripts/mech.sh"; chmod +x "$W/scripts/mech.sh"
+    printf '# harness-kit 9.9.9\n%s *scripts/mech.sh\n' "$ZEROS" > "$W/scripts/harness/.harness-manifest"
+    assert_flags "manifest: a binary-mode pin with a stale checksum is still flagged" "$W" "does not match"
+
+    W=$(new_fixture)
+    printf '# harness-kit 9.9.9\n%s *scripts/gone.sh\n' "$ZEROS" > "$W/scripts/harness/.harness-manifest"
+    # Needle is the CLEAN path, not "does not exist": the UNHARDENED reader
+    # also reports "does not exist" (for '*scripts/gone.sh'), so only the
+    # stripped path in the message discriminates.
+    assert_flags "manifest: a binary-mode pin on a missing file names the clean path" "$W" "lists 'scripts/gone.sh'"
+
+
     W=$(new_fixture)
     printf '# harness-kit 9.9.9\n%s  scripts/gone.sh # tailored\n' "$ZEROS" > "$W/scripts/harness/.harness-manifest"
     assert_flags "manifest: missing tailored file is flagged too" "$W" "does not exist"

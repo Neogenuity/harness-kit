@@ -197,12 +197,74 @@ _env_material() {
         | LC_ALL=C sort
 }
 
+# _validate_toks <label> <tokens> — the CONFIG-ERROR subset of _gate_material's
+# checks, and only that subset. Three things make an annotation INVALID: an
+# unknown '@' directive, a '@tool:' naming nothing, and a token that resolves to
+# no path. All are pure lookups — no hashing, no find, no stat.
+#
+# ADDING A CHECK: a new config error belongs HERE, never in _gate_material.
+# _gate_material's own `return 2` is this function's, delegated (see below), so
+# a check added there would run in full and --changed but not --fast — silently
+# recreating the mode divergence this split exists to remove.
+#
+# The split exists because config validity must not depend on the MODE. Every
+# other way _gate_material can bail (no hash tool, a missing @tool:, a symlink
+# or a newline in a filename) means "unprovable, not invalid": it returns 1, the
+# key is dropped and the gate simply runs. Only these two are worth failing a
+# run over, and because they are cheap, --fast can afford to agree with full
+# mode about them while still skipping the hashing that only a cache key needs.
+_validate_toks() {
+    local label="$1" toks="$2" tok
+    # Word splitting AND pathname expansion, exactly as _gate_material does it,
+    # so an unmatched glob arrives here still literal and is caught below.
+    for tok in $toks; do
+        case "$tok" in
+            @git-head) ;;
+            # A bare '@tool:' names nothing, so it can never resolve on ANY
+            # host. That makes it invalid rather than undecidable: unlike
+            # '@tool:absent-binary', which a different machine may well have,
+            # no machine can satisfy this one. Left unchecked its symptom is
+            # the annotation silently never applying — exactly what the orphan
+            # check below exists to prevent.
+            @tool:)
+                echo "verify: '# inputs' directive '@tool:' for gate '$label' names no tool — give it a binary name, or drop it, in .harness/gates.conf" >&2
+                return 2
+                ;;
+            @tool:*) ;;
+            @*)
+                echo "verify: unknown '# inputs' directive '$tok' for gate '$label'" >&2
+                return 2
+                ;;
+            *)
+                # An unmatched glob stays literal, so a token resolving to
+                # nothing is caught here. That IS a config error: an input set
+                # resolving to nothing would make every run a cache hit.
+                if [ ! -e "$tok" ]; then
+                    echo "verify: '# inputs' token '$tok' for gate '$label' matched no files — an input set that resolves to nothing would make every run a cache hit; fix the token in .harness/gates.conf" >&2
+                    return 2
+                fi
+                ;;
+        esac
+    done
+    return 0
+}
+
 # _gate_material <label> <cmd> <tokens> — the bytes a gate's identity is made
 # of, on stdout. Exit 0 = usable, 1 = cannot compute (run the gate), 2 = config
 # error (FAIL). Everything that cannot be PROVEN returns 1: an unprovable gate
 # runs, it never skips.
 _gate_material() {
     local label="$1" cmd="$2" toks="$3" tok name ver d nfiles hashed got nul nl modes npaths
+    # Config errors first, and from the one place that defines them: the loop
+    # below therefore never sees an unknown '@' directive or a token that
+    # resolves to nothing, which is why it no longer re-checks for either.
+    #
+    # Deliberately ABOVE the HASH_CMD guard: whether an annotation is legal is a
+    # property of the gates.conf, not of the local toolchain. On a host with no
+    # sha256 tool the annotation is 100% inert, so accepting a broken one there
+    # would hand the adopter a file that fails the moment they install a hash
+    # tool. Same argument as the mode invariant, and it fails closed.
+    _validate_toks "$label" "$toks" || return 2
     [ -n "$HASH_CMD" ] || return 1
     printf 'v1\nlabel|%s\ncmd|%s\ntokens|%s\n' "$label" "$cmd" "$toks"
     _env_material || return 1
@@ -242,18 +304,10 @@ _gate_material() {
                 ver=${ver%%$'\n'*}
                 printf 'tool|%s|%s|%s\n' "$name" "$(command -v "$name")" "$ver"
                 ;;
-            @*)
-                echo "verify: unknown '# inputs' directive '$tok' for gate '$label'" >&2
-                return 2
-                ;;
             *)
-                # An unmatched glob stays literal, so a token resolving to
-                # nothing is caught here. That IS a config error: an input set
-                # resolving to nothing would make every run a cache hit.
-                if [ ! -e "$tok" ]; then
-                    echo "verify: '# inputs' token '$tok' for gate '$label' matched no files — an input set that resolves to nothing would make every run a cache hit; fix the token in .harness/gates.conf" >&2
-                    return 2
-                fi
+                # Existence and directive validity are already proven by the
+                # _validate_toks call above; from here on every branch is about
+                # whether a key is PROVABLE, never whether the config is legal.
                 # shasum FOLLOWS symlinks, so a link silently widens the real
                 # footprint past what the annotation declares, and a newline in a
                 # filename truncates the inventory (a false HIT, not a miss).
@@ -419,7 +473,7 @@ _prescan_gates() {
 }
 
 _validate_inputs() {
-    local i j lbl status
+    local i j lbl
     # Two gates sharing a label share one cache key, because a key is derived
     # from the label's annotation and its FIRST matching declaration. The
     # passing twin would then warm a key the failing twin is served on the next
@@ -445,16 +499,27 @@ _validate_inputs() {
             echo "FAIL: '# inputs' names gate '$lbl', which no gate/full/parallel line declares — a stale annotation silently never applies; fix or remove it in .harness/gates.conf" >&2
             exit 1
         fi
-        # --fast runs no annotated gate, so skip the hashing but keep the cheap
-        # structural checks above. The key itself is NOT kept: it is recomputed
-        # at each gate's hit test (see _live_key). This pass exists to surface a
-        # config error before the first gate runs, not to memoize.
-        [ "$MODE" = fast ] && continue
-        _gate_key "$lbl" "$(_cmd_for "$lbl")" "${INPUT_TOKENS[$i]}" >/dev/null; status=$?
-        if [ "$status" -eq 2 ]; then
+        # Whether the CONFIG is valid cannot depend on the mode. The earlier
+        # claim here — "--fast runs no annotated gate" — was wrong: gate-kind
+        # gates run in both modes and may carry a '# inputs' line, and run_gate
+        # swallows the error (`key=$(_live_key ...) || key=""`), so a broken
+        # annotation printed its message to stderr and still exited 0 under
+        # --fast while full mode hard-failed on the same file.
+        if ! _validate_toks "$lbl" "${INPUT_TOKENS[$i]}"; then
             echo "FAIL: '# inputs' for gate '$lbl' cannot be used (see the message above); fix it in .harness/gates.conf" >&2
             exit 1
         fi
+        # No key is computed here, in ANY mode. This pass used to call
+        # _gate_key and discard the result purely to surface a config error;
+        # _validate_toks above now surfaces every one of them for the cost of a
+        # few [ -e ] tests, so the hash was buying nothing while costing seconds
+        # on every full and --changed run — and each gate recomputes its key
+        # live at its own hit test regardless (see _live_key).
+        #
+        # Do not reinstate it as a safety net: gated on mode it would catch a
+        # future _gate_material `return 2` in full but not --fast, which is the
+        # divergence this whole function was fixed to remove. New config errors
+        # go in _validate_toks.
     done
 }
 
@@ -488,6 +553,7 @@ run_gate() {
         emit_gate_event "$label" "$outcome" "$status" "$duration"
         _cache_record "$label" "$key"
         echo "ok:   $label"
+        _echo_skips "$out"
     else
         status=$?
         outcome=fail
@@ -505,6 +571,46 @@ full_gate() {
     # declared before it. Do not let a consumer race its queued producers.
     wait_parallel_gates || exit 1
     run_gate "$@"
+}
+
+# _echo_skips <output> — re-emit any "SKIP:" lines a PASSING gate printed.
+# A gate's stdout is captured and DISCARDED when it passes, so a suite that
+# skipped a case for a missing platform capability reported it to nobody: the
+# operator saw only "ok:   <label>". Every shipped suite counts and names its
+# skips precisely so a narrowed run is visible, and the only consumer that ever
+# read them was the Windows CI step's `grep '^SKIP:'`. That made "the skip is
+# counted, so coverage loss cannot hide" true on one runner and false under
+# `verify` — the command this repo calls the executable definition of done.
+# Indented under the ok: line, so a clean run still reads as a clean run.
+#
+# PURE SHELL on purpose — no grep, no sed, no cat. This runs on the deliberately
+# stripped PATH the missing-jq case builds (bash date dirname mktemp rm sleep
+# touch and nothing else), where any external tool here would print
+# "command not found" into the very output that case compares. And no heredoc or
+# here-string to feed the loop: bash 3.2 puts those temporaries in $TMPDIR and
+# falls back to CWD, so under an unwritable CWD the loop silently iterates zero
+# times and the skip vanishes again — the fail-open pattern this repo has been
+# bitten by before.
+_echo_skips() {
+    local _rest="$1" _line
+    # Fast path FIRST. The splitter below re-slices the remaining string each
+    # iteration, which is O(N^2) in the number of lines — bash string slicing
+    # copies, and there is no builtin line reader that does not need a temp file
+    # (see the heredoc note above). Almost every gate emits no SKIP at all, so
+    # one substring test retires the whole cost for them and bounds the
+    # quadratic term to output that actually contains a skip.
+    # ANCHORED, to agree with the line-anchored emit below. An unanchored
+    # *SKIP:* guard is defeated by any output that merely CONTAINS the token —
+    # `go test -v` prints "    --- SKIP: TestFoo", and a 4000-line log then paid
+    # the full quadratic walk to emit nothing (measured: 13.3s vs 0.11s once
+    # anchored). Adopters are told to declare `full tests <runner>` gates, so
+    # that output is the normal case out there, not an exotic one.
+    case $'\n'"$_rest" in *$'\n'SKIP:*) ;; *) return 0 ;; esac
+    while [ -n "$_rest" ]; do
+        _line=${_rest%%$'\n'*}
+        if [ "$_line" = "$_rest" ]; then _rest=""; else _rest=${_rest#*$'\n'}; fi
+        case "$_line" in SKIP:*) printf '      %s\n' "$_line" ;; esac
+    done
 }
 
 # Bash 3.2-compatible parallel gate queue (macOS still ships Bash 3.2). Output
@@ -624,6 +730,10 @@ wait_parallel_gates() {
         emit_gate_event "${PARALLEL_LABELS[$index]}" "$outcome" "$recorded_status" "$duration"
         if [ "$recorded_status" -eq 0 ]; then
             echo "ok:   ${PARALLEL_LABELS[$index]}"
+            # $(<file) is a bash builtin read — `cat` is not on the stripped
+            # PATH the missing-jq case uses.
+            [ -s "${PARALLEL_OUTPUTS[$index]}" ] \
+                && _echo_skips "$(<"${PARALLEL_OUTPUTS[$index]}")"
         else
             [ -s "${PARALLEL_OUTPUTS[$index]}" ] \
                 && cat "${PARALLEL_OUTPUTS[$index]}"

@@ -55,3 +55,158 @@ jobs:
       # which have no template twin.
       - name: verify
         run: bash scripts/harness/verify
+
+  # Windows / Git Bash. Deliberately NOT a third leg of the matrix above: that
+  # job runs the full `verify`, whose gates (evals, the live-runtime fixture,
+  # prettier-backed adapter checks) assume a POSIX toolchain the kit has never
+  # claimed to support on Windows. This job covers the surface the kit DOES
+  # claim — the floor an adopter's own gates.conf runs — so it can be green and
+  # meaningful rather than red and ignored.
+  #
+  # It exists because issues #23/#25/#26/#27 were all found by an adopter on
+  # Git Bash, on surfaces CI could not see: a CRLF checkout corrupting the ship
+  # contract, binary-mode sha256 pins, and fixtures that assert on a state
+  # Windows cannot construct. Each has a step below.
+  #
+  # Bonus coverage: this is the ONLY job that behaviorally executes the
+  # installed copies under scripts/harness/tests/. Everywhere else they are
+  # verified as bytes (template-sync + the integrity manifest), because
+  # .harness/gates.conf globs only the templates tree.
+  windows-floor:
+    name: adopter floor (windows / git bash)
+    timeout-minutes: 20
+    runs-on: windows-latest
+    defaults:
+      run:
+        # `bash` on a windows runner is Git Bash (MSYS2) — the reporters'
+        # environment, not WSL and not a POSIX emulation layer we control.
+        shell: bash
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Environment facts
+        run: |
+          echo "bash            : $BASH_VERSION"
+          echo "core.autocrlf   : $(git config --get core.autocrlf || echo '<unset>')"
+          echo "jq              : $(command -v jq || echo MISSING)"
+          echo "shasum          : $(command -v shasum || echo MISSING)"
+          echo "sha256sum       : $(command -v sha256sum || echo MISSING)"
+          printf 'x\n' > "$RUNNER_TEMP/hp.txt"
+          # ' *' here means the tool defaults to BINARY mode — issue #25's cause.
+          echo "shasum sep      : [$(shasum -a 256 "$RUNNER_TEMP/hp.txt" | sed 's/^[0-9a-f]*//' | cut -c1-2)]"
+          echo "sha256sum sep   : [$(sha256sum "$RUNNER_TEMP/hp.txt" | sed 's/^[0-9a-f]*//' | cut -c1-2)]"
+          echo "symlink capable : $(ln -s "$RUNNER_TEMP/hp.txt" "$RUNNER_TEMP/sp" 2>/dev/null && [ -L "$RUNNER_TEMP/sp" ] && echo yes || echo no)"
+
+      # Regression guard for #27. .gitattributes pins eol=lf, so a Windows
+      # checkout must NOT be CRLF even though core.autocrlf=true is the Git for
+      # Windows default. Asserted on the ship contract and on an executable,
+      # the two files whose parsers break first.
+      - name: Checkout is LF, not CRLF
+        run: |
+          fails=0
+          for f in scripts/harness/kit-manifest \
+                   scripts/harness/verify \
+                   plugins/harness-kit/skills/harness-kit/templates/scripts/harness/kit-manifest; do
+            if LC_ALL=C grep -q $'\r' "$f"; then
+              echo "FAIL: $f has CRLF line endings — .gitattributes is not holding"
+              fails=1
+            else
+              echo "ok:   $f is LF"
+            fi
+          done
+          exit $fails
+
+      # Regression guard for #26: the floor an adopter runs. Cases whose
+      # fixture Windows cannot build must SKIP loudly, never fail — and never
+      # pass silently either, which is why the skips are echoed back here.
+      - name: Shipped test floor
+        if: always()
+        run: |
+          # test-eval-graders.sh stays excluded, and ONLY it. Its Git Bash
+          # failure is `verify-live-runtime: reference/apply.sh errored`, and
+          # the v0.41.0 precheck did NOT fire on this runner — python3 resolves
+          # and a loopback bind succeeds there, so the prerequisites the probe
+          # tests are all met and the real cause is something else in that
+          # task's dev-runtime path. The probe is still right for the hosts that
+          # genuinely lack those things; it just does not cover this one.
+          # See docs/plans/tech-debt.md.
+          #
+          # test-audit-log.sh is no longer excluded. Its golden-table case now
+          # PASSES here — the CR normalization in audit-log.sh fixed it, even
+          # though the "jq emits CRLF everywhere" theory behind that change was
+          # false. Its only remaining Git Bash failure was the new CRLF-stub
+          # case reporting `stub emitted CRLF=0`: this platform's tools do not
+          # produce the CRLF stream that fixture needs, so it now SKIPs rather
+          # than asserting on a fixture it could not build.
+          known_gaps="test-eval-graders.sh"
+          fails=0
+          skipped=0
+          for t in scripts/harness/tests/test-*.sh; do
+            # `if`, not `out=$(...); rc=$?`: GitHub runs this step under
+            # `bash --noprofile --norc -eo pipefail`, and a bare assignment whose
+            # command substitution fails aborts the whole step under -e — which
+            # is guaranteed to happen the moment the gapped suite fails, the one
+            # case this loop exists to report.
+            if out=$(bash "$t" 2>&1); then rc=0; else rc=$?; fi
+            n=$(printf '%s\n' "$out" | grep -c '^SKIP:' || true)
+            case " $known_gaps " in
+              *" $(basename "$t") "*)
+                # Known-failing, so NOT counted toward the job's exit status —
+                # but still RUN, and printed in full. Skipping the run would
+                # also skip the `od -c` dump the suite now emits on failure,
+                # and that dump is the only way this cause gets diagnosed: the
+                # whole point of excluding it is that nobody can reproduce it
+                # off a Windows runner. Excluded-from-FAILING is not
+                # excluded-from-RUNNING.
+                echo "GAP:  $(basename "$t") — known Windows failure (rc=$rc), not counted; see tech-debt.md"
+                printf '%s\n' "$out"
+                continue ;;
+            esac
+            [ "$rc" -eq 0 ] || fails=$((fails + 1))
+            skipped=$((skipped + n))
+            # Pure-shell line membership, NOT `printf | grep -q`. grep -q exits on
+            # the first match, printf takes SIGPIPE, and under `-o pipefail` the
+            # pipeline is then FALSE — so a suite whose failure marker appears
+            # early in a large output gets reported as `ok:` and its diagnostic
+            # is never printed. The job still exits non-zero via $fails, which is
+            # what makes it a silent mislabel rather than a missed failure. This
+            # repo has been bitten by that exact pattern more than once.
+            case $'\n'"$out" in
+              *$'\n'FAIL:*|*$'\n'FAILED*)
+                echo "=== $t ==="
+                printf '%s\n' "$out" ;;
+              *)
+                printf 'ok:   %-34s %s\n' "$(basename "$t")" "$([ "$n" -gt 0 ] && echo "($n skipped)")" ;;
+            esac
+          done
+          echo "--- $skipped case(s) skipped for missing platform capabilities ---"
+          echo "--- $(printf '%s' "$known_gaps" | wc -w) suite(s) excluded as known Windows gaps ---"
+          exit $fails
+
+      # Regression guard for #25: the pins this repo ships must verify on a
+      # host whose hash tools default to binary mode ("<sha> *<path>").
+      #
+      # HARNESS_SKIP_TESTS_FAMILY=1 mirrors the adopter's own gates.conf: their
+      # `parallel-each` runs the floor, so check-harness must not re-run it.
+      # Without it this step swallowed the floor and reported only the last few
+      # lines of each failing suite, hiding which case failed.
+      - name: Integrity manifest verifies
+        if: always()
+        run: env HARNESS_SKIP_TESTS_FAMILY=1 bash scripts/harness/check-harness
+
+      # Regression guard for #27's second half: bootstrap must parse the ship
+      # contract and install cleanly here, which is the exact command that
+      # failed with ~90 `unknown layer '<CR>'` errors.
+      - name: bootstrap install into a scratch repo
+        if: always()
+        run: |
+          target="$RUNNER_TEMP/adopter"
+          mkdir -p "$target"
+          git -C "$target" init -q
+          bash scripts/harness/bootstrap install "$PWD/scripts" "$target"
+          for f in scripts/harness/verify scripts/harness/kit-manifest .harness/gates.conf; do
+            [ -f "$target/$f" ] || { echo "FAIL: bootstrap did not install $f"; exit 1; }
+          done
+          echo "ok:   bootstrap install produced a complete harness"

@@ -16,7 +16,11 @@ export GIT_CEILING_DIRECTORIES="$WORK"
 trap 'git -C "$MAIN" worktree remove --force "$LINKED" >/dev/null 2>&1 || true; rm -rf "$WORK"' EXIT
 
 fails=0
+skips=0
 pass() { printf 'ok:   %s\n' "$1"; }
+# skip <reason> — an environment that cannot build the fixture. Counted and
+# surfaced in the summary, never silently dropped.
+skip() { printf 'SKIP: %s\n' "$1"; skips=$((skips + 1)); }
 fail() { printf 'FAIL: %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/        /'; fails=$((fails + 1)); }
 
 git_c() { git -c user.email=t@example.com -c user.name=t "$@"; }
@@ -38,11 +42,20 @@ else
     fail "suffix: invalid shape" "$main_a"
 fi
 
-ln -s "$MAIN" "$WORK/main-alias"
-alias_suffix=$(cd "$WORK/main-alias" && "$HELPER" suffix)
-[ "$alias_suffix" = "$main_a" ] \
-    && pass "suffix: symlinked checkout resolves to the same physical root" \
-    || fail "suffix: physical-root resolution changed through a symlink"
+# This case is about physical-root resolution THROUGH a symlink, so it needs a
+# real one. MSYS `ln -s` without Developer Mode copies the directory instead and
+# still exits 0 — and a copy legitimately IS a different physical root, so the
+# assertion would fail while the helper was behaving correctly. Probe with
+# [ -L ], which a copy cannot satisfy, and skip rather than assert on a fixture
+# that was never built.
+if ln -s "$MAIN" "$WORK/main-alias" 2>/dev/null && [ -L "$WORK/main-alias" ]; then
+    alias_suffix=$(cd "$WORK/main-alias" && "$HELPER" suffix)
+    [ "$alias_suffix" = "$main_a" ] \
+        && pass "suffix: symlinked checkout resolves to the same physical root" \
+        || fail "suffix: physical-root resolution changed through a symlink"
+else
+    skip "suffix: symlinked-checkout resolution — this filesystem cannot create symlinks"
+fi
 
 linked_suffix=$(cd "$LINKED" && "$HELPER" suffix)
 [ "$linked_suffix" != "$main_a" ] \
@@ -128,4 +141,8 @@ if [ "$fails" -gt 0 ]; then
     echo "FAILED: $fails dev-instance case(s)"
     exit 1
 fi
-echo "PASSED: all dev-instance cases"
+if [ "$skips" -gt 0 ]; then
+    echo "PASSED: all dev-instance cases that ran ($skips skipped — no symlink support)"
+else
+    echo "PASSED: all dev-instance cases"
+fi

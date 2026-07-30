@@ -304,14 +304,52 @@ the guards guard nothing.
 
 **Supported platforms:** the installed hooks are bash + `jq`.
 **CI-tested:** macOS and Linux (Ubuntu) — every gate runs on both.
-**Best-effort:** WSL (treated as Linux-equivalent; no dedicated runner) and
-Git Bash on Windows (no CI coverage yet — bash-3.2-compatible by
-construction, but not machine-verified). There is no native-Windows hook
-execution — the kit's bash hooks assume a POSIX shell. Codex's
+**Windows / Git Bash:** the *adopter floor* is CI-tested — the shipped test
+suites, `check-harness`, and `bootstrap install`, which is what an adopter's own
+`gates.conf` runs. The full `verify` is not: its eval, live-runtime and
+prettier-backed gates assume a POSIX toolchain the kit does not claim on
+Windows. One shipped suite (`test-eval-graders.sh`) is excluded from that job's
+pass/fail tally while its failure is diagnosed — it still runs and prints; see
+[tech-debt.md](docs/plans/tech-debt.md).
+**Best-effort:** WSL (treated as Linux-equivalent; no dedicated runner). There
+is no native-Windows hook execution — the kit's bash hooks assume a POSIX
+shell.
+
+The shipped test floor runs everywhere, and cases whose *fixture* the platform
+cannot build report `SKIP:` with a reason and are counted in the summary,
+rather than asserting against a half-built fixture. Windows without Developer
+Mode cannot create symlinks — `ln -s` copies instead — so the four cases that
+exist to prove symlink resolution skip there. Everything else, including the
+jq-unavailable paths, runs unprivileged. A `SKIP` is a real gap in coverage on
+that machine, not a pass; it is printed loudly for exactly that reason.
+
+Codex's
 `commandWindows` override and other provider-specific Windows notes are
 tracked per-provider in
 [provider-matrix.md](plugins/harness-kit/skills/harness-kit/references/provider-matrix.md),
 not duplicated here.
+
+**Windows: clone with LF line endings.** The repo pins `eol=lf` in
+`.gitattributes`, so a fresh clone is already correct. But `.gitattributes`
+only governs files git writes — it does **not** repair a checkout made before
+it existed, and `git status` reports such a checkout clean, so a stale clone
+stays broken with no signal. If `bootstrap` fails with any of
+
+```
+unknown layer '<CR>'
+set: pipefail: invalid option name
+/usr/bin/env: 'bash\r': No such file or directory
+```
+
+the checkout is CRLF. Repair it in place, or re-clone:
+
+```bash
+git add --renormalize . && git checkout -- .
+```
+
+`core.autocrlf=true` is Git for Windows' default and is what produces this;
+the kit's mechanism is parsed line-by-line and executed by bash, so it needs
+LF regardless of that setting.
 
 ## Repository internals
 
