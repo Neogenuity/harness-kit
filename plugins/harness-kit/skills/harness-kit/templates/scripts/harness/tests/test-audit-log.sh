@@ -186,9 +186,13 @@ fi
 # jq built for Windows opens stdio in TEXT mode, so every line it prints ends
 # CRLF. Command substitution strips the LF and leaves the CR, which lands
 # MID-ROW in the assembled table ("status=available<CR> v1=1<CR> ..."). On
-# screen that is invisible — it is exactly why the Git Bash failure of the
-# golden case above printed a table that looked byte-identical to its golden —
-# while a terminal actually renders the row overwritten from column 0.
+# screen that is invisible, while a terminal actually renders the row
+# overwritten from column 0.
+#
+# This is NOT the cause of the Git Bash failure of the golden case above. It
+# reproduces that symptom exactly, which is why it was suspected — but under a
+# CRLF-emitting jq nine other shipped suites fail too, and all nine pass on that
+# runner. This case pins the hardening; the real cause is still open.
 #
 # Stubbed rather than skipped, so the behavior is pinned on every runner and
 # not only on the one platform that ships such a jq; same technique as the
@@ -207,8 +211,11 @@ else
     # converts every jq failure into a success — which would disable the
     # `|| { ...; exit 1; }` arms inside audit-log.sh for the whole case and
     # destroy `jq -e`'s false-means-non-zero contract for any future call site.
+    # bash, NOT /bin/sh: `set -o pipefail` is not POSIX, and /bin/sh is dash on
+    # Ubuntu — `dash -c 'set -o pipefail'` exits 2, so the stub would die before
+    # ever reaching jq and fail this case on the Linux runner.
     cat > "$STUBJQ/jq" <<EOF
-#!/bin/sh
+#!/usr/bin/env bash
 set -o pipefail
 "$realjq" "\$@" | awk '{ printf "%s\r\n", \$0 }'
 EOF

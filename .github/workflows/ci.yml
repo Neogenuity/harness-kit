@@ -164,12 +164,20 @@ jobs:
             esac
             [ "$rc" -eq 0 ] || fails=$((fails + 1))
             skipped=$((skipped + n))
-            if printf '%s\n' "$out" | grep -qE '^(FAILED|FAIL:)'; then
-              echo "=== $t ==="
-              printf '%s\n' "$out"
-            else
-              printf 'ok:   %-34s %s\n' "$(basename "$t")" "$([ "$n" -gt 0 ] && echo "($n skipped)")"
-            fi
+            # Pure-shell line membership, NOT `printf | grep -q`. grep -q exits on
+            # the first match, printf takes SIGPIPE, and under `-o pipefail` the
+            # pipeline is then FALSE — so a suite whose failure marker appears
+            # early in a large output gets reported as `ok:` and its diagnostic
+            # is never printed. The job still exits non-zero via $fails, which is
+            # what makes it a silent mislabel rather than a missed failure. This
+            # repo has been bitten by that exact pattern more than once.
+            case $'\n'"$out" in
+              *$'\n'FAIL:*|*$'\n'FAILED:*)
+                echo "=== $t ==="
+                printf '%s\n' "$out" ;;
+              *)
+                printf 'ok:   %-34s %s\n' "$(basename "$t")" "$([ "$n" -gt 0 ] && echo "($n skipped)")" ;;
+            esac
           done
           echo "--- $skipped case(s) skipped for missing platform capabilities ---"
           echo "--- $(printf '%s' "$known_gaps" | wc -w) suite(s) excluded as known Windows gaps ---"

@@ -108,11 +108,18 @@ for slug in $BANK_TASKS; do
     if [ -f "$td/reference/precheck.sh" ]; then
         why=$(bash "$td/reference/precheck.sh" 2>&1); pc_rc=$?
         # EXACTLY 1 means "this host cannot run the task". Any OTHER non-zero is
-        # the precheck itself breaking — a syntax error (2), a missing
+        # the precheck itself breaking — a shell syntax error (2), a missing
         # interpreter (126/127), a killed process — and must FAIL, not skip.
-        # Treating every non-zero as a decline is how a typo'd probe silently
-        # retires its own task's coverage forever, which is the exact failure
-        # this whole release is about.
+        #
+        # This NARROWS the hole, it does not close it: plenty of ordinary
+        # failures exit 1 by accident (a false `[ ]`, an unmatched grep, a
+        # Python traceback), so a buggy probe can still land on 1 and read as a
+        # legitimate decline. A probe that can misreport its own reason is worth
+        # writing carefully — see this repo's own precheck, which splits
+        # "bind refused" from "probe broken" by catching OSError specifically.
+        # The backstop for what still slips through is that the skip is printed
+        # with its reason and re-emitted by `verify` even when the gate passes,
+        # so a task that stops being graded says so on every run.
         case "$pc_rc" in
             0) ;;
             1) skip "$slug: host cannot run this task — ${why:-reference/precheck.sh declined}"

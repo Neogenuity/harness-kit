@@ -33,11 +33,24 @@ command -v python3 >/dev/null 2>&1 || {
 # `python3 -c "$var"` rather than a heredoc: `cmd <<'PY' || { ... }` is not
 # parseable (SC1073), and splitting it into an if/then around a heredoc puts the
 # program text between the condition and its body, which reads worse than this.
-bind_probe='import socket
-s = socket.socket()
-s.bind(("127.0.0.1", 0))
-s.close()'
-if ! python3 -c "$bind_probe" 2>/dev/null; then
-    echo "cannot bind a loopback port (sandboxed?)"
-    exit 1
-fi
+# The program distinguishes "bind was refused" (exit 1 — a real host decline)
+# from "this probe is broken" (exit 3 — a NameError/AttributeError from a typo
+# in the lines below). Without that split every Python failure collapses to
+# exit 1 and a typo'd probe reads as a legitimate decline, silently retiring
+# this task's grader coverage. It is not total: a SyntaxError is raised before
+# the try block runs and still exits 1. Narrower, not solved.
+bind_probe='import socket, sys
+try:
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    s.close()
+except OSError:
+    sys.exit(1)
+except Exception:
+    sys.exit(3)'
+python3 -c "$bind_probe" 2>/dev/null; bind_rc=$?
+case "$bind_rc" in
+    0) ;;
+    1) echo "cannot bind a loopback port (sandboxed?)"; exit 1 ;;
+    *) echo "bind probe itself failed (exit $bind_rc) — fix precheck.sh"; exit 3 ;;
+esac

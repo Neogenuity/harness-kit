@@ -127,11 +127,14 @@ with an optional **`reference/precheck.sh`**. It exits 0 when the host can run
 the task, or **1** with a one-line reason on stdout when it cannot, and
 `test-eval-graders.sh` then **skips** that task's validity check instead of
 failing it. Any other status means the precheck itself is broken — a syntax
-error, a missing interpreter — and is reported as a FAILURE, because treating
-every non-zero as a decline is how a typo'd probe silently retires its own
-task's coverage. A legitimate skip is counted and its reason printed, and
-`verify` re-emits `SKIP:` lines from a passing gate, so a narrowed run stays
-visible rather than reading as a clean one.
+error, a missing interpreter — and is reported as a FAILURE. That narrows the
+hole rather than closing it: plenty of ordinary failures exit 1 by accident, so
+write the probe to distinguish its own breakage from a real decline (this
+repo's catches `OSError` specifically, so a typo exits 3, not 1).
+
+A legitimate skip is counted and its reason printed, and `verify` re-emits
+`SKIP:` lines from a passing gate, so a narrowed run stays visible rather than
+reading as a clean one.
 
 Keep the prerequisite in the task, not in the runner: `verify-live-runtime`
 needs `python3` and a loopback bind because *its* fixture app is Python, but

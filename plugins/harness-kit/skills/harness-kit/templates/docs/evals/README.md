@@ -116,10 +116,12 @@ an optional **`reference/precheck.sh`**:
 - **exit 0** — this host can run the task; the full validity check proceeds.
 - **exit 1** — it cannot; print a one-line reason on stdout and the task's
   validity check is **skipped**, counted and named, rather than failed.
-- **any other status** — the precheck itself is broken (a syntax error, a
-  missing interpreter), and that is reported as a FAILURE. Treating every
-  non-zero as a decline is how a typo'd probe silently retires its own task's
-  coverage forever.
+- **any other status** — the precheck itself is broken (a shell syntax error,
+  a missing interpreter), and that is reported as a FAILURE. This narrows the
+  hole rather than closing it: plenty of ordinary failures exit 1 by accident,
+  so write the probe so its own breakage is distinguishable from a real
+  decline — catch the specific error that means "unavailable" and let anything
+  else fall through to a non-1 status.
 
 Keep the prerequisite in the task, not in the runner: the task knows whether it
 needs Python, Node, or a database; the shipped floor must not. The probe is not

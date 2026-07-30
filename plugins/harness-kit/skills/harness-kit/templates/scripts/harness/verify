@@ -593,6 +593,13 @@ full_gate() {
 # bitten by before.
 _echo_skips() {
     local _rest="$1" _line
+    # Fast path FIRST. The splitter below re-slices the remaining string each
+    # iteration, which is O(N^2) in the number of lines — bash string slicing
+    # copies, and there is no builtin line reader that does not need a temp file
+    # (see the heredoc note above). Almost every gate emits no SKIP at all, so
+    # one substring test retires the whole cost for them and bounds the
+    # quadratic term to output that actually contains a skip.
+    case "$_rest" in *SKIP:*) ;; *) return 0 ;; esac
     while [ -n "$_rest" ]; do
         _line=${_rest%%$'\n'*}
         if [ "$_line" = "$_rest" ]; then _rest=""; else _rest=${_rest#*$'\n'}; fi

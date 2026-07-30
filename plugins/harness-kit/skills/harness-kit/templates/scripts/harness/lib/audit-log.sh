@@ -189,10 +189,13 @@ REPORT=$(jq -cn --arg log_status "$LOG_STATUS" --argjson counters "$COUNTERS" --
 # leaves the CR, which then lands MID-LINE in an assembled row
 # ("status=available<CR> v1=1<CR> ..."); a terminal seeing that CR returns to
 # column 0, so the row renders overwritten rather than merely odd. It is also
-# what made the shipped golden-rendering test fail on Git Bash while printing
-# output that looked byte-identical to the golden — reproduced here by stubbing
-# a CRLF-emitting jq onto PATH, the same technique the binary-mode sha256 case
-# in test-install-core.sh uses.
+# suspected of the shipped golden-rendering test's Git Bash failure, whose
+# printed output looks byte-identical to its golden. It is NOT that cause: under
+# a CRLF-emitting jq nine other shipped suites fail too, and all nine pass on
+# that runner. This normalization is hardening kept on its own merits — jq's
+# Windows build does open stdout in text mode — and is pinned by a case that
+# stubs such a jq onto PATH, the same technique the binary-mode sha256 case in
+# test-install-core.sh uses.
 #
 # ONLY the text branch is normalized. The --format json branch is left exactly
 # as jq emits it: a CR there is insignificant JSON whitespace, and a blanket
