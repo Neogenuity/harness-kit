@@ -142,13 +142,27 @@ jobs:
           fails=0
           skipped=0
           for t in scripts/harness/tests/test-*.sh; do
+            # `if`, not `out=$(...); rc=$?`: GitHub runs this step under
+            # `bash --noprofile --norc -eo pipefail`, and a bare assignment whose
+            # command substitution fails aborts the whole step under -e — which
+            # is guaranteed to happen the moment the gapped suite fails, the one
+            # case this loop exists to report.
+            if out=$(bash "$t" 2>&1); then rc=0; else rc=$?; fi
+            n=$(printf '%s\n' "$out" | grep -c '^SKIP:' || true)
             case " $known_gaps " in
               *" $(basename "$t") "*)
-                echo "GAP:  $(basename "$t") — known Windows failure, see tech-debt.md"
+                # Known-failing, so NOT counted toward the job's exit status —
+                # but still RUN, and printed in full. Skipping the run would
+                # also skip the `od -c` dump the suite now emits on failure,
+                # and that dump is the only way this cause gets diagnosed: the
+                # whole point of excluding it is that nobody can reproduce it
+                # off a Windows runner. Excluded-from-FAILING is not
+                # excluded-from-RUNNING.
+                echo "GAP:  $(basename "$t") — known Windows failure (rc=$rc), not counted; see tech-debt.md"
+                printf '%s\n' "$out"
                 continue ;;
             esac
-            out=$(bash "$t" 2>&1) || { fails=$((fails + 1)); }
-            n=$(printf '%s\n' "$out" | grep -c '^SKIP:' || true)
+            [ "$rc" -eq 0 ] || fails=$((fails + 1))
             skipped=$((skipped + n))
             if printf '%s\n' "$out" | grep -qE '^(FAILED|FAIL:)'; then
               echo "=== $t ==="
