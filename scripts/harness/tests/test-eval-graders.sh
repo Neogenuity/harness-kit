@@ -32,12 +32,25 @@ cd "$ROOT" || exit 1
 
 TASKS_DIR="${EVAL_TASKS_DIR:-.harness/evals/scenarios}"
 fails=0
+skips=0
 ok()  { printf 'ok:   %s\n' "$1"; }
 bad() { printf 'FAIL: %s\n' "$1"; fails=$((fails + 1)); }
+# skip <reason> — a check this HOST cannot run, as opposed to one that failed.
+# Counted and echoed in the summary so a skipped task can never hide behind the
+# suite's success line; the shipped floor's CI step sums these '^SKIP:' lines
+# across suites for the same reason.
+skip() { printf 'SKIP: %s\n' "$1"; skips=$((skips + 1)); }
 
 finish() {
     echo "----"
-    if [ "$fails" -eq 0 ]; then echo "test-eval-graders: all checks passed"; exit 0; fi
+    if [ "$fails" -eq 0 ]; then
+        if [ "$skips" -gt 0 ]; then
+            echo "test-eval-graders: all checks passed ($skips skipped)"
+        else
+            echo "test-eval-graders: all checks passed"
+        fi
+        exit 0
+    fi
     echo "test-eval-graders: $fails check(s) failed"; exit 1
 }
 
@@ -49,12 +62,12 @@ if [ -z "$BANK_TASKS" ]; then
 fi
 
 if [ "${1:-}" = "--quick" ]; then
-    ok "grader validity (skipped: --quick)"
+    skip "grader validity (--quick requested)"
     finish
 fi
 
 if ! command -v git >/dev/null 2>&1; then
-    ok "grader validity (skipped: git absent)"
+    skip "grader validity (git absent)"
     finish
 fi
 
@@ -72,6 +85,44 @@ export HARNESS_SKIP_TESTS_FAMILY=1
 for slug in $BANK_TASKS; do
     td="$TASKS_DIR/$slug"
     base="$WORK/$slug"
+
+    # A task may need more of the host than a POSIX shell and git — a live dev
+    # server, a language runtime, a bindable port. reference/precheck.sh is how
+    # it says so: exit 0 when this host can run the task, non-zero with a reason
+    # on stdout when it cannot, and THIS task's grader-validity check is skipped
+    # rather than failed.
+    #
+    # Per-task rather than a TASK.md metadata enum on purpose. The shipped floor
+    # must not hardcode what any one task's runtime needs: this repo's
+    # live-runtime task wants python3 and a loopback bind, an adopter's might
+    # want node, a database, or a container. The task knows; the runner cannot.
+    #
+    # Without it the failure was "verify-live-runtime: reference/apply.sh
+    # errored" — which reads as a broken grader and sent triage at the eval
+    # bank, when the real answer was that Git Bash ships no python3. The skip is
+    # counted and named, so a precheck that always declines cannot quietly
+    # retire its own task's coverage.
+    #
+    # Runs BEFORE mkdir/clone: the workspace prep is the expensive step, and a
+    # host that cannot run the task should not pay for it.
+    if [ -f "$td/reference/precheck.sh" ]; then
+        why=$(bash "$td/reference/precheck.sh" 2>&1); pc_rc=$?
+        # EXACTLY 1 means "this host cannot run the task". Any OTHER non-zero is
+        # the precheck itself breaking — a syntax error (2), a missing
+        # interpreter (126/127), a killed process — and must FAIL, not skip.
+        # Treating every non-zero as a decline is how a typo'd probe silently
+        # retires its own task's coverage forever, which is the exact failure
+        # this whole release is about.
+        case "$pc_rc" in
+            0) ;;
+            1) skip "$slug: host cannot run this task — ${why:-reference/precheck.sh declined}"
+               continue ;;
+            *) bad "$slug: reference/precheck.sh exited $pc_rc (expected 0=can run, 1=cannot) — the probe is broken, not the host"
+               printf '%s\n' "$why" | sed 's/^/    /'
+               continue ;;
+        esac
+    fi
+
     mkdir -p "$base" || { bad "$slug: scratch dir"; continue; }
 
     ws="$base/repo"; logd="$base/log"

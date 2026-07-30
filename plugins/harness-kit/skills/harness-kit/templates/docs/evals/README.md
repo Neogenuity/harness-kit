@@ -25,6 +25,7 @@ workspace**, scored by **pass rate**:
     reference/
       apply.sh           # reference solution: makes check.sh pass (grader-validity proof)
       violate.sh         # negative tasks only: the forbidden shortcut check.sh must exit 3 on
+      precheck.sh        # optional: host prerequisites; exit 1 SKIPs this task's validity check
   rubrics/<slug>.md      # optional: semantic (LLM-judge) criteria + a dated calibration note
 ```
 
@@ -107,6 +108,23 @@ in the bank, and additionally proves each negative task's
 `reference/violate*.sh` **scores `violation`** and each `reference/wrongplace*.sh`
 is rejected. It runs in the shipped floor (the `harness-test` gate), and no-ops
 when the bank is empty — so the cost appears only once this repo authors tasks.
+
+A task whose reference solution needs more of the host than a POSIX shell and
+git — a live dev server, a language runtime, a bindable port — declares that in
+an optional **`reference/precheck.sh`**:
+
+- **exit 0** — this host can run the task; the full validity check proceeds.
+- **exit 1** — it cannot; print a one-line reason on stdout and the task's
+  validity check is **skipped**, counted and named, rather than failed.
+- **any other status** — the precheck itself is broken (a syntax error, a
+  missing interpreter), and that is reported as a FAILURE. Treating every
+  non-zero as a decline is how a typo'd probe silently retires its own task's
+  coverage forever.
+
+Keep the prerequisite in the task, not in the runner: the task knows whether it
+needs Python, Node, or a database; the shipped floor must not. The probe is not
+a second grader — a host that passes it still runs the full
+reference-scores-pass check.
 
 `check.sh`'s exit code is a three-way convention: **0** = pass; **3** = a
 negative task's grader caught the forbidden shortcut itself (recorded outcome

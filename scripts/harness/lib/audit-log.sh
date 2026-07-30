@@ -183,21 +183,44 @@ REPORT=$(jq -cn --arg log_status "$LOG_STATUS" --argjson counters "$COUNTERS" --
        then {code:"investigate_eval_regression",count:(.eval.report.regressions + .eval.report.violations)} else empty end)
     ])') || { echo "audit-log.sh: failed to build report" >&2; exit 1; }
 
+# _jq_text — jq -r for a value about to be interpolated into TEXT output, with
+# each line's trailing CR removed. A jq built for Windows opens stdio in TEXT
+# mode and ends every line with CRLF. Command substitution strips the LF and
+# leaves the CR, which then lands MID-LINE in an assembled row
+# ("status=available<CR> v1=1<CR> ..."); a terminal seeing that CR returns to
+# column 0, so the row renders overwritten rather than merely odd. It is also
+# what made the shipped golden-rendering test fail on Git Bash while printing
+# output that looked byte-identical to the golden — reproduced here by stubbing
+# a CRLF-emitting jq onto PATH, the same technique the binary-mode sha256 case
+# in test-install-core.sh uses.
+#
+# ONLY the text branch is normalized. The --format json branch is left exactly
+# as jq emits it: a CR there is insignificant JSON whitespace, and a blanket
+# strip could reach inside string values.
+#
+# On the exit status: this file sets `pipefail` (line 3), so the pipeline still
+# reports JQ's failure, not sed's zero — measured, `printf not-json | _jq_text .`
+# gives 5 with pipefail and 0 without. Either way nothing here branches on it:
+# every use below is a command substitution read for its stdout, and the
+# enclosing `printf` discards the status exactly as the un-piped calls did. The
+# json branch, whose status does matter, does not route through here.
+_jq_text() { jq -r "$@" | sed 's/\r$//'; }
+
 if [ "$FORMAT" = json ]; then
     printf '%s\n' "$REPORT" | jq -S '.'
 else
     printf 'Harness log: status=%s v1=%s v2=%s invalid-json=%s invalid-schema=%s unsupported=%s unknown-event=%s\n' \
-        "$LOG_STATUS" "$(printf '%s' "$COUNTERS" | jq -r .valid_v1)" "$(printf '%s' "$COUNTERS" | jq -r .valid_v2)" \
-        "$(printf '%s' "$COUNTERS" | jq -r .invalid_json)" "$(printf '%s' "$COUNTERS" | jq -r .invalid_schema)" \
-        "$(printf '%s' "$COUNTERS" | jq -r .unsupported_version)" "$(printf '%s' "$COUNTERS" | jq -r .unknown_event)"
+        "$LOG_STATUS" "$(printf '%s' "$COUNTERS" | _jq_text .valid_v1)" "$(printf '%s' "$COUNTERS" | _jq_text .valid_v2)" \
+        "$(printf '%s' "$COUNTERS" | _jq_text .invalid_json)" "$(printf '%s' "$COUNTERS" | _jq_text .invalid_schema)" \
+        "$(printf '%s' "$COUNTERS" | _jq_text .unsupported_version)" "$(printf '%s' "$COUNTERS" | _jq_text .unknown_event)"
     printf '%-10s %-24s %-6s %-5s %-5s %-5s %s\n' DAY GATE MODE RUNS PASS FAIL FAILURE-RATE
-    printf '%s' "$GATE_DAILY" | jq -r '.[] | [.day,.name,.mode,(.runs|tostring),(.passes|tostring),(.failures|tostring),(.failure_rate|tostring)] | @tsv' \
+    printf '%s' "$GATE_DAILY" | _jq_text '.[] | [.day,.name,.mode,(.runs|tostring),(.passes|tostring),(.failures|tostring),(.failure_rate|tostring)] | @tsv' \
         | while IFS="$(printf '\t')" read -r day name mode runs passes failures rate; do
             printf '%-10s %-24s %-6s %-5s %-5s %-5s %s\n' "$day" "$name" "$mode" "$runs" "$passes" "$failures" "$rate"
           done
     printf 'Plan cycles: N/A (no machine-readable lifecycle)\n'
-    printf 'Review findings: %s\n' "$(printf '%s' "$REVIEW_FINDINGS" | jq -r .count)"
-    printf 'Session commits: %s%s\n' "$(printf '%s' "$SESSION_COMMITS" | jq -r .status)" \
-        "$(printf '%s' "$SESSION_COMMITS" | jq -r 'if .reason then " ("+.reason+")" else "" end')"
-    printf 'Recommendations: %s\n' "$(printf '%s' "$REPORT" | jq -r '[.recommendations[].code] | if length==0 then "none" else join(", ") end')"
+    printf 'Review findings: %s\n' "$(printf '%s' "$REVIEW_FINDINGS" | _jq_text .count)"
+    printf 'Session commits: %s%s\n' "$(printf '%s' "$SESSION_COMMITS" | _jq_text .status)" \
+        "$(printf '%s' "$SESSION_COMMITS" | _jq_text 'if .reason then " ("+.reason+")" else "" end')"
+    printf 'Recommendations: %s\n' "$(printf '%s' "$REPORT" | _jq_text '[.recommendations[].code] | if length==0 then "none" else join(", ") end')"
 fi

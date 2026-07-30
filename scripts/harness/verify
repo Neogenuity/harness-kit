@@ -553,6 +553,7 @@ run_gate() {
         emit_gate_event "$label" "$outcome" "$status" "$duration"
         _cache_record "$label" "$key"
         echo "ok:   $label"
+        _echo_skips "$out"
     else
         status=$?
         outcome=fail
@@ -570,6 +571,33 @@ full_gate() {
     # declared before it. Do not let a consumer race its queued producers.
     wait_parallel_gates || exit 1
     run_gate "$@"
+}
+
+# _echo_skips <output> — re-emit any "SKIP:" lines a PASSING gate printed.
+# A gate's stdout is captured and DISCARDED when it passes, so a suite that
+# skipped a case for a missing platform capability reported it to nobody: the
+# operator saw only "ok:   <label>". Every shipped suite counts and names its
+# skips precisely so a narrowed run is visible, and the only consumer that ever
+# read them was the Windows CI step's `grep '^SKIP:'`. That made "the skip is
+# counted, so coverage loss cannot hide" true on one runner and false under
+# `verify` — the command this repo calls the executable definition of done.
+# Indented under the ok: line, so a clean run still reads as a clean run.
+#
+# PURE SHELL on purpose — no grep, no sed, no cat. This runs on the deliberately
+# stripped PATH the missing-jq case builds (bash date dirname mktemp rm sleep
+# touch and nothing else), where any external tool here would print
+# "command not found" into the very output that case compares. And no heredoc or
+# here-string to feed the loop: bash 3.2 puts those temporaries in $TMPDIR and
+# falls back to CWD, so under an unwritable CWD the loop silently iterates zero
+# times and the skip vanishes again — the fail-open pattern this repo has been
+# bitten by before.
+_echo_skips() {
+    local _rest="$1" _line
+    while [ -n "$_rest" ]; do
+        _line=${_rest%%$'\n'*}
+        if [ "$_line" = "$_rest" ]; then _rest=""; else _rest=${_rest#*$'\n'}; fi
+        case "$_line" in SKIP:*) printf '      %s\n' "$_line" ;; esac
+    done
 }
 
 # Bash 3.2-compatible parallel gate queue (macOS still ships Bash 3.2). Output
@@ -689,6 +717,10 @@ wait_parallel_gates() {
         emit_gate_event "${PARALLEL_LABELS[$index]}" "$outcome" "$recorded_status" "$duration"
         if [ "$recorded_status" -eq 0 ]; then
             echo "ok:   ${PARALLEL_LABELS[$index]}"
+            # $(<file) is a bash builtin read — `cat` is not on the stripped
+            # PATH the missing-jq case uses.
+            [ -s "${PARALLEL_OUTPUTS[$index]}" ] \
+                && _echo_skips "$(<"${PARALLEL_OUTPUTS[$index]}")"
         else
             [ -s "${PARALLEL_OUTPUTS[$index]}" ] \
                 && cat "${PARALLEL_OUTPUTS[$index]}"

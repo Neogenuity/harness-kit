@@ -124,20 +124,21 @@ jobs:
       - name: Shipped test floor
         if: always()
         run: |
-          # Two suites fail here for reasons this PR did not introduce and does
-          # not fix. They are excluded BY NAME and printed, never dropped
-          # silently — a gate that quietly covers less than it appears to is the
-          # failure mode this whole release is about. Tracked in
-          # docs/plans/tech-debt.md under "Two shipped suites fail on Windows".
+          # test-audit-log.sh stays excluded, and ONLY it. Its Git Bash failure
+          # is a golden-table mismatch whose printed table looks identical to
+          # the golden, and the cause is still UNKNOWN. A CRLF-emitting jq
+          # reproduces the symptom exactly on a POSIX host — but it is not the
+          # cause here: under such a jq nine other shipped suites fail too
+          # (test-affected-files.sh 13, test-guard-secrets.sh 28, ...), and all
+          # nine pass on this runner. The suite now dumps `od -c` for both sides
+          # on failure, so the next run that DOES fail here reports the actual
+          # bytes; un-exclude once those have been read, not before.
+          # See docs/plans/tech-debt.md.
           #
-          # test-verify.sh is deliberately NOT excluded. Its one Windows failure
-          # was a fixture the platform cannot build (a 0644 -> 0600 chmod that
-          # is not recorded), and the suite now capability-probes and SKIPs that
-          # single case. Excluding the whole file also dropped the only coverage
-          # of the '# inputs' full/--fast/--changed consistency regression (#23)
-          # — a fix shipped in this very release, left unguarded on the one
-          # platform this release is about.
-          known_gaps="test-audit-log.sh test-eval-graders.sh"
+          # test-eval-graders.sh is no longer excluded: that task now declares
+          # its host prerequisites (reference/precheck.sh) and SKIPs when they
+          # are unmet, which is honest whichever prerequisite Git Bash lacks.
+          known_gaps="test-audit-log.sh"
           fails=0
           skipped=0
           for t in scripts/harness/tests/test-*.sh; do

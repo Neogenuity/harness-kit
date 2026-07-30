@@ -57,35 +57,49 @@ a real plan in [PLANS.md](PLANS.md)'s lifecycle.
 - **haiku reward-hacks the neuter-check** — the negative-no-neuter-check
   scenario passes ~2/3 on haiku-tier models (recorded 2026-07-12). Revisit
   when re-baselining the eval matrix on newer cheap-tier models.
-- **Two shipped suites fail on Windows / Git Bash** — found by the
-  `adopter floor (windows / git bash)` CI job added in v0.41.0, which excludes
-  them by name so the gate can be green and honest. Both are pre-existing,
-  neither introduced by the v0.41.0 fixes, and neither reported by an adopter
-  yet. 17 of 19 suites plus `check-harness` and `bootstrap install` pass.
-  (`test-verify.sh` was the third: its single Windows failure — a
-  `chmod 644 -> 600` the platform does not record, so the `--changed` key has
-  nothing to move on — now capability-probes and `SKIP`s that one case, and the
-  suite runs on the Windows floor. That mattered beyond the one case: excluding
-  the file also dropped the only coverage of the `# inputs` mode-consistency
-  regression (#23), fixed in the same release. The probe declines on both
-  candidate causes — no usable `stat` dialect, or a chmod that does not stick —
-  so a Windows failure that survives it is a real defect, not a fixture the
-  platform refused to build.)
-  - `test-audit-log.sh` — `FAIL: table output drifted from the mixed-log golden
-    rendering`, yet the printed table is visually identical to the golden, so
-    the drift is invisible characters. The suite's own git fixture emits
-    `warning: in the working copy of 'x', LF will be replaced by CRLF`, so the
-    fixture repo inherits the system `core.autocrlf=true`. Suspect a CRLF
-    round-trip; unconfirmed. The failure message should print a byte-level diff
-    rather than just the actual table — that alone would have diagnosed it.
-  - `test-eval-graders.sh` — `verify-live-runtime: reference/apply.sh errored`.
-    That scenario needs a live dev runtime; it is environmental rather than a
-    Windows defect (it also fails in a linked worktree on macOS). Likeliest
-    resolution is scoping the scenario out of the adopter floor, not fixing it
-    for Windows.
+- **`test-audit-log.sh` fails on Windows / Git Bash, cause still unknown** — the
+  golden-table case reports a mismatch while printing a table that looks
+  byte-identical to its golden, so the difference is invisible characters. Two
+  hypotheses are now RULED OUT, neither replaced:
+  - a `core.autocrlf=true` round-trip (the originally recorded suspicion) —
+    forcing it on a POSIX host via `GIT_CONFIG_GLOBAL` reproduces the suite's
+    CRLF warnings but the case still passes;
+  - a CRLF-emitting jq (jq's Windows build does open stdout in text mode) —
+    it reproduces the symptom *exactly* on a POSIX host, but under such a jq
+    nine other shipped suites also fail (`test-affected-files.sh` 13 cases,
+    `test-guard-secrets.sh` 28, `test-advise-once.sh` 13, …) and all nine pass
+    on the runner. So the runner's jq is not emitting CRLF.
 
-  Promote when an adopter reports either of them, or when the Windows job is
-  promoted to a required check (trigger: either).
+  The suite now dumps `od -c` for the actual and expected tables on failure, so
+  the next Git Bash run that fails reports the bytes rather than a
+  visually-identical table. It stays excluded by name from the Windows floor
+  until those bytes have been read — landing the instrument and un-excluding in
+  the same change would have been guessing. Promote as soon as any Windows run
+  produces that dump.
+- **Shipped mechanism is not uniformly CR-safe if a hash/JSON tool emits CRLF** —
+  `_jq_text` in `lib/audit-log.sh` normalizes only that file's table branch. The
+  same `x=$(… | jq -r …)` then exact-compare pattern is unguarded in
+  `lib/check-doctor.sh:498` (a `true\r` silently disables the whole biome
+  formatter-coverage check #10e — a silent gate no-op, worse than a corrupt
+  table), `lib/eval-harness.sh` (regression/violation markers and table rows),
+  `hooks/lib.sh` (tool names, event names, file paths), and the maintainer-only
+  `scripts/check-packaging.sh`. Deliberately NOT fixed: the class is currently
+  hypothetical — no runner we test on emits CRLF from jq (see the entry above) —
+  and a repo-wide normalizer is a large change to justify on a cause that has
+  been falsified once already. Promote if any host is ever observed emitting
+  CRLF from jq, or if check #10e is reported as silently not running.
+- **The version-bump policy hook cannot tell a released HEAD from an unreleased
+  one** — `.harness/hooks/guard-project-policy.sh` warns when shipped templates
+  change while `VERSION` still equals `git show HEAD:...VERSION`. That is right
+  when HEAD is a released state, but during release prep HEAD is the
+  `release: v<x>` commit itself and is not yet tagged, so further fixes that
+  belong *in* that unreleased version trip the warning and the only way to
+  silence it is a wrong second bump. Hit twice while preparing v0.41.0. A fix
+  would compare against the newest `v*` TAG rather than HEAD, and stay silent
+  when `VERSION` is ahead of it. Low priority: the hook is advisory, the
+  workaround (commit, which clears the `git status` trigger) is normal
+  workflow, and the false positive is loud rather than silent. Promote if it
+  ever fires on a path where committing is not the next step.
 - **Maintainer suites still build PATH shims with `ln -s` + `command -v`** —
   six sites (`scripts/test-check-harness.sh:791`, `:857`, `:1115`;
   `scripts/test-install-core.sh:619`, `:643`, `:661`) carry the pattern issue

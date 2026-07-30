@@ -168,8 +168,68 @@ if [ "$rc" -eq 0 ] && [ "$table" = "$expected_table" ]; then
     pass "table output matches the mixed-log golden rendering"
 else
     fail "table output drifted from the mixed-log golden rendering"
-    printf '%s\n' "$table"
+    # BYTE-level, not just the rendered table. Every difference this case has
+    # ever caught was invisible on screen: a jq built for Windows terminates
+    # each line with CRLF, and command substitution leaves the CR embedded
+    # mid-row, so the printed table looked identical to the golden and the
+    # failure named nothing. `od -c` is the one dump tool present everywhere
+    # this floor runs (diff, cmp and `od -t` variants are not uniformly
+    # available on Git Bash); it renders a stray \r as plainly as a missing
+    # column.
+    printf '    --- actual (rc=%s) ---\n' "$rc"
+    printf '%s\n' "$table" | od -c | sed 's/^/    /'
+    printf '    --- expected ---\n'
+    printf '%s\n' "$expected_table" | od -c | sed 's/^/    /'
 fi
+
+# --- a CRLF-emitting jq must leave no CR in the table -------------------------
+# jq built for Windows opens stdio in TEXT mode, so every line it prints ends
+# CRLF. Command substitution strips the LF and leaves the CR, which lands
+# MID-ROW in the assembled table ("status=available<CR> v1=1<CR> ..."). On
+# screen that is invisible — it is exactly why the Git Bash failure of the
+# golden case above printed a table that looked byte-identical to its golden —
+# while a terminal actually renders the row overwritten from column 0.
+#
+# Stubbed rather than skipped, so the behavior is pinned on every runner and
+# not only on the one platform that ships such a jq; same technique as the
+# binary-mode sha256 case in test-install-core.sh. awk builds the CRLF, not
+# `sed 's/$/\r/'` — BSD sed's handling of \r in a replacement is not portable,
+# and test-install-core.sh's CRLF kit-manifest case set that precedent.
+CR=$(printf '\r')
+STUBJQ=$(mktemp -d "$WORK/crlfjq.XXXXXX") || exit 1
+# `type -P` searches PATH for an executable FILE and skips builtins, so the
+# wrapper always has a resolvable absolute target.
+realjq=$(type -P jq 2>/dev/null)
+if [ -z "$realjq" ]; then
+    fail "CRLF-jq case: no jq on PATH to wrap (the suite cannot have got this far without one)"
+else
+    # `set -o pipefail` in the stub, or the wrapper always exits 0 and silently
+    # converts every jq failure into a success — which would disable the
+    # `|| { ...; exit 1; }` arms inside audit-log.sh for the whole case and
+    # destroy `jq -e`'s false-means-non-zero contract for any future call site.
+    cat > "$STUBJQ/jq" <<EOF
+#!/bin/sh
+set -o pipefail
+"$realjq" "\$@" | awk '{ printf "%s\r\n", \$0 }'
+EOF
+    # 755 explicitly: `chmod +x` is masked by the caller's umask.
+    chmod 755 "$STUBJQ/jq"
+    # Prove the stub really emits CRLF first, or the assertion below is vacuous
+    # — it would pass just as well against a stub that did nothing.
+    stub_raw=$(printf '{"a":1}' | PATH="$STUBJQ:$PATH" jq -r .a)
+    case "$stub_raw" in *"$CR"*) stub_crlf=1 ;; *) stub_crlf=0 ;; esac
+    crlf_table=$(PATH="$STUBJQ:$PATH" bash "$WORK/repo/scripts/harness/lib/audit-log.sh" \
+        --repo "$WORK/repo" --log "$WORK/repo/.harness/var/log.jsonl" --format table); rc=$?
+    case "$crlf_table" in *"$CR"*) table_crlf=1 ;; *) table_crlf=0 ;; esac
+    if [ "$stub_crlf" -eq 1 ] && [ "$rc" -eq 0 ] \
+            && [ "$table_crlf" -eq 0 ] && [ "$crlf_table" = "$expected_table" ]; then
+        pass "a text-mode jq's CRLF never reaches the rendered table"
+    else
+        fail "CR from a text-mode jq reached the table (stub emitted CRLF=$stub_crlf, rc=$rc, table carries CR=$table_crlf)"
+        printf '%s\n' "$crlf_table" | od -c | sed 's/^/        /'
+    fi
+fi
+rm -rf "$STUBJQ"
 
 if [ "$fails" -gt 0 ]; then echo "FAILED: $fails audit-log test(s)"; exit 1; fi
 echo "OK: audit-log tests passed"
