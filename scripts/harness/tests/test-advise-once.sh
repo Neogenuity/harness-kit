@@ -162,7 +162,7 @@ fi
 
 # --- observability: an advisory appends one valid JSON line ---
 LOG="$WORK/log.jsonl"
-printf '%s' '{"stop_hook_active": false}' | env HARNESS_LOG=1 HARNESS_LOG_FILE="$LOG" "$HOOK" >/dev/null 2>&1
+printf '%s' '{"stop_hook_active": false}' | env HARNESS_TESTING=0 HARNESS_LOG=1 HARNESS_LOG_FILE="$LOG" "$HOOK" >/dev/null 2>&1
 if [ -f "$LOG" ] && jq -e 'select(.version == 2 and .event == "advise"
         and keys == ["context","data","detail","event","file","hook","ts","version"])' "$LOG" >/dev/null 2>&1; then
     echo "ok:   advisory appends a valid JSON log line"

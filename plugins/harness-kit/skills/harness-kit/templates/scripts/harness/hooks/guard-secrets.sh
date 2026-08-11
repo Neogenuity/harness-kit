@@ -120,12 +120,12 @@ check_path() {
     target_verdict=$(classify "$target_name")
     [ "$target_verdict" = allow ] && return 0
     if [ "$target_verdict" = secret ]; then
-        hook_deny "Blocked by scripts/harness/hooks/guard-secrets.sh: '$literal_name' may contain real secrets. Use an .example/.testing variant instead."
+        hook_deny "Blocked by scripts/harness/hooks/guard-secrets.sh: '$literal_name' may contain real secrets. Use an .example/.testing variant instead." "$file"
     fi
     if [ "$target_name" != "$literal_name" ]; then
         literal_verdict=$(classify "$literal_name")
         if [ "$literal_verdict" = secret ]; then
-            hook_deny "Blocked by scripts/harness/hooks/guard-secrets.sh: '$literal_name' may contain real secrets. Use an .example/.testing variant instead."
+            hook_deny "Blocked by scripts/harness/hooks/guard-secrets.sh: '$literal_name' may contain real secrets. Use an .example/.testing variant instead." "$file"
         fi
     fi
     return 0

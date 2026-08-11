@@ -316,6 +316,14 @@ if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; th
         "$(sha "$W/scripts/harness/check-harness")" "$(sha "$W/scripts/harness/kit-manifest")" > "$W/scripts/harness/.harness-manifest"
     assert_flags "manifest completeness: optional dev.sh missing-line is flagged" "$W" "dev.sh' is present but not pinned"
 
+    W=$(new_fixture)
+    mkdir -p "$W/scripts/harness/hooks" "$W/.opencode/plugins"
+    write_kmf "$W" "optional-policy .opencode/plugins/harness-kit.js"
+    printf 'export const HarnessKit = async () => ({})\n' > "$W/.opencode/plugins/harness-kit.js"
+    printf '# harness-kit 9.9.9\n%s  scripts/harness/check-harness\n%s  scripts/harness/kit-manifest\n' \
+        "$(sha "$W/scripts/harness/check-harness")" "$(sha "$W/scripts/harness/kit-manifest")" > "$W/scripts/harness/.harness-manifest"
+    assert_flags "manifest completeness: executable OpenCode adapter missing-line is flagged" "$W" "harness-kit.js' is present but not pinned"
+
     # The hooks-tree arm itself: an executable hook script present on disk but
     # never given a manifest line must be flagged too — the hooks tree is
     # filesystem-derived (a repo-local hook needs a pin even though the
@@ -530,6 +538,77 @@ cat > "$W/docs/plans/active/wip.md" <<'EOF'
 Stuff.
 EOF
 assert_warns "an active plan without a Next action warns" "$W" "no 'Next action' section"
+
+W=$(new_fixture)
+mkdir -p "$W/docs/plans/active"
+cat > "$W/docs/plans/active/current.md" <<'EOF'
+---
+harness_plan: 1
+status: active
+started: 2026-08-11
+completed: null
+---
+# Current
+## Next action
+Continue.
+EOF
+assert_ok "valid active plan lifecycle metadata passes" "$W"
+
+W=$(new_fixture)
+mkdir -p "$W/docs/plans/active"
+cat > "$W/docs/plans/active/general-frontmatter.md" <<'EOF'
+---
+title: General Markdown metadata
+tags: [planning]
+---
+# General metadata
+## Next action
+Continue.
+EOF
+assert_ok "unrelated Markdown frontmatter does not opt into harness lifecycle validation" "$W"
+
+W=$(new_fixture)
+mkdir -p "$W/docs/plans/active"
+cat > "$W/docs/plans/active/wrong-state.md" <<'EOF'
+---
+harness_plan: 1
+status: completed
+started: 2026-08-11
+completed: 2026-08-12
+---
+# Wrong state
+## Next action
+Continue.
+EOF
+assert_flags "plan lifecycle state must agree with its directory" "$W" "directory requires 'active'"
+
+W=$(new_fixture)
+mkdir -p "$W/docs/plans/completed"
+cat > "$W/docs/plans/completed/backwards.md" <<'EOF'
+---
+harness_plan: 1
+status: completed
+started: 2026-08-12
+completed: 2026-08-11
+---
+# Backwards
+EOF
+assert_flags "plan completion cannot precede activation" "$W" "precedes its start date"
+
+W=$(new_fixture)
+mkdir -p "$W/docs/plans/active"
+cat > "$W/docs/plans/active/impossible-date.md" <<'EOF'
+---
+harness_plan: 1
+status: active
+started: 2026-02-30
+completed: null
+---
+# Impossible date
+## Next action
+Continue.
+EOF
+assert_flags "plan lifecycle dates must be real calendar dates" "$W" "real YYYY-MM-DD date"
 
 # git-age arm: a plan committed long ago warns. Gated on git being present.
 if command -v git >/dev/null 2>&1; then
@@ -1970,7 +2049,7 @@ assert_flags "8g: an unknown skill_stubs enum is rejected" \
     "skill_stubs [maybe] not in {yes,no}"
 assert_flags "8g: a hook_config with an unknown shape is rejected" \
     "$(new_caps_fixture '.badhook     yes          md             .x/y.json:sideways             none')" \
-    "not none or <safe-relative-path>:(nested|flat)"
+    "not none or <safe-relative-path>:(nested|flat|plugin)"
 assert_flags "8g: a duplicate provider row is rejected" \
     "$(new_caps_fixture '.claude      no           toml           none                           none')" \
     "provider .claude appears more than once"

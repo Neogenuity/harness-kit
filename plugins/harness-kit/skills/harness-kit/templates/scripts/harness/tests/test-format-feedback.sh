@@ -23,6 +23,7 @@ trap 'rm -rf "$WORK"' EXIT
 cp "$HOOKS_DIR/lib.sh" "$WORK/lib.sh"
 cp "$HOOKS_DIR/../lib/log-lib.sh" "$WORK/log-lib.sh"
 export HARNESS_LOG=1
+export HARNESS_TESTING=0
 export HARNESS_LOG_FILE="$WORK/log.jsonl"
 cat > "$WORK/fixture-hook.sh" <<'EOF'
 #!/usr/bin/env bash

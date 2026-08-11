@@ -481,8 +481,14 @@ guard-secrets.sh PreToolUse @any
 guard-config.sh PreToolUse @any
 format.sh PostToolUse @any
 guard-project-policy.sh Stop @any' ;;
+        .opencode)
+            cfg=".opencode/plugins/harness-kit.js"; shape="plugin"
+            tuples='session-context.sh experimental.chat.system.transform @any
+guard-secrets.sh tool.execute.before @any
+guard-config.sh tool.execute.before @any
+format.sh tool.execute.after @any' ;;
         *)
-            echo "ERROR: HOOK_WIRED_PROVIDERS names '$prov' but check-harness has no hook-tuple contract for it — only .claude, .cursor, .codex are hook-wired; remove it or extend the contract table"
+            echo "ERROR: HOOK_WIRED_PROVIDERS names '$prov' but check-harness has no hook-tuple contract for it — only .claude, .cursor, .codex, .opencode are hook-wired; remove it or extend the contract table"
             ERRORS=$((ERRORS + 1)); return ;;
     esac
 
@@ -491,9 +497,14 @@ guard-project-policy.sh Stop @any' ;;
         ERRORS=$((ERRORS + 1)); return
     fi
 
-    # Parsing the wiring needs jq; without it the guards fail open anyway.
-    command -v jq >/dev/null 2>&1 || return 0
-    if [ "$shape" = "nested" ]; then
+    # JSON configs need jq. The OpenCode adapter is JavaScript and carries one
+    # generated/checkable marker per binding; OpenCode/Bun remains the runtime
+    # parser, while this static check pins event-to-script coverage offline.
+    if [ "$shape" = "plugin" ]; then
+        rows=$(sed -n 's|^[[:space:]]*// harness-hook: \([^[:space:]]*\) \([^[:space:]]*\).*$|\1\	\	scripts/harness/hooks/\2|p' "$ROOT/$cfg" 2>/dev/null); rc=$?
+    elif ! command -v jq >/dev/null 2>&1; then
+        return 0
+    elif [ "$shape" = "nested" ]; then
         rows=$(jq -r '(.hooks // {}) | to_entries[] | .key as $ev | (.value[]?) | (.matcher // "") as $m | (.hooks[]?.command // empty) as $c | [$ev, $m, $c] | @tsv' "$ROOT/$cfg" 2>/dev/null); rc=$?
     else
         rows=$(jq -r '(.hooks // {}) | to_entries[] | .key as $ev | (.value[]?) | [$ev, "", (.command // empty)] | @tsv' "$ROOT/$cfg" 2>/dev/null); rc=$?
@@ -577,6 +588,13 @@ guard-project-policy.sh Stop @any' ;;
         fi
     done < <(printf '%s\n' "$hook_paths")
     assert_loop_ran "$path_rows" "hook command resolvability check #8d for $cfg"
+
+    if [ "$shape" = "plugin" ]; then
+        if ! grep -qF '"shell.env"' "$ROOT/$cfg" || ! grep -qF 'HARNESS_SESSION_ID' "$ROOT/$cfg"; then
+            echo "ERROR: OpenCode hook adapter $cfg does not inject HARNESS_SESSION_ID through shell.env — verify retry attribution would be structurally empty"
+            ERRORS=$((ERRORS + 1))
+        fi
+    fi
 }
 
 hook_wired_declared=0
@@ -940,8 +958,8 @@ if command -v _provider_caps_file >/dev/null 2>&1; then
                 # .. — a validator joins it under the repo root. First char
                 # [^:/] rejects an absolute or empty path; /\.\./ rejects
                 # traversal.
-                if ($4 != "none" && ($4 !~ /^[^:\/][^:]*:(nested|flat)$/ || $4 ~ /\.\./))
-                    printf "row %d [%s]: hook_config [%s] not none or <safe-relative-path>:(nested|flat)\n", NR, $1, $4
+                if ($4 != "none" && ($4 !~ /^[^:\/][^:]*:(nested|flat|plugin)$/ || $4 ~ /\.\./))
+                    printf "row %d [%s]: hook_config [%s] not none or <safe-relative-path>:(nested|flat|plugin)\n", NR, $1, $4
                 if ($5 != "none" && ($5 !~ /^[^:\/][^:]*:[^:]+$/ || $5 ~ /\.\./))
                     printf "row %d [%s]: exec_config [%s] not none or <safe-relative-path>:<checker>\n", NR, $1, $5
             }

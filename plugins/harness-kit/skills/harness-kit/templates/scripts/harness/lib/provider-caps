@@ -23,8 +23,7 @@
 #                    stub renders (Codex = TOML; OpenCode = Markdown + a
 #                    `mode: subagent` line); 'none' = receives no agent stub.
 #   4 hook_config    <path>:<shape> | none. The provider's hook-wiring config
-#                    and its jq shape (nested|flat); 'none' = no bash hook shim
-#                    (OpenCode is descoped, per the frozen provider matrix).
+#                    and its validation shape (nested|flat|plugin).
 #   5 exec_config    <path>:<checker> | none. The provider's execution-profile
 #                    config and the check-harness #8e validator that reads it.
 #
@@ -36,4 +35,4 @@
 .claude      yes          md             .claude/settings.json:nested   .claude/settings.json:claude
 .cursor      yes          md             .cursor/hooks.json:flat        .cursor/sandbox.json:cursor
 .codex       no           toml           .codex/hooks.json:nested       .codex/config.toml:codex
-.opencode    yes          md-subagent    none                           opencode.json:opencode
+.opencode    yes          md-subagent    .opencode/plugins/harness-kit.js:plugin opencode.json:opencode

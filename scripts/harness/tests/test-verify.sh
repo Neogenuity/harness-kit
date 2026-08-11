@@ -61,7 +61,7 @@ make_fixture() {
 # bounded default on a low-core host (the default job cap is the core count).
 cat > "$WORK/success.gates" <<'EOF'
 # fixture gate policy: one fast serial gate + a two-job rendezvous
-gate fast-probe touch "$TEST_WORK/fast"
+gate fast-probe [ "${HARNESS_TESTING:-}" = 1 ] && touch "$TEST_WORK/fast"
 parallel first touch "$TEST_WORK/first.started"; i=0; while [ ! -f "$TEST_WORK/second.started" ] && [ "$i" -lt 100 ]; do sleep 0.05; i=$((i + 1)); done; [ -f "$TEST_WORK/second.started" ]; echo first-detail
 parallel second touch "$TEST_WORK/second.started"; i=0; while [ ! -f "$TEST_WORK/first.started" ] && [ "$i" -lt 100 ]; do sleep 0.05; i=$((i + 1)); done; [ -f "$TEST_WORK/first.started" ]; echo second-detail
 EOF
@@ -77,6 +77,36 @@ if [ "$rc" -eq 0 ] \
 else
     fail "parallel full gates did not overlap or report cleanly"
     printf '%s\n' "$out" | sed 's/^/        /'
+fi
+
+# A gate that reads stdin must see EOF, not the runner's still-open gates.conf.
+# Otherwise it can consume every declaration after itself and the runner exits
+# green after executing only a prefix of the configured gates.
+cat > "$WORK/stdin.gates" <<'EOF'
+parallel reader if IFS= read -r line; then echo "consumed gate config: $line"; exit 1; fi
+parallel after touch "$TEST_WORK/after-stdin"
+EOF
+V_STDIN=$(make_fixture stdin "$WORK/stdin.gates")
+out=$(bash "$V_STDIN" --jobs 2 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && has "$out" 'ok:   reader' && has "$out" 'ok:   after' \
+        && [ -f "$WORK/after-stdin" ]; then
+    pass "gate commands cannot consume later gates.conf declarations from stdin"
+else
+    fail "a stdin-reading gate consumed or hid later declarations"
+    printf '%s\n' "$out" | sed 's/^/        /'
+fi
+
+: > "$HARNESS_LOG_FILE"
+out=$(env -u HARNESS_SESSION_ID -u HARNESS_PROVIDER CODEX_THREAD_ID=codex-thread bash "$V_SUCCESS" --jobs 4 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && jq -e -s '
+        length == 3 and all(.[];
+          .context.session_id == "codex-thread"
+          and .context.provenance.session_id == "provider-env"
+          and .context.provider == "codex"
+          and .context.provenance.provider == "provider-env")' "$HARNESS_LOG_FILE" >/dev/null 2>&1; then
+    pass "Codex provider environment attributes verify gates without shared state"
+else
+    fail "Codex provider environment attribution missing from gate events"
 fi
 if jq -e -s '
     length == 3

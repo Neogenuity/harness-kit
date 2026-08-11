@@ -249,7 +249,7 @@ run_conf 0 "conf replaces defaults (.env allowed under custom conf)" "$(payload 
 LOG="$WORK/log.jsonl"
 obs_payload=$(printf '%s' "$(payload "$WORK/.env")" | jq -c '.session_id="payload-session"')
 printf '%s' "$obs_payload" | env HARNESS_LOG=1 HARNESS_LOG_FILE="$LOG" \
-    HARNESS_PROVIDER=codex HARNESS_PLAN_SLUG=v017 "$HOOK" >/dev/null 2>&1
+    HARNESS_TESTING=0 HARNESS_PROVIDER=codex HARNESS_PLAN_SLUG=v017 "$HOOK" >/dev/null 2>&1
 if [ -f "$LOG" ] && [ "$(wc -l < "$LOG" | tr -d '[:space:]')" = "1" ] \
     && jq -e 'select(.version == 2 and .event == "deny" and .hook == "guard-secrets.sh"
         and keys == ["context","data","detail","event","file","hook","ts","version"]
@@ -260,6 +260,15 @@ if [ -f "$LOG" ] && [ "$(wc -l < "$LOG" | tr -d '[:space:]')" = "1" ] \
 else
     echo "FAIL: deny did not append one valid JSON log line"
     fails=$((fails + 1))
+fi
+
+printf '%s' "$(codex_shell "cat $WORK/.env")" | env HARNESS_LOG=1 HARNESS_LOG_FILE="$WORK/shell-log.jsonl" \
+    HARNESS_TESTING=0 "$HOOK" >/dev/null 2>&1
+if jq -e --arg path "$WORK/.env" 'select(.event == "deny" and .file == $path)' \
+        "$WORK/shell-log.jsonl" >/dev/null 2>&1; then
+    echo "ok:   shell-command deny logs the matched path"
+else
+    echo "FAIL: shell-command deny did not log its matched path"; fails=$((fails + 1))
 fi
 printf '%s' "$(payload "$WORK/.env")" | env HARNESS_LOG=0 HARNESS_LOG_FILE="$WORK/off.jsonl" "$HOOK" >/dev/null 2>&1
 if [ -e "$WORK/off.jsonl" ]; then

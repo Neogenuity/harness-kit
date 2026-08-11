@@ -16,6 +16,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TPL="$ROOT/plugins/harness-kit/skills/harness-kit/templates/scripts"
 MANIFEST="$ROOT/scripts/harness/.harness-manifest"
+OPENCODE_TPL="$ROOT/plugins/harness-kit/skills/harness-kit/templates/providers/opencode/plugins/harness-kit.js"
 
 [ -d "$TPL" ] || { echo "SKIP: no template dir at ${TPL#"$ROOT"/}"; exit 0; }
 
@@ -82,6 +83,19 @@ while IFS= read -r tpl_file; do
     fails=$((fails + 1))
 done < <(find "$TPL" -type f | sort)
 
+# The OpenCode project plugin is executable provider content outside the
+# scripts-only installer tree. It is still an exact shipped adapter and is
+# integrity-pinned in the dogfood install, so give it the same two-way drift
+# check as mechanism files.
+if [ -f "$OPENCODE_TPL" ] || [ -f "$ROOT/.opencode/plugins/harness-kit.js" ]; then
+    checked=$((checked + 1))
+    if [ ! -f "$OPENCODE_TPL" ] || [ ! -f "$ROOT/.opencode/plugins/harness-kit.js" ] \
+        || ! cmp -s "$OPENCODE_TPL" "$ROOT/.opencode/plugins/harness-kit.js"; then
+        echo "FAIL: .opencode/plugins/harness-kit.js does not match its provider template"
+        fails=$((fails + 1))
+    fi
+fi
+
 # Reverse: every non-tailored file the manifest pins must still have a
 # template twin — a template rename/removal must not leave a stale installed
 # copy behind.
@@ -89,7 +103,11 @@ while IFS= read -r line; do
     case "$line" in \#*|"") continue ;; *"# tailored"*) continue ;; esac
     rel=$(printf '%s\n' "$line" | awk '{print $2}')
     [ -n "$rel" ] || continue
-    if [ ! -f "$TPL/$(template_rel "$rel")" ]; then
+    case "$rel" in
+        .opencode/plugins/harness-kit.js) twin="$OPENCODE_TPL" ;;
+        *) twin="$TPL/$(template_rel "$rel")" ;;
+    esac
+    if [ ! -f "$twin" ]; then
         echo "FAIL: $rel is manifest-pinned but has no template twin under plugins/harness-kit/skills/harness-kit/templates/scripts/ — the template was renamed or removed; update the installed copy and its manifest line to match"
         fails=$((fails + 1))
     fi

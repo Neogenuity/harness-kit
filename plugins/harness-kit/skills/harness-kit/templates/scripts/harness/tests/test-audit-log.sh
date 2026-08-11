@@ -37,6 +37,18 @@ git -C "$WORK/repo" commit -qF "$WORK/message"
 trailer_commit=$(git -C "$WORK/repo" rev-parse HEAD)
 printf 'malformed trailer\n\nHarness-Session-Id malformed\n' > "$WORK/message"
 git -C "$WORK/repo" commit -q --allow-empty -F "$WORK/message"
+
+mkdir -p "$WORK/repo/docs/plans/completed"
+cat > "$WORK/repo/docs/plans/completed/v1.0.0-example.md" <<'EOF'
+---
+harness_plan: 1
+status: completed
+started: 2026-07-10
+completed: 2026-07-15
+---
+# Example
+EOF
+printf '# Legacy completed plan\n' > "$WORK/repo/docs/plans/completed/legacy.md"
 printf 'control trailer\n\nHarness-Session-Id: bad\tid\n' > "$WORK/message"
 git -C "$WORK/repo" commit -q --allow-empty -F "$WORK/message"
 { printf 'overlong trailer\n\nHarness-Session-Id: '; printf '%0257d\n' 0; } > "$WORK/message"
@@ -73,13 +85,34 @@ if [ "$rc" -eq 0 ] && printf '%s' "$report" | jq -e --arg seed "$seed_commit" --
     and .session_commits == {status:"available",items:[
       {session_id:"alpha,beta",commit:$trailer},{session_id:"dupe",commit:$trailer},
       {session_id:"session-1",commit:$seed}],reason:null}
-    and .plan_cycles.status == "not_available"
+    and .plan_cycles == {status:"available",items:[{
+      plan:"docs/plans/completed/v1.0.0-example.md",started:"2026-07-10",
+      completed:"2026-07-15",duration_days:5}],summary:{count:1,average_days:5},reason:null}
     and .eval.status == "not_available"
     and [.recommendations[].code] == ["repair_invalid_log_rows","address_gate_failures","reduce_gate_retries","engineer_repeat_denies"]' >/dev/null; then
     pass "schemas, reviews, denies, and lossless deduplicated trailers are deterministic"
 else
     fail "audit JSON report drifted"
     printf '%s\n' "$report"
+fi
+
+since_report=$(bash "$WORK/repo/scripts/harness/lib/audit-log.sh" --repo "$WORK/repo" \
+    --log "$WORK/repo/.harness/var/log.jsonl" --since 2026-07-16 --format json); rc=$?
+if [ "$rc" -eq 0 ] && printf '%s' "$since_report" | jq -e '
+    .log == {status:"available",since:"2026-07-16"}
+    and .parser == {valid_v1:1,valid_v2:5,invalid_json:1,invalid_schema:6,unsupported_version:1,unknown_event:1}
+    and .gate_outcomes_daily == [] and .retry_episodes == [] and .repeat_denies == []
+    and .review_findings == {count:0}' >/dev/null; then
+    pass "--since filters trends without hiding retained-log parser health"
+else
+    fail "--since changed parser counters or retained pre-window events"
+fi
+
+if bash "$WORK/repo/scripts/harness/lib/audit-log.sh" --repo "$WORK/repo" \
+        --since yesterday --format json >/dev/null 2>&1; then
+    fail "invalid --since values were accepted"
+else
+    pass "invalid --since values are rejected"
 fi
 
 mkdir -p "$WORK/alternate/scripts/harness/lib" "$WORK/alternate/.harness/var/eval-results" "$WORK/alternate/.harness/evals"
@@ -162,7 +195,7 @@ expected_table=$(cat <<'EOF'
 Harness log: status=available v1=1 v2=5 invalid-json=1 invalid-schema=6 unsupported=1 unknown-event=1
 DAY        GATE                     MODE   RUNS  PASS  FAIL  FAILURE-RATE
 2026-07-15 tests                    full   2     1     1     0.5
-Plan cycles: N/A (no machine-readable lifecycle)
+Plan cycles: 1 completed, average 5 days
 Review findings: 1
 Session commits: available
 Recommendations: repair_invalid_log_rows, address_gate_failures, reduce_gate_retries, engineer_repeat_denies, investigate_eval_regression

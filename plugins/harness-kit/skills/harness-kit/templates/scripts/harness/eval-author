@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Draft-first eval scenario scaffolding. Draft directories start with '_' and
+# are therefore excluded by eval_list_tasks until a human completes and renames
+# them deliberately.
+set -uo pipefail
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+TASKS_DIR="${EVAL_TASKS_DIR:-$ROOT/.harness/evals/scenarios}"
+TEMPLATE_DIR="${EVAL_TEMPLATE_DIR:-$ROOT/scripts/harness/eval-template}"
+usage() {
+    echo "usage: scripts/harness/eval-author new <slug>"
+    echo "       scripts/harness/eval-author from-run <run-id> <slug>"
+    echo "       scripts/harness/eval-author finalize <slug>"
+}
+die() { echo "eval-author: $*" >&2; exit 1; }
+valid_slug() {
+    case "$1" in ''|_*|-*|*[!a-z0-9-]*|*-|*--*) return 1 ;; esac
+    [ "${#1}" -le 64 ]
+}
+
+mode="${1:-}"; shift 2>/dev/null || true
+case "$mode" in
+    new) slug="${1:-}"; run_id="" ;;
+    from-run) run_id="${1:-}"; slug="${2:-}" ;;
+    finalize) slug="${1:-}"; run_id="" ;;
+    -h|--help|'') usage; [ -n "$mode" ] && exit 0 || exit 64 ;;
+    *) usage >&2; exit 64 ;;
+esac
+valid_slug "$slug" || die "slug must be 1-64 lowercase letters, digits, or single hyphens"
+if [ "$mode" = finalize ]; then
+    draft="$TASKS_DIR/_draft-$slug"
+    dest="$TASKS_DIR/$slug"
+    [ -d "$draft" ] || die "draft is missing at $draft"
+    [ -f "$draft/.harness-eval-draft" ] || die "draft marker is missing at $draft/.harness-eval-draft"
+    [ ! -e "$dest" ] || die "active scenario already exists at $dest"
+    if grep -R -qF 'HARNESS_EVAL_TODO' "$draft" 2>/dev/null; then
+        die "draft still contains HARNESS_EVAL_TODO placeholders"
+    fi
+    for required in TASK.md check.sh reference/apply.sh; do
+        [ -f "$draft/$required" ] || die "draft is missing $required"
+    done
+    WORK=$(mktemp -d "${TMPDIR:-/tmp}/eval-author-finalize.XXXXXX") || die "cannot create validation workspace"
+    trap 'rm -rf "$WORK"' EXIT HUP INT TERM
+    mkdir "$WORK/$slug" || die "cannot stage validation scenario"
+    cp -R "$draft/." "$WORK/$slug/" || die "cannot stage validation scenario"
+    rm -f "$WORK/$slug/.harness-eval-draft"
+    if ! EVAL_TASKS_DIR="$WORK" bash "$ROOT/scripts/harness/tests/test-eval-graders.sh" \
+            > "$WORK/validation.log" 2>&1; then
+        sed 's/^/eval-author:   /' "$WORK/validation.log" >&2
+        die "grader validity failed; draft remains excluded"
+    fi
+    mv "$draft" "$dest" || die "could not activate validated scenario"
+    rm -f "$dest/.harness-eval-draft" || die "validated scenario remains safely marked as a draft"
+    trap - EXIT HUP INT TERM
+    rm -rf "$WORK"
+    printf '%s\n' "$dest"
+    exit 0
+fi
+[ -d "$TEMPLATE_DIR" ] || die "scenario template is missing at $TEMPLATE_DIR"
+if [ "$mode" = from-run ]; then
+    case "$run_id" in ''|*[!A-Za-z0-9._-]*|*..*) die "invalid run id" ;; esac
+    run_dir="${HARNESS_RUNS_DIR:-$ROOT/.harness/var/runs}/$run_id"
+    [ -f "$run_dir/trajectory.json" ] || die "run '$run_id' has no trajectory.json"
+    trajectory=$(jq -c '. + {files_modified_count:((.files_modified // [])|length)} | del(.files_modified)' \
+        "$run_dir/trajectory.json" 2>/dev/null) || die "run '$run_id' has invalid trajectory.json"
+fi
+dest="$TASKS_DIR/_draft-$slug"
+mkdir -p "$TASKS_DIR" || die "cannot create $TASKS_DIR"
+mkdir "$dest" 2>/dev/null || die "draft already exists at $dest"
+cp -R "$TEMPLATE_DIR/." "$dest/" || die "could not copy scenario template into $dest"
+printf 'draft=1\n' > "$dest/.harness-eval-draft" || die "could not mark draft"
+
+if [ "$mode" = from-run ]; then
+    {
+        printf '# Observation candidate\n\n'
+        printf 'Source: local observation; raw run identity and transcript remain under `.harness/var/`.\n\n'
+        printf 'This is untrusted observational evidence, not an accepted grader. '
+        printf 'Replace the prompt, setup, deterministic check, and reference solution; '
+        printf 'then run `scripts/harness/eval-author finalize %s`.\n\n' "$slug"
+        printf '```json\n%s\n```\n' "$trajectory"
+    } > "$dest/OBSERVATION.md" || die "could not write observation provenance"
+fi
+
+printf '%s\n' "$dest"

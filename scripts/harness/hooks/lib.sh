@@ -156,6 +156,10 @@ hook_log() {
     local event="$1" file="${2:-}" detail="${3:-}" root logfile enabled
     local run_id="" run_source="" session_id="" session_source="" provider="" plan_slug="" context count
     command -v jq >/dev/null 2>&1 || return 0
+    # verify marks gate subprocesses as tests. A repo-authored guard regression
+    # must never append synthetic denies to the operational outcome stream;
+    # focused observability tests explicitly opt back in with HARNESS_TESTING=0.
+    [ "${HARNESS_TESTING:-0}" = "1" ] && return 0
     root="${HOOK_LIB_ROOT:-}"
     [ -n "$root" ] || return 0
     if [ -n "$HOOK_ENV_HARNESS_LOG" ]; then
@@ -219,8 +223,9 @@ hook_log() {
 # That fallback is load-bearing: a malformed or unwritten exit-0 "deny" would
 # fail OPEN (allow), the one direction this protocol must never take.
 hook_deny() {
-    local reason="$1" event="" json=""
-    hook_log deny "$(hook_file_path)" "$reason"
+    local reason="$1" file="${2:-}" event="" json=""
+    [ -n "$file" ] || file=$(hook_file_path)
+    hook_log deny "$file" "$reason"
     if command -v jq >/dev/null 2>&1 && [ -n "${HOOK_INPUT:-}" ]; then
         event=$(printf '%s' "$HOOK_INPUT" | jq -r '.hook_event_name // empty' 2>/dev/null)
         if [ "$event" = "PreToolUse" ]; then

@@ -2,6 +2,11 @@
 
 **Status:** accepted (v0.25.0)
 
+**Amended 2026-08-11:** OpenCode now has a shipped project-plugin adapter, so
+its capability-table hook cell is `.opencode/plugins/harness-kit.js:plugin` and
+it derives into the hook-wired set. The single-declaration decision is
+unchanged; the table remains the one place this provider fact changes.
+
 ## Context
 
 Through v0.24.0 an adopter declared provider wiring four times in

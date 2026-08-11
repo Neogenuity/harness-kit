@@ -251,6 +251,7 @@ eval_usage_json() {
 # eval_result_json <task> <provider> <model> <suite> <polarity> <run> \
 #                  <trial> <pass:true|false> <duration_s> <agent_rc> <transcript> \
 #                  <run_started_at> <outcome> [usage_json] [variant]
+#                  [trajectory_json]
 # Emits one compact JSON object — the results.jsonl schema. The single source for
 # that shape, so eval.sh (writer) and every reader of results.jsonl can never
 # disagree. Requires jq (the only jq-dependent function in this lib).
@@ -278,22 +279,29 @@ eval_usage_json() {
 #                           Omitted/empty => "bare", so every row carries the
 #                           field and legacy rows/callers written before this
 #                           dimension existed still score as bare.
+#   arg 16  trajectory_json (optional) deterministic metrics computed from the
+#                           normalized provider trace. Observational only:
+#                           eval-harness.sh never reads it for pass/fail or
+#                           baselines. Omitted => the explicit empty trajectory.
 eval_result_json() {
     local usage="${14:-}"
     [ -n "$usage" ] || usage='{"input_uncached":null,"input_cached_read":null,"input_cache_write":null,"output":null,"cost":null,"tool_calls":0}'
     local variant="${15:-}"
     [ -n "$variant" ] || variant="bare"
+    local trajectory="${16:-}"
+    [ -n "$trajectory" ] || trajectory='{"version":1,"events":0,"instruction_discovery_available":false,"instructions_discovered":null,"edited_before_instruction_discovery":null,"tests_executed":0,"verification_executed":false,"failed_commands":0,"recovery_successful":false,"repeated_reads":0,"repeated_commands":0,"files_modified":[]}'
     jq -cn \
         --arg task "$1" --arg provider "$2" --arg model "$3" \
         --arg suite "$4" --arg polarity "$5" --arg run "$6" \
         --argjson trial "$7" --argjson pass "$8" --argjson duration_s "$9" \
         --argjson agent_rc "${10}" --arg transcript "${11}" \
         --argjson run_started_at "${12}" --arg outcome "${13}" \
-        --argjson usage "$usage" --arg variant "$variant" \
+        --argjson usage "$usage" --arg variant "$variant" --argjson trajectory "$trajectory" \
         '{task:$task, provider:$provider, model:$model, variant:$variant,
           suite:$suite, polarity:$polarity, run:$run, trial:$trial, pass:$pass,
           duration_s:$duration_s, agent_rc:$agent_rc, transcript:$transcript,
-          run_started_at:$run_started_at, outcome:$outcome, usage:$usage}'
+          run_started_at:$run_started_at, outcome:$outcome, usage:$usage,
+          trajectory:$trajectory}'
 }
 
 # eval_list_tasks <tasks_dir>
@@ -306,6 +314,7 @@ eval_list_tasks() {
         [ -f "${t}TASK.md" ] || continue
         t="$(basename "$t")"
         case "$t" in _*) continue ;; esac
+        [ ! -e "${d%/}/$t/.harness-eval-draft" ] || continue
         printf '%s\n' "$t"
     done | sort
 }

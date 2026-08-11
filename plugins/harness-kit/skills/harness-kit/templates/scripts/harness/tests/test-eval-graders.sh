@@ -9,7 +9,8 @@
 #     exit-3 convention for every reward-hacking vector it ships a fixture for
 #     (a grader that silently scores a violation as an ordinary miss is
 #     false-green, and stays that way forever);
-#   * every reference/wrongplace*.sh fixture is REJECTED (any non-pass).
+#   * every reference/reject*.sh or wrongplace*.sh fixture is REJECTED (any
+#     non-pass), pinning task-specific false-green and wrong-copy attacks.
 #
 # An empty bank is the default for a fresh install (the shipped _template is
 # skipped by eval_list_tasks), and this exits 0 with a note — the cost appears
@@ -160,13 +161,10 @@ for slug in $BANK_TASKS; do
         done
     fi
 
-    # Any reference/wrongplace*.sh fixture (the template-first "edited the
-    # installed copy instead of the shipped template" shortcut) must be
-    # REJECTED — a non-'pass' outcome. NOT polarity-gated: a positive task can
-    # ship a wrong-place fixture, and only violate*.sh on negative tasks is
-    # exercised above, so without this that grader branch is never run and
-    # could silently rot.
-    for wp in "$td"/reference/wrongplace*.sh; do
+    # Any reference/reject*.sh fixture, including the historical
+    # wrongplace*.sh convention, must be REJECTED — a non-'pass' outcome. This
+    # is not polarity-gated: positive tasks also need adversarial grader cases.
+    for wp in "$td"/reference/reject*.sh "$td"/reference/wrongplace*.sh; do
         [ -f "$wp" ] || continue
         wpname="$(basename "$wp")"
         ws3="$base/repo-$wpname"; logd3="$base/log-$wpname"

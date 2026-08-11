@@ -1,10 +1,35 @@
 # Local outcome telemetry
 
 The harness writes local, git-ignored events to `.harness/var/log.jsonl`. This is a
-repository feedback stream, not provider telemetry: it installs no collector,
-imports no provider export, and makes no team-wide or retention guarantee.
+repository feedback stream, not provider telemetry: it installs no collector
+and imports no provider export. The active file rotates before an append once
+it reaches 10 MiB (`HARNESS_LOG_MAX_BYTES`, bytes; `0` disables), keeping
+timestamped sibling archives without automatically deleting them.
 Use `bash scripts/harness/lib/audit-log.sh --format table` for deterministic reduction; do
 not recompute rates or joins by hand.
+
+## Retention and windows
+
+The log and its rotated siblings are derived local operational data, not source
+of truth. Deleting an archive loses only its historical trends and attribution;
+it does not change repository state, eval baselines, plans, or verification
+results. Pick a local retention window appropriate to the repository, archive
+or delete older rotated siblings deliberately, and never commit or upload them
+by default because paths and identifiers can be sensitive.
+
+Rotation is fail-open and preserves the full old active file as
+`log.jsonl.<UTC timestamp>`. It uses a portable atomic owner file and reclaims
+the lock when its local owner process is gone. An unreadable/invalid owner file
+or rename failure leaves logging functional and postpones rotation; remove a
+confirmed-orphaned `.rotate-lock` manually. The kit does not auto-delete
+archives because that would silently choose a history window for the adopter.
+Audit an archive explicitly with `--log <path>`.
+
+`audit-log.sh --since YYYY-MM-DD` restricts event-derived trends and
+recommendations to events on or after that UTC date. Parser health counters
+still describe the whole selected file, so malformed old rows remain visible;
+the window is reported as `log.since`. This scopes analysis, while rotation is
+what bounds the active file's parse cost.
 
 ## Mixed-version contract
 
@@ -74,8 +99,8 @@ its provenance key are both omitted:
 | Field | Value and source |
 | --- | --- |
 | `run_id` | At most 128 `A-Za-z0-9._/-` characters. Provenance is `verify` when generated for one `verify` invocation or `env` when explicitly supplied to another producer. |
-| `session_id` | At most 256 characters with no control characters. Provenance is `env` when supplied explicitly, or `payload` when copied from a supported hook `.session_id`/`.conversation_id` field. |
-| `provider` | At most 64 `A-Za-z0-9._/-` characters. Provenance is `env`; no inference fallback exists. |
+| `session_id` | At most 256 characters with no control characters. Provenance is `env` when supplied through `HARNESS_SESSION_ID`, `payload` when copied from a supported hook `.session_id`/`.conversation_id`, or `provider-env` when copied from a provider-owned exact-session variable (`CODEX_THREAD_ID`). |
+| `provider` | At most 64 `A-Za-z0-9._/-` characters. Provenance is `env` for `HARNESS_PROVIDER`, or `provider-env` when the provider is identified by the same exact-session environment contract. No directory/config inference fallback exists. |
 | `plan_slug` | At most 128 `A-Za-z0-9._/-` characters. Provenance is `env`; no active-directory fallback exists. |
 | `provenance` | Object mapping every present attribution field to its source above. It is absent when `context` is empty. |
 
@@ -84,6 +109,16 @@ models, surviving configs, or prose. If multiple plans are active and no plan
 was explicitly supplied, omit `plan_slug`; do not choose one. Skill identity,
 token/cost data, and PR identity have no v0.17 producer and remain N/A. Do not
 copy provider exports into this log to fill them.
+
+Session propagation is provider-specific and never uses a shared worktree
+"current session" file. Claude Code's SessionStart hook writes the payload's
+safe `session_id` to its documented `CLAUDE_ENV_FILE`; the OpenCode adapter's
+`shell.env` hook injects the call's exact `sessionID`; Codex verify commands use
+the provider-owned `CODEX_THREAD_ID` when `HARNESS_SESSION_ID` is absent. Cursor
+has no adopted equivalent, so its gate events remain unattributed unless the
+caller explicitly exports `HARNESS_SESSION_ID`. This preserves concurrency
+correctness: unknown is preferable to assigning a parent run to whichever
+subagent wrote shared state last.
 
 Treat every identifier and path as local operational data. Keep the
 runtime-state dir `.harness/var/` git-ignored (only `var/` — the rest of
@@ -151,8 +186,11 @@ derived. An existing unreadable log is an input error, not no data.
 across the mixed stream. The reducer owns this count; audit prose does not
 recount raw JSONL.
 
-Plan-cycle timing is `not_available` in v0.17 because free-form progress prose
-and Git rename history are not a portable lifecycle clock. With usable local Git
+Plan-cycle timing is `available` when completed plans carry the fixed
+`harness_plan: 1` lifecycle header documented by the execution-plan template.
+Legacy completed plans remain valid but are excluded: lifecycle dates are never
+inferred from prose, filenames, or Git timestamps. When no completed plan has
+valid metadata, the report says `no_completed_plan_metadata`. With usable local Git
 history, exact session trailers produce
 `{status:"available",items:[{session_id,commit}],reason:null}`. Without Git,
 with shallow history, or when local history cannot be read, `status` is
@@ -167,10 +205,17 @@ success.
 
 ## Audit boundary
 
+Provider transcripts and `trace-event.v1` rows are a separate observational
+surface under `.harness/var/runs/` and `.harness/var/eval-results/`. They can
+contain file paths and command text, are not appended to the outcome event log,
+and never affect gate outcomes or eval baselines. Import is explicit and local;
+promotion produces an excluded eval draft rather than a trusted task.
+
 Run the reducer against local artifacts:
 
 ```bash
 bash scripts/harness/lib/audit-log.sh --format table
+bash scripts/harness/lib/audit-log.sh --since 2026-08-01 --format table
 ```
 
 Use `--format json` when another deterministic tool consumes the result. Its
@@ -179,8 +224,10 @@ version-1 report has the stable top-level keys `version`, `log`, `parser`,
 `session_commits`, `plan_cycles`, `eval`, and `recommendations`. Repeat-deny
 rows are `{hook,file,count}`; `review_findings` is `{count}`; available session
 joins are `session_commits.items` rows shaped `{session_id,commit}` from exact
-local Git trailers. `plan_cycles` is
-`{status:"not_available",reason:"no_machine_readable_lifecycle"}`. Eval is
+local Git trailers. Available `plan_cycles.items` rows are
+`{plan,started,completed,duration_days}` with a count/average summary; without
+eligible metadata the object is
+`{status:"not_available",items:[],summary:null,reason:"no_completed_plan_metadata"}`. Eval is
 `not_available` when current results or a baseline is absent, `invalid` when the
 existing scorer fails, and `available` only with the scorer's JSON report.
 

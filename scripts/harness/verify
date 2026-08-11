@@ -121,10 +121,26 @@ fi
 
 VERIFY_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 VERIFY_CONTEXT='{}'
+VERIFY_SESSION_ID="${HARNESS_SESSION_ID:-}"
+VERIFY_SESSION_SOURCE="${HARNESS_SESSION_ID:+env}"
+VERIFY_PROVIDER="${HARNESS_PROVIDER:-}"
+VERIFY_PROVIDER_SOURCE="${HARNESS_PROVIDER:+env}"
+# Codex exposes the current task/thread id to its shell commands. Use that
+# provider-owned environment value only when the explicit HARNESS_* override is
+# absent; unlike a worktree state file it cannot cross-contaminate concurrent
+# parent/subagent sessions.
+if [ -z "$VERIFY_SESSION_ID" ] && [ -n "${CODEX_THREAD_ID:-}" ]; then
+    VERIFY_SESSION_ID="$CODEX_THREAD_ID"
+    VERIFY_SESSION_SOURCE="provider-env"
+    if [ -z "$VERIFY_PROVIDER" ]; then
+        VERIFY_PROVIDER="codex"
+        VERIFY_PROVIDER_SOURCE="provider-env"
+    fi
+fi
 if command -v harness_log_context >/dev/null 2>&1; then
     VERIFY_CONTEXT=$(harness_log_context "$VERIFY_RUN_ID" verify \
-        "${HARNESS_SESSION_ID:-}" "${HARNESS_SESSION_ID:+env}" \
-        "${HARNESS_PROVIDER:-}" "${HARNESS_PROVIDER:+env}" \
+        "$VERIFY_SESSION_ID" "$VERIFY_SESSION_SOURCE" \
+        "$VERIFY_PROVIDER" "$VERIFY_PROVIDER_SOURCE" \
         "${HARNESS_PLAN_SLUG:-}" "${HARNESS_PLAN_SLUG:+env}")
 fi
 
@@ -546,7 +562,10 @@ run_gate() {
     fi
     command=$(format_command "$@")
     started=$SECONDS
-    if out=$("$@" 2>&1); then
+    # Gate commands never inherit this runner's open gates.conf descriptor.
+    # Hooks and tools commonly read stdin; without /dev/null one can consume
+    # the remaining declarations and turn an incomplete run into a false green.
+    if out=$(HARNESS_TESTING=1 "$@" </dev/null 2>&1); then
         status=0
         outcome=pass
         duration=$((SECONDS - started))
@@ -693,7 +712,7 @@ parallel_full_gate() {
     meta="$PARALLEL_DIR/$index.meta"
     (
         started=$SECONDS
-        "$@" >"$out" 2>&1
+        HARNESS_TESTING=1 "$@" </dev/null >"$out" 2>&1
         status=$?
         duration=$((SECONDS - started))
         # Recorded by the CHILD, which is the process that knows the command

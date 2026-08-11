@@ -31,8 +31,8 @@ harness_log_context() {
     provider=$(_harness_log_bounded "${5:-}" 64 1)
     plan_slug=$(_harness_log_bounded "${7:-}" 128 1)
     case "$run_source" in verify|env) ;; *) run_id=""; run_source="" ;; esac
-    case "$session_source" in env|payload) ;; *) session_id=""; session_source="" ;; esac
-    case "$provider_source" in env) ;; *) provider=""; provider_source="" ;; esac
+    case "$session_source" in env|payload|provider-env) ;; *) session_id=""; session_source="" ;; esac
+    case "$provider_source" in env|provider-env) ;; *) provider=""; provider_source="" ;; esac
     case "$plan_source" in env) ;; *) plan_slug=""; plan_source="" ;; esac
     jq -cn \
         --arg run_id "$run_id" --arg run_source "$run_source" \
@@ -52,7 +52,7 @@ harness_log_context() {
 # command or hook it observes.
 harness_log_v2() {
     local root="${1:-}" hook="${2:-}" event="${3:-}" file="${4:-}" detail="${5:-}"
-    local context="${6:-}" data="${7:-}" enabled logfile line
+    local context="${6:-}" data="${7:-}" enabled logfile line limit size lock lock_tmp lock_token owner acquired stamp archive suffix
     [ -n "$context" ] || context='{}'
     [ -n "$data" ] || data='{}'
     command -v jq >/dev/null 2>&1 || return 0
@@ -63,6 +63,53 @@ harness_log_v2() {
     printf '%s' "$data" | jq -e 'type == "object"' >/dev/null 2>&1 || data='{}'
     logfile="${HARNESS_LOG_FILE:-$root/.harness/var/log.jsonl}"
     mkdir -p "$(dirname "$logfile")" 2>/dev/null || return 0
+    # Keep the active stream bounded without deleting history. Rotation is
+    # best-effort and lock-directory serialized (portable atomic mkdir): a
+    # failure merely leaves the current file growing. Archives are timestamped
+    # siblings and are never auto-deleted; retention remains an explicit local
+    # choice. Set HARNESS_LOG_MAX_BYTES=0 to disable.
+    limit="${HARNESS_LOG_MAX_BYTES:-10485760}"
+    case "$limit" in ''|*[!0-9]*) limit=10485760 ;; esac
+    if [ "$limit" -gt 0 ] 2>/dev/null && [ -f "$logfile" ]; then
+        size=$(wc -c 2>/dev/null < "$logfile" | tr -d '[:space:]') || size=0
+        case "$size" in ''|*[!0-9]*) size=0 ;; esac
+        if [ "$size" -ge "$limit" ] 2>/dev/null; then
+            lock="$logfile.rotate-lock"
+            lock_token="${BASHPID:-$$}"
+            lock_tmp="$lock.$lock_token"
+            acquired=0
+            if printf '%s\n' "$lock_token" > "$lock_tmp" 2>/dev/null; then
+                if ln "$lock_tmp" "$lock" 2>/dev/null; then
+                    acquired=1
+                elif [ -f "$lock" ]; then
+                    owner=$(sed -n '1p' "$lock" 2>/dev/null)
+                    case "$owner" in
+                        ''|*[!0-9]*) ;;
+                        *) if ! kill -0 "$owner" 2>/dev/null; then
+                               rm -f -- "$lock" 2>/dev/null
+                               ln "$lock_tmp" "$lock" 2>/dev/null && acquired=1
+                           fi ;;
+                    esac
+                fi
+                rm -f -- "$lock_tmp" 2>/dev/null
+            fi
+            if [ "$acquired" -eq 1 ]; then
+                size=$(wc -c 2>/dev/null < "$logfile" | tr -d '[:space:]') || size=0
+                case "$size" in ''|*[!0-9]*) size=0 ;; esac
+                if [ "$size" -ge "$limit" ] 2>/dev/null; then
+                    stamp=$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null) || stamp="unknown"
+                    archive="$logfile.$stamp"
+                    suffix=0
+                    while [ -e "$archive" ]; do
+                        suffix=$((suffix + 1))
+                        archive="$logfile.$stamp.$suffix"
+                    done
+                    mv "$logfile" "$archive" 2>/dev/null || true
+                fi
+                rm -f -- "$lock" 2>/dev/null || true
+            fi
+        fi
+    fi
     line=$(jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --arg hook "$hook" --arg event "$event" --arg file "$file" \
         --arg detail "$detail" --argjson context "$context" --argjson data "$data" \

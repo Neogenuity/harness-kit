@@ -43,14 +43,12 @@ hook_affected_files`, so one script serves every harness.
   reads files via shell). Keep the native permission/trust layer as a
   second guard. Stop hooks must emit JSON when exiting 0 —
   `hook_advise_once` handles that contract.
-- **OpenCode** — no shell hooks. A small TS plugin in `.opencode/plugins/`
-  hooking `tool.execute.before`/`after`, shelling out to these scripts and
-  throwing on exit 2 (OpenCode's block mechanism), is the documented wiring
-  path — but the kit ships no such shim template yet (descoped 2026-07-13),
-  so OpenCode is not hook-wired. Its native `opencode.json` `permission.read`
-  denies and the `check-harness` manifest verification are the backstop — the
-  latter, again, only for kit mechanism files, not for `GUARD_PROTECTED_EXTRA`
-  entries.
+- **OpenCode** — `.opencode/plugins/harness-kit.js` maps
+  `tool.execute.before`/`after` and the session system transform onto these
+  scripts, throwing on exit 2 and appending post-edit feedback. Its `shell.env`
+  hook supplies exact session attribution. Native `opencode.json` denies and
+  `check-harness` remain backstops; the latter covers kit mechanism files, not
+  arbitrary `GUARD_PROTECTED_EXTRA` entries.
 - **Other harnesses** — point the equivalent lifecycle event at the same
   script; exit code 2 means "deny", exit 0 with no output means
   "allow/continue".

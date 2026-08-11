@@ -4,10 +4,12 @@
 # fresh session (including subagents and worktrees) starts oriented without
 # having to think to look.
 #
-# Provider-agnostic: plain text on stdout, no stdin dependency. Claude Code
-# injects the output into context via the SessionStart hook; other harnesses
-# can call it from any equivalent lifecycle event. Fails open — missing git or
-# an empty plans directory just shrinks the output.
+# Provider-agnostic banner output. When Claude Code supplies a SessionStart
+# payload plus CLAUDE_ENV_FILE, persist the exact session/provider into its
+# documented per-session Bash environment so later verify runs are attributable
+# without a shared state file. Other providers ignore that branch and use their
+# own environment adapters. Fails open — missing jq/git, an unwritable env file,
+# or an empty plans directory just shrinks the behavior.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -16,6 +18,21 @@ cd "$ROOT" || exit 0
 # shellcheck source=/dev/null
 [ -f "$ROOT/scripts/harness/harness.conf" ] && . "$ROOT/scripts/harness/harness.conf" 2>/dev/null
 PLANS_DIR="${PLANS_DIR:-docs/plans/active}"
+
+payload=""
+[ -t 0 ] || payload=$(cat 2>/dev/null || true)
+if [ -n "${CLAUDE_ENV_FILE:-}" ] && command -v jq >/dev/null 2>&1; then
+    session_id=$(printf '%s' "$payload" | jq -r '
+        .session_id // empty
+        | select(type == "string" and length > 0 and length <= 256)
+        | select(test("^[A-Za-z0-9._/-]+$"))' 2>/dev/null)
+    if [ -n "$session_id" ]; then
+        {
+            printf "export HARNESS_SESSION_ID='%s'\n" "$session_id"
+            printf "export HARNESS_PROVIDER='claude'\n"
+        } >> "$CLAUDE_ENV_FILE" 2>/dev/null || true
+    fi
+fi
 
 if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
     branch=$(git branch --show-current 2>/dev/null)

@@ -110,8 +110,9 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      that costs a review cycle every time — e.g. tenancy scoping, missing
      migration, unregistered route). Skippable; the hook ships as a no-op.
    - The 1-2 recurring tasks that *define success* in this repo ("add an
-     endpoint", "add a model") — the seeds for the first behavioral eval golden
-     tasks. Skippable; the eval bank starts empty and an empty bank is fine.
+     endpoint", "add a model") — candidates for repo-specific behavioral evals
+     after the two stack-independent seed tasks are installed. Skippable; the
+     shipped seeds provide the adoption floor without guessing repo behavior.
    - **Application repos only:** always present the detected app classification
      and proposed six-field runtime map, then require one explicit confirmation
      to adopt the runtime bundle before authoring anything. Ask detailed
@@ -185,7 +186,7 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      (`scripts/harness/lib/provider-caps`) derives the per-facet sets from it —
      skill stubs (providers that don't read `.agents/skills/` natively; `.codex`
      does, so it gets none), agent stubs (all four dialects), and the hook-wired
-     subset (`.claude .cursor .codex`; OpenCode is descoped — no bash hook shim)
+     subset (all four providers; OpenCode uses a project-local JS adapter)
      whose config `check-harness` validates tuple-by-tuple. `check-harness`
      validates the derived sets and the declaration itself; a declared provider
      missing its config/stubs is an ERROR, and an unknown entry is a loud `#8f`
@@ -283,11 +284,12 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      `session-context.sh` has a directory to announce. Copy
      `templates/docs/templates/execution-plan.md` to `.harness/templates/`; seed real plans only
      when there's long-horizon work to track (an empty queue is fine).
-   - `.harness/evals/` from `templates/docs/evals/` (`README.md` + `scenarios/_template/`
-     + `rubrics/_example.md`) — the behavioral eval bank. Author real golden
-     tasks only for the recurring success-defining work named in the interview;
-     an empty bank is fine, but if you ship none, delete the AGENTS.md Evals
-     link so `check-harness` doesn't dangle. Each task grades the *end state*
+   - `.harness/evals/` from `templates/docs/evals/` (`README.md`,
+     `scenarios/_template/`, the stack-independent
+     `follow-local-convention/` and `protect-verification-policy/` seed tasks,
+     and `rubrics/_example.md`) — the behavioral eval bank. Keep the two seeds
+     as an immediately runnable adoption floor, then author repo-specific golden
+     tasks for recurring success-defining work named in the interview. Each task grades the *end state*
      via `check.sh` and ships a `reference/apply.sh` that
      `scripts/harness/tests/test-eval-graders.sh` proves scores as a pass (and,
      for negative tasks, a `reference/violate.sh` it proves scores `violation`,
@@ -335,12 +337,14 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      When `.opencode` is declared for execution profiles, merge the
      `external_directory`, `bash`, `webfetch`, and `websearch` permission
      tuples; state that they are prompts/denials, not an OS/network sandbox.
-     No hook shim ships (descoped 2026-07-13): a TS plugin shim in
-     `.opencode/plugins/` shelling out to the portable hooks is the documented
-     path (see provider matrix), but the kit provides no template for it, so
-     OpenCode is left out of `HOOK_WIRED_PROVIDERS` and its guards degrade to
-     these native permissions + CI — the intended backstop, not a gap to fill
-     by hand.
+     Copy `templates/providers/opencode/plugins/harness-kit.js` to
+     `.opencode/plugins/harness-kit.js`. The adapter shells out to the same
+     portable guards from `tool.execute.before`, appends `format.sh` feedback
+     from `tool.execute.after`, injects the session banner through the system
+     transform, and uses `shell.env` for exact session attribution. Throwing on
+     a guard's exit 2 is OpenCode's block path (verified 2026-08). Merge, do not
+     replace, any existing project plugins; local plugin code executes with the
+     OpenCode process's authority, so review it like the hook configs themselves.
    - GitHub Copilot coding agent: nothing to wire — it reads `AGENTS.md`
      natively, including nested files (verified 2026-07-11). Copy
      `templates/github-copilot-instructions.md.tmpl` to
