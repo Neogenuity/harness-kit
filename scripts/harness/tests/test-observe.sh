@@ -24,13 +24,25 @@ EOF
 fails=0
 pass() { echo "ok:   $1"; }
 fail() { echo "FAIL: $1"; fails=$((fails + 1)); }
+mode_of() {
+    local path=$1 mode
+    mode=$(stat -c '%a' "$path" 2>/dev/null || true)
+    case "$mode" in
+        [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) printf '%s\n' "$mode"; return 0 ;;
+    esac
+    mode=$(stat -f '%Lp' "$path" 2>/dev/null || true)
+    case "$mode" in
+        [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) printf '%s\n' "$mode"; return 0 ;;
+    esac
+    return 1
+}
 
 run_dir=$(bash "$REPO/scripts/harness/observe" import --provider claude \
     --transcript "$WORK/transcript.jsonl" --run-id run-1); rc=$?
 if [ "$rc" -eq 0 ] && [ -f "$run_dir/transcript.jsonl" ] && [ -f "$run_dir/trace.jsonl" ] \
     && jq -e '.events == 4 and .files_modified == ["src/private-name.txt"]' "$run_dir/trajectory.json" >/dev/null 2>&1 \
-    && [ "$(stat -f %Lp "$run_dir" 2>/dev/null || stat -c %a "$run_dir")" = 700 ] \
-    && [ "$(stat -f %Lp "$run_dir/transcript.jsonl" 2>/dev/null || stat -c %a "$run_dir/transcript.jsonl")" = 600 ]; then
+    && [ "$(mode_of "$run_dir")" = 700 ] \
+    && [ "$(mode_of "$run_dir/transcript.jsonl")" = 600 ]; then
     pass "local import preserves raw evidence and computes trajectory metrics"
 else
     fail "local transcript import did not create the expected run artifacts"
