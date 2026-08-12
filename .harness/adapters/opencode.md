@@ -9,6 +9,6 @@ change `HARNESS_PROVIDERS` (harness.conf) or the capability table
 
 - **Skill stubs:** generated in `.opencode/skills/` from `.agents/skills/`
 - **Agent stubs:** `md-subagent` stubs in `.opencode/agents/` from `.harness/agents/`
-- **Hook wiring:** no bash hook shim (descoped)
+- **Hook wiring:** `.opencode/plugins/harness-kit.js` (plugin shape)
 - **Execution profile:** adopted — floor validated in `opencode.json`
 - **Reads `.agents/skills/` natively:** no

@@ -100,7 +100,7 @@ if [ -f "$MANIFEST" ] && [ -d "$ROOT/scripts/harness/hooks" ] && [ -f "$ROOT/scr
         # The ship contract installs under scripts/ and the two repo-owned
         # .harness/ policy homes; ignore anything else a malformed
         # kit-manifest line might name.
-        case "$rel" in scripts/*|.harness/gates.conf|.harness/hooks/*) ;; *) continue ;; esac
+        case "$rel" in scripts/*|.harness/gates.conf|.harness/hooks/*|.opencode/plugins/*) ;; *) continue ;; esac
         [ -f "$ROOT/$rel" ] || continue
         # Pipe-free exact-line membership test. `printf ... | grep -q` is
         # banned in this script: grep -q exits on first match, and when the

@@ -46,6 +46,11 @@ mechanism scripts/harness/check-docs
 mechanism scripts/harness/detect-drift
 mechanism scripts/harness/validate-plan
 mechanism scripts/harness/run-evals
+mechanism scripts/harness/eval-author
+mechanism scripts/harness/observe
+mechanism scripts/harness/eval-template/TASK.md
+mechanism scripts/harness/eval-template/check.sh
+mechanism scripts/harness/eval-template/reference/apply.sh
 
 # --- mechanism: libraries -----------------------------------------------------
 mechanism scripts/harness/lib/install-lib.sh
@@ -63,6 +68,7 @@ mechanism scripts/harness/lib/eval-lib.sh
 mechanism scripts/harness/lib/eval.sh
 mechanism scripts/harness/lib/eval-harness.sh
 mechanism scripts/harness/lib/log-lib.sh
+mechanism scripts/harness/lib/trace-lib.sh
 mechanism scripts/harness/lib/audit-log.sh
 mechanism scripts/harness/lib/doc-garden.sh
 mechanism scripts/harness/lib/dev-instance.sh
@@ -87,6 +93,9 @@ mechanism scripts/harness/tests/test-guard-secrets.sh
 mechanism scripts/harness/tests/test-session-context.sh
 mechanism scripts/harness/tests/test-dev-instance.sh
 mechanism scripts/harness/tests/test-log.sh
+mechanism scripts/harness/tests/test-trace.sh
+mechanism scripts/harness/tests/test-observe.sh
+mechanism scripts/harness/tests/test-opencode-adapter.sh
 mechanism scripts/harness/tests/test-audit-log.sh
 mechanism scripts/harness/tests/test-doc-garden.sh
 mechanism scripts/harness/tests/test-verify.sh
@@ -106,6 +115,9 @@ policy .harness/hooks/guard-project-policy.sh src=hooks/guard-project-policy.sh
 
 # --- optional-policy: authored per repo, pinned when present ------------------
 optional-policy scripts/dev.sh
+# Executable provider content is authored by init/migration rather than the
+# scripts-only installer, but must still be integrity-pinned when present.
+optional-policy .opencode/plugins/harness-kit.js
 
 # --- content: authored/copied by the SKILL's init flow, never by install ------
 content AGENTS.md.tmpl dest=AGENTS.md
@@ -125,6 +137,7 @@ content docs/templates/adr.md dest=.harness/templates/adr.md
 content docs/templates/pull-request.md dest=.harness/templates/pull-request.md
 content docs/schemas/telemetry-event.v2.schema.json dest=.harness/schemas/telemetry-event.v2.schema.json
 content docs/schemas/audit-report.schema.json dest=.harness/schemas/audit-report.schema.json
+content docs/schemas/trace-event.v1.schema.json dest=.harness/schemas/trace-event.v1.schema.json
 content docs/schemas/eval-task-metadata.schema.json dest=.harness/schemas/eval-task-metadata.schema.json
 content docs/agents/code-reviewer.md dest=.harness/agents/code-reviewer.md
 

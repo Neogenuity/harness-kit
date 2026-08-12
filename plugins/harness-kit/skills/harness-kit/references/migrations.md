@@ -33,6 +33,24 @@ A second update must be a no-op. Existing content and generated stubs are never
 auto-added or overwritten; `hooks/lib.sh` and the new helpers follow manifest
 checksums, while `.harness/gates.conf` stays diff-only.
 
+## v0.42.0 OpenCode hook-adapter adoption
+
+The capability table now derives a declared `.opencode` into the hook-wired set.
+After the mechanism update, an existing OpenCode adopter chooses one explicit
+content/policy path:
+
+1. Adopt the adapter by reviewing and copying
+   `templates/providers/opencode/plugins/harness-kit.js` to
+   `.opencode/plugins/harness-kit.js`, preserving any existing project plugin;
+   then run `test-opencode-adapter.sh` and `check-instructions`, and re-pin the
+   installed manifest so the executable adapter is integrity-checked.
+2. Or preserve the earlier no-hook posture by declaring an explicit
+   `HOOK_WIRED_PROVIDERS` override that excludes `.opencode`.
+
+The bootstrap does neither automatically: provider plugins are repo-visible
+content and `harness.conf` is repo-owned policy. A missing adapter with OpenCode
+still derived as hook-wired is an error, not a silent partial upgrade.
+
 ## Per-provider sunset playbooks
 
 **A provider starts reading `.agents/skills/` natively** (already true for
@@ -56,13 +74,14 @@ Codex and OpenCode):
 2. Keep `.claude/settings.json` — permissions and hook wiring are separate
    concerns and stay.
 
-**A provider ships native shell hooks** (watch: OpenCode, whose portable-hook
-reuse would take the TS plugin shim — not shipped, descoped 2026-07-13):
+**A provider ships native declarative shell hooks** (watch: OpenCode, whose
+current project-plugin surface is bridged by the shipped JS adapter):
 
 1. Wire the same `scripts/harness/hooks/*.sh` scripts in the provider's hook config
    per the provider matrix conventions (stdin JSON, exit 2 = deny).
-2. Delete any hand-rolled shim (`.opencode/plugins/` for OpenCode); the kit
-   ships none by default.
+2. Retire the provider adapter (`.opencode/plugins/harness-kit.js` for OpenCode)
+   only after the native mapping covers the same pre-tool, post-tool, session,
+   and environment behavior.
 3. Re-verify payload shapes by piping the provider's real payloads through
    the scripts; extend `lib.sh:hook_affected_files` if a new layout appears.
 

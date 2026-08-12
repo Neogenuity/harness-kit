@@ -37,6 +37,28 @@ required
 
 Move plans between states with `git mv` — never copy.
 
+New plans also carry this exact six-line frontmatter so `audit-log.sh` can
+report completed cycle time without scraping prose:
+
+```yaml
+---
+harness_plan: 1
+status: queued
+started: null
+completed: null
+---
+```
+
+On activation, set `status: active` and `started: YYYY-MM-DD`; on completion,
+set `status: completed` and `completed: YYYY-MM-DD`. The directory, dates, and
+metadata status must agree. `validate-plan` enforces the contract for any plan
+that opts into the header. Existing plans without it remain valid but do not
+contribute cycle metrics; their dates are never inferred from prose or Git.
+Root-level umbrella and superseded records deliberately keep their prose
+Status and do not add `harness_plan` metadata. The machine lifecycle models
+one queued → active → completed delivery cycle, whose completed record belongs
+under `completed/`; it does not model cross-release umbrella state.
+
 **Naming**: the active plan carries its release version (its scope pins that
 version everywhere from `plugin.json` to the manifest header). Queued plans
 are named by **theme** — versions are assigned when a plan moves to
@@ -181,11 +203,13 @@ rows + strict Agent Skills validation + matrix stamping
 **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
 ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
-**Active:** [Launch readiness](active/launch-readiness.md) remains the parallel
-maintainer track; its demo recording is still open, while the org move (→
-Neogenuity) and the public flip both shipped 2026-07-23.
+**Active:** [Open-issue hardening and observational eval foundations](active/v0.42.0-open-issue-hardening.md)
+is the current mechanism track. [Launch readiness](active/launch-readiness.md)
+remains the parallel maintainer track; its demo recording is still open, while
+the org move (→ Neogenuity) and the public flip both shipped 2026-07-23.
 
-The mechanism queue is empty after v0.18.0. New work enters as a
+The mechanism queue was empty after v0.18.0 until the validated #29–#36 issue
+set activated as v0.42.0. New work enters as a
 theme-named queued plan and takes a version only when activated. v0.18.0 was
 unqueued and unplanned — it jumped straight to active because it was the one
 defect class where the kit violated its own core promise (never damage the repo

@@ -10,7 +10,10 @@
     "log": {
       "type": "object",
       "required": ["status"],
-      "properties": { "status": { "enum": ["available", "no_data"] } }
+      "properties": {
+        "status": { "enum": ["available", "no_data"] },
+        "since": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+      }
     },
     "parser": {
       "type": "object",
@@ -48,10 +51,19 @@
     },
     "plan_cycles": {
       "type": "object",
-      "required": ["status"],
+      "required": ["status", "items", "summary", "reason"],
       "properties": {
-        "status": { "const": "not_available" },
-        "reason": { "const": "no_machine_readable_lifecycle" }
+        "status": { "enum": ["available", "not_available"] },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["plan", "started", "completed", "duration_days"],
+            "properties": { "duration_days": { "type": "integer", "minimum": 0 } }
+          }
+        },
+        "summary": { "type": ["object", "null"] },
+        "reason": { "type": ["string", "null"] }
       }
     },
     "eval": {

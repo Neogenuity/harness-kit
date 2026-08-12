@@ -3,7 +3,7 @@
 # entry in the kit-manifest ship contract), pinned as '# tailored' in
 # scripts/harness/.harness-manifest by the release step, not by this script. Validates
 # that the REAL shipped provider hook configs in
-# plugins/harness-kit/skills/harness-kit/templates/providers/{claude,cursor,codex}
+# plugins/harness-kit/skills/harness-kit/templates/providers/{claude,cursor,codex,opencode}
 # pass check-harness.sh check #8d (the frozen hook-tuple contract) inside a
 # throwaway install fixture — not synthetic configs, the actual bytes this kit
 # ships. This is the positive half of the old template test-install.sh's
@@ -53,12 +53,14 @@ F=$(mktemp -d "$WORK/providers.XXXXXX") || exit 1
 harness_install_mechanism "$TPL_SCRIPTS" "$F"
 harness_append_gitignore "$F"
 { grep -vE '^(HOOK_WIRED_PROVIDERS|AGENT_PROVIDERS|EXECUTION_PROFILE_PROVIDERS)=' "$F/scripts/harness/harness.conf"
-  printf 'HOOK_WIRED_PROVIDERS=".claude .cursor .codex"\nAGENT_PROVIDERS=""\nEXECUTION_PROFILE_PROVIDERS=""\n'
+  printf 'HOOK_WIRED_PROVIDERS=".claude .cursor .codex .opencode"\nAGENT_PROVIDERS=""\nEXECUTION_PROFILE_PROVIDERS=""\n'
 } > "$F/scripts/hc" && mv "$F/scripts/hc" "$F/scripts/harness/harness.conf"
-mkdir -p "$F/.claude" "$F/.cursor" "$F/.codex"
+mkdir -p "$F/.claude" "$F/.cursor" "$F/.codex" "$F/.opencode/plugins"
 cp "$TPL_PROVIDERS/claude/settings.json" "$F/.claude/settings.json"
 cp "$TPL_PROVIDERS/cursor/hooks.json" "$F/.cursor/hooks.json"
 cp "$TPL_PROVIDERS/codex/hooks.json" "$F/.codex/hooks.json"
+cp "$TPL_PROVIDERS/opencode/plugins/harness-kit.js" "$F/.opencode/plugins/harness-kit.js"
+cp "$TPL_PROVIDERS/opencode/opencode.json" "$F/opencode.json"
 harness_generate_manifest "$F" "$KIT_VERSION" > "$F/scripts/harness/.harness-manifest"
 ( cd "${F:?}" && git_c add -A && git_c commit -qm init >/dev/null )
 out=$(cd "${F:?}" && bash scripts/harness/check-harness 2>&1); rc=$?

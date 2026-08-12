@@ -30,10 +30,9 @@ whatever ships next — without maintaining N parallel configurations.
    plain bash scripts in `scripts/harness/hooks/` that read the event JSON on stdin
    and tolerate every harness's field layout. Per-provider hook configs
    (`.claude/settings.json`, `.cursor/hooks.json`, `.codex/hooks.json`) are
-   one-line wirings; an OpenCode plugin shim is the documented fourth path,
-   but the kit ships no shim template yet (descoped 2026-07-13), so OpenCode
-   is not hook-wired. This keeps policy identical across harnesses and
-   testable in isolation.
+   one-line wirings; `.opencode/plugins/harness-kit.js` is the thin fourth
+   adapter. All four delegate policy to the same scripts, keeping behavior
+   identical across harnesses and testable in isolation.
 
 4. **Drift is a CI failure, not a code-review hope.** `scripts/harness/check-harness`
    fails the build when a stub is hand-edited, a canonical skill changes

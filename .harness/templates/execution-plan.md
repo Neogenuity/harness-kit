@@ -1,11 +1,20 @@
+---
+harness_plan: 1
+status: queued
+started: null
+completed: null
+---
+
 # <Plan title — a theme, not a version>
 
 Status: queued
 
 <!-- Copy this file to docs/plans/<theme>.md to queue a plan. When work starts,
      git mv it into active/ and rename it to carry the milestone (e.g.
-     active/v1.2.0-<theme>.md); set Status: active. When it ships, git mv it to
-     completed/ with Verification filled in.
+     active/v1.2.0-<theme>.md); set both status fields to active and replace
+     started: null with the UTC start date. When it ships, git mv it to
+     completed/, set both status fields to completed, fill completed with the
+     UTC completion date, and fill in Verification.
      See README.md for the lifecycle, naming, and the markdown-link honesty rule. -->
 
 ## Objective

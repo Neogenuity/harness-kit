@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # Deterministic, read-only summary of mixed v1/v2 harness event logs.
+# Usage: audit-log.sh [--repo PATH] [--log PATH] [--format table|json]
+#                     [--since YYYY-MM-DD] [--eval-results PATH]
+#                     [--baseline PATH]
+# --since filters trend rows by UTC event day. Parser counters still describe
+# the complete selected input so operators can see malformed retained history.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -7,6 +12,7 @@ LOG=""
 FORMAT=table
 RESULTS_DIR=""
 BASELINE=""
+SINCE=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --repo) ROOT="$2"; shift 2 ;;
@@ -14,11 +20,16 @@ while [ $# -gt 0 ]; do
         --format) FORMAT="$2"; shift 2 ;;
         --eval-results) RESULTS_DIR="$2"; shift 2 ;;
         --baseline) BASELINE="$2"; shift 2 ;;
+        --since) SINCE="$2"; shift 2 ;;
         -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
         *) echo "audit-log.sh: unknown option: $1" >&2; exit 64 ;;
     esac
 done
 case "$FORMAT" in table|json) ;; *) echo "audit-log.sh: --format must be table or json" >&2; exit 64 ;; esac
+case "$SINCE" in ''|????-??-??) ;; *) echo "audit-log.sh: --since must be YYYY-MM-DD" >&2; exit 64 ;; esac
+if [ -n "$SINCE" ] && ! printf '%s' "$SINCE" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+    echo "audit-log.sh: --since must be YYYY-MM-DD" >&2; exit 64
+fi
 [ -n "$LOG" ] || LOG="$ROOT/.harness/var/log.jsonl"
 [ -n "$RESULTS_DIR" ] || RESULTS_DIR="$ROOT/.harness/var/eval-results"
 [ -n "$BASELINE" ] || BASELINE="$ROOT/.harness/evals/baselines.json"
@@ -63,10 +74,11 @@ PARSED=$(jq -Rn '
          else ((.context.provenance // {})|has("run_id")|not) end)
     and (if (.context|has("session_id")) then
            (.context.session_id|session)
-           and (.context.provenance.session_id as $source | ["env","payload"] | index($source) != null)
+           and (.context.provenance.session_id as $source | ["env","payload","provider-env"] | index($source) != null)
          else ((.context.provenance // {})|has("session_id")|not) end)
     and (if (.context|has("provider")) then
-           (.context.provider|slug(64)) and .context.provenance.provider == "env"
+           (.context.provider|slug(64))
+           and (.context.provenance.provider as $source | ["env","provider-env"] | index($source) != null)
          else ((.context.provenance // {})|has("provider")|not) end)
     and (if (.context|has("plan_slug")) then
            (.context.plan_slug|slug(128)) and .context.provenance.plan_slug == "env"
@@ -90,6 +102,9 @@ PARSED=$(jq -Rn '
 ' < "$LOG_INPUT") || { echo "audit-log.sh: failed to parse $LOG" >&2; exit 1; }
 
 EVENTS=$(printf '%s' "$PARSED" | jq -c '[.[] | select(.classification == "valid_v1" or .classification == "valid_v2") | .event + {line:.line}]')
+if [ -n "$SINCE" ]; then
+    EVENTS=$(printf '%s' "$EVENTS" | jq -c --arg since "$SINCE" '[.[] | select(.ts[0:10] >= $since)]')
+fi
 COUNTERS=$(printf '%s' "$PARSED" | jq -c '
   reduce .[] as $r ({valid_v1:0,valid_v2:0,invalid_json:0,invalid_schema:0,unsupported_version:0,unknown_event:0};
     .[$r.classification] += 1)')
@@ -154,6 +169,38 @@ fi
 
 REVIEW_FINDINGS=$(printf '%s' "$EVENTS" | jq -c '{count:([.[] | select(.event == "review-finding")] | length)}')
 
+# Completed plan lifecycle is opt-in and exact. Legacy prose plans are valid but
+# excluded: inferring dates from filenames, Git history, or narrative would turn
+# a convenience metric into fabricated data.
+PLAN_ITEMS='[]'
+for plan in "$ROOT"/docs/plans/completed/*.md; do
+    [ -f "$plan" ] || continue
+    [ "$(sed -n '1p' "$plan")" = "---" ] || continue
+    [ "$(sed -n '2p' "$plan")" = "harness_plan: 1" ] || continue
+    [ "$(sed -n '3p' "$plan")" = "status: completed" ] || continue
+    started=$(sed -n '4s/^started: //p' "$plan")
+    completed=$(sed -n '5s/^completed: //p' "$plan")
+    [ "$(sed -n '6p' "$plan")" = "---" ] || continue
+    printf '%s' "$started" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || continue
+    printf '%s' "$completed" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || continue
+    plan_rel=${plan#"$ROOT"/}
+    item=$(jq -cn --arg plan "$plan_rel" --arg started "$started" --arg completed "$completed" '
+      (($completed + "T00:00:00Z" | fromdateiso8601)
+       - ($started + "T00:00:00Z" | fromdateiso8601)) / 86400 | floor as $days
+      | select($days >= 0)
+      | {plan:$plan,started:$started,completed:$completed,duration_days:$days}' 2>/dev/null) || continue
+    [ -n "$item" ] || continue
+    PLAN_ITEMS=$(jq -cn --argjson items "$PLAN_ITEMS" --argjson item "$item" '$items + [$item]') || PLAN_ITEMS='[]'
+done
+PLAN_ITEMS=$(printf '%s' "$PLAN_ITEMS" | jq -c 'sort_by([.completed,.plan])')
+PLAN_COUNT=$(printf '%s' "$PLAN_ITEMS" | jq -r 'length' | tr -d '\r')
+if [ "$PLAN_COUNT" -gt 0 ]; then
+    PLAN_CYCLES=$(printf '%s' "$PLAN_ITEMS" | jq -c '
+      {status:"available",items:.,summary:{count:length,average_days:(map(.duration_days)|add/length)},reason:null}')
+else
+    PLAN_CYCLES=$(jq -cn '{status:"not_available",items:[],summary:null,reason:"no_completed_plan_metadata"}')
+fi
+
 EVAL=$(jq -cn '{status:"not_available",reason:"current_results_or_baseline_absent"}')
 if [ -d "$RESULTS_DIR" ] && [ -f "$BASELINE" ] && [ -x "$ROOT/scripts/harness/lib/eval-harness.sh" ]; then
     if eval_json=$(bash "$ROOT/scripts/harness/lib/eval-harness.sh" --results-dir "$RESULTS_DIR" \
@@ -164,12 +211,12 @@ if [ -d "$RESULTS_DIR" ] && [ -f "$BASELINE" ] && [ -x "$ROOT/scripts/harness/li
     fi
 fi
 
-REPORT=$(jq -cn --arg log_status "$LOG_STATUS" --argjson counters "$COUNTERS" --argjson gate_daily "$GATE_DAILY" \
+REPORT=$(jq -cn --arg log_status "$LOG_STATUS" --arg since "$SINCE" --argjson counters "$COUNTERS" --argjson gate_daily "$GATE_DAILY" \
     --argjson retries "$RETRIES" --argjson denies "$DENIES" --argjson reviews "$REVIEW_FINDINGS" --argjson session_commits "$SESSION_COMMITS" \
-    --argjson eval "$EVAL" '
-  {version:1,log:{status:$log_status},parser:$counters,gate_outcomes_daily:$gate_daily,retry_episodes:$retries,
+    --argjson plan_cycles "$PLAN_CYCLES" --argjson eval "$EVAL" '
+  {version:1,log:({status:$log_status} + (if $since != "" then {since:$since} else {} end)),parser:$counters,gate_outcomes_daily:$gate_daily,retry_episodes:$retries,
    repeat_denies:$denies,review_findings:$reviews,session_commits:$session_commits,
-   plan_cycles:{status:"not_available",reason:"no_machine_readable_lifecycle"},eval:$eval}
+   plan_cycles:$plan_cycles,eval:$eval}
   | .recommendations = ([
       (if (.parser.invalid_json + .parser.invalid_schema + .parser.unsupported_version) > 0
        then {code:"repair_invalid_log_rows",count:(.parser.invalid_json + .parser.invalid_schema + .parser.unsupported_version)} else empty end),
@@ -216,12 +263,19 @@ else
         "$LOG_STATUS" "$(printf '%s' "$COUNTERS" | _jq_text .valid_v1)" "$(printf '%s' "$COUNTERS" | _jq_text .valid_v2)" \
         "$(printf '%s' "$COUNTERS" | _jq_text .invalid_json)" "$(printf '%s' "$COUNTERS" | _jq_text .invalid_schema)" \
         "$(printf '%s' "$COUNTERS" | _jq_text .unsupported_version)" "$(printf '%s' "$COUNTERS" | _jq_text .unknown_event)"
+    [ -n "$SINCE" ] && printf 'Trend window: since %s UTC\n' "$SINCE"
     printf '%-10s %-24s %-6s %-5s %-5s %-5s %s\n' DAY GATE MODE RUNS PASS FAIL FAILURE-RATE
     printf '%s' "$GATE_DAILY" | _jq_text '.[] | [.day,.name,.mode,(.runs|tostring),(.passes|tostring),(.failures|tostring),(.failure_rate|tostring)] | @tsv' \
         | while IFS="$(printf '\t')" read -r day name mode runs passes failures rate; do
             printf '%-10s %-24s %-6s %-5s %-5s %-5s %s\n' "$day" "$name" "$mode" "$runs" "$passes" "$failures" "$rate"
           done
-    printf 'Plan cycles: N/A (no machine-readable lifecycle)\n'
+    if [ "$(printf '%s' "$PLAN_CYCLES" | _jq_text .status)" = available ]; then
+        printf 'Plan cycles: %s completed, average %s days\n' \
+            "$(printf '%s' "$PLAN_CYCLES" | _jq_text .summary.count)" \
+            "$(printf '%s' "$PLAN_CYCLES" | _jq_text .summary.average_days)"
+    else
+        printf 'Plan cycles: N/A (%s)\n' "$(printf '%s' "$PLAN_CYCLES" | _jq_text .reason)"
+    fi
     printf 'Review findings: %s\n' "$(printf '%s' "$REVIEW_FINDINGS" | _jq_text .count)"
     printf 'Session commits: %s%s\n' "$(printf '%s' "$SESSION_COMMITS" | _jq_text .status)" \
         "$(printf '%s' "$SESSION_COMMITS" | _jq_text 'if .reason then " ("+.reason+")" else "" end')"

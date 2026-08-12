@@ -164,8 +164,17 @@ jobs:
                 printf '%s\n' "$out"
                 continue ;;
             esac
-            [ "$rc" -eq 0 ] || fails=$((fails + 1))
             skipped=$((skipped + n))
+            if [ "$rc" -ne 0 ]; then
+              fails=$((fails + 1))
+              echo "=== $t ==="
+              printf '%s\n' "$out"
+              case $'\n'"$out" in
+                *$'\n'FAIL:*|*$'\n'FAILED*) ;;
+                *) echo "FAIL: $(basename "$t") exited $rc without a standard failure marker" ;;
+              esac
+              continue
+            fi
             # Pure-shell line membership, NOT `printf | grep -q`. grep -q exits on
             # the first match, printf takes SIGPIPE, and under `-o pipefail` the
             # pipeline is then FALSE — so a suite whose failure marker appears

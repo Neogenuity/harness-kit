@@ -24,6 +24,15 @@ else
     fail "v2 writer envelope/provenance drifted"
 fi
 
+provider_context=$(harness_log_context run-2 verify codex-thread provider-env codex provider-env '' '')
+if printf '%s' "$provider_context" | jq -e '
+        .session_id == "codex-thread" and .provenance.session_id == "provider-env"
+        and .provider == "codex" and .provenance.provider == "provider-env"' >/dev/null 2>&1; then
+    pass "provider-owned environment attribution is explicit"
+else
+    fail "provider-owned environment attribution was dropped: $provider_context"
+fi
+
 long=$(printf '%0300d' 0)
 bounded=$(harness_log_context '' '' "$long" env 'bad provider' env '../bad plan?' env)
 if [ "$bounded" = '{}' ]; then
@@ -71,6 +80,80 @@ else
     fail "concurrent appends lost or interleaved event rows"
 fi
 
+# The active stream rotates only before an append would extend an already-full
+# file. Archives remain valid JSONL siblings and no old history is deleted.
+rotate_log="$WORK/rotate.jsonl"
+HARNESS_LOG_FILE="$rotate_log" HARNESS_LOG_MAX_BYTES=1 \
+    harness_log_v2 "$WORK" test-log.sh advise first "" '{}' '{}'
+HARNESS_LOG_FILE="$rotate_log" HARNESS_LOG_MAX_BYTES=1 \
+    harness_log_v2 "$WORK" test-log.sh advise second "" '{}' '{}'
+archive_count=0
+archive_valid=0
+for candidate in "$rotate_log".*; do
+    [ -f "$candidate" ] || continue
+    archive_count=$((archive_count + 1))
+    if jq -e -s 'length == 1 and .[0].file == "first"' "$candidate" >/dev/null 2>&1; then
+        archive_valid=$((archive_valid + 1))
+    fi
+done
+if [ "$archive_count" -eq 1 ] && [ "$archive_valid" -eq 1 ] \
+    && jq -e -s 'length == 1 and .[0].file == "second"' "$rotate_log" >/dev/null 2>&1; then
+    pass "bounded logs rotate to timestamped valid JSONL without deleting history"
+else
+    fail "bounded log rotation lost, duplicated, or corrupted history"
+fi
+
+stale_log="$WORK/stale.jsonl"
+HARNESS_LOG_FILE="$stale_log" HARNESS_LOG_MAX_BYTES=1 \
+    harness_log_v2 "$WORK" test-log.sh advise first "" '{}' '{}'
+printf '99999999\n' > "$stale_log.rotate-lock"
+HARNESS_LOG_FILE="$stale_log" HARNESS_LOG_MAX_BYTES=1 \
+    harness_log_v2 "$WORK" test-log.sh advise second "" '{}' '{}'
+if [ ! -e "$stale_log.rotate-lock" ] \
+    && jq -e -s 'length == 1 and .[0].file == "second"' "$stale_log" >/dev/null 2>&1; then
+    pass "a dead rotation owner is reclaimed without permanently disabling the bound"
+else
+    fail "stale rotation ownership was not recovered"
+fi
+
+concurrent_rotate="$WORK/concurrent-rotate.jsonl"
+: > "$concurrent_rotate"
+: > "$WORK/concurrent-rotate.err"
+i=0
+while [ "$i" -lt 64 ]; do
+    ( HARNESS_LOG_FILE="$concurrent_rotate" HARNESS_LOG_MAX_BYTES=1 \
+        harness_log_v2 "$WORK" test-log.sh advise "row-$i" "" '{}' '{}' ) \
+        2>>"$WORK/concurrent-rotate.err" &
+    i=$((i + 1))
+done
+wait
+rotation_rows=0
+rotation_valid=1
+for candidate in "$concurrent_rotate" "$concurrent_rotate".*; do
+    [ -f "$candidate" ] || continue
+    case "$candidate" in *.rotate-lock|*.rotate-lock.*) continue ;; esac
+    count=$(jq -e -s 'if all(.[]; .version == 2 and .event == "advise") then length else error("invalid") end' \
+        "$candidate" 2>/dev/null) || { rotation_valid=0; continue; }
+    rotation_rows=$((rotation_rows + count))
+done
+if [ "$rotation_valid" -eq 1 ] && [ "$rotation_rows" -eq 64 ] \
+    && [ ! -s "$WORK/concurrent-rotate.err" ]; then
+    pass "concurrent rotation preserves every row without leaking shell diagnostics"
+else
+    fail "concurrent rotation lost rows, emitted invalid JSON, or leaked diagnostics"
+fi
+
+no_rotate="$WORK/no-rotate.jsonl"
+HARNESS_LOG_FILE="$no_rotate" HARNESS_LOG_MAX_BYTES=0 \
+    harness_log_v2 "$WORK" test-log.sh advise first "" '{}' '{}'
+HARNESS_LOG_FILE="$no_rotate" HARNESS_LOG_MAX_BYTES=0 \
+    harness_log_v2 "$WORK" test-log.sh advise second "" '{}' '{}'
+if jq -e -s 'length == 2' "$no_rotate" >/dev/null 2>&1; then
+    pass "HARNESS_LOG_MAX_BYTES=0 disables rotation"
+else
+    fail "HARNESS_LOG_MAX_BYTES=0 did not preserve the active stream"
+fi
+
 # --- hook_log resolves the repo root from lib.sh, not from the caller -------
 # The default log path is "$root/.harness/var/log.jsonl", and $root used to be
 # computed as dirname($0)/../../.. -- three levels up from the CALLING hook.
@@ -92,7 +175,7 @@ set -uo pipefail
 hook_log advise policy.sh detail
 HOOKEOF
 chmod +x "$HL/.harness/hooks/policy.sh"
-( cd "$HL" && ./.harness/hooks/policy.sh >/dev/null 2>&1 )
+( export HARNESS_TESTING=0; cd "$HL" && ./.harness/hooks/policy.sh >/dev/null 2>&1 )
 if [ -f "$HL/.harness/var/log.jsonl" ] \
     && jq -e 'select(.version == 2 and .event == "advise")' "$HL/.harness/var/log.jsonl" >/dev/null 2>&1; then
     pass "hook_log from a .harness/hooks/ hook writes inside the repo"

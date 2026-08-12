@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# Import local provider transcripts, compute deterministic trajectory evidence,
+# record human feedback, and scaffold untrusted eval drafts. Nothing uploads.
+set -uo pipefail
+umask 077
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+RUNS_DIR="${HARNESS_RUNS_DIR:-$ROOT/.harness/var/runs}"
+# shellcheck source=/dev/null
+. "$ROOT/scripts/harness/lib/trace-lib.sh"
+usage() {
+    echo "usage: scripts/harness/observe import --provider claude|codex --transcript PATH [--run-id ID]"
+    echo "       scripts/harness/observe feedback <run-id> good|bad [--reason TEXT]"
+    echo "       scripts/harness/observe show <run-id>"
+    echo "       scripts/harness/observe promote <run-id> <slug>"
+}
+die() { echo "observe: $*" >&2; exit 1; }
+valid_id() { case "$1" in ''|*[!A-Za-z0-9._-]*|*..*) return 1 ;; *) return 0 ;; esac; }
+command -v jq >/dev/null 2>&1 || die "jq is required"
+
+action="${1:-}"; [ $# -gt 0 ] && shift
+case "$action" in
+    import)
+        provider=""; transcript=""; run_id=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --provider) [ $# -ge 2 ] || die "--provider requires a value"; provider="$2"; shift 2 ;;
+                --transcript) [ $# -ge 2 ] || die "--transcript requires a value"; transcript="$2"; shift 2 ;;
+                --run-id) [ $# -ge 2 ] || die "--run-id requires a value"; run_id="$2"; shift 2 ;;
+                *) die "unknown import option: $1" ;;
+            esac
+        done
+        case "$provider" in claude|codex) ;; *) die "--provider must be claude or codex" ;; esac
+        [ -r "$transcript" ] || die "transcript is not readable: $transcript"
+        if [ -z "$run_id" ]; then run_id="$(date -u +%Y%m%dT%H%M%SZ)-$provider"; fi
+        valid_id "$run_id" || die "run id may contain only letters, digits, dot, underscore, and hyphen"
+        mkdir -p "$RUNS_DIR" || die "cannot create $RUNS_DIR"
+        run_dir="$RUNS_DIR/$run_id"
+        [ ! -e "$run_dir" ] || die "run already exists at $run_dir"
+        reservation="$RUNS_DIR/.reserve-$run_id"
+        mkdir "$reservation" 2>/dev/null || die "run is already being imported: $run_id"
+        stage="$RUNS_DIR/.import-$run_id-$$"
+        cleanup_import() {
+            [ -d "$stage" ] && rm -rf -- "$stage"
+            [ -d "$reservation" ] && rmdir "$reservation" 2>/dev/null || true
+        }
+        trap cleanup_import EXIT HUP INT TERM
+        mkdir "$stage" || die "cannot stage run $run_id"
+        cp "$transcript" "$stage/transcript.jsonl" || die "cannot copy transcript"
+        row_counts=$(jq -Rsc '
+            [split("\n")[] | select(length > 0)] as $raw
+            | [$raw[] | (fromjson? // empty) | select(type == "object")] as $objects
+            | {total:($raw|length),objects:($objects|length)}' "$stage/transcript.jsonl") \
+            || die "cannot inspect transcript rows"
+        invalid_rows=$(printf '%s' "$row_counts" | jq -r '.total - .objects')
+        [ "$invalid_rows" -eq 0 ] \
+            || echo "observe: warning: ignored $invalid_rows malformed or non-object transcript row(s)" >&2
+        eval_normalize_trace "$provider" "$stage/transcript.jsonl" > "$stage/trace.jsonl" \
+            || die "trace normalization failed"
+        [ -s "$stage/trace.jsonl" ] || die "transcript produced no supported trace events"
+        jq -e -s 'any(.[]; .type == "session.started")' "$stage/trace.jsonl" >/dev/null 2>&1 \
+            || die "transcript has no recognized session-start anchor"
+        eval_trajectory_json "$stage/trace.jsonl" > "$stage/trajectory.json" \
+            || die "trajectory analysis failed"
+        jq -cn --arg provider "$provider" --arg run_id "$run_id" \
+            --arg imported_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version:1,run_id:$run_id,provider:$provider,imported_at:$imported_at,feedback:null}' \
+            > "$stage/metadata.json" || die "metadata write failed"
+        mv "$stage" "$run_dir" || die "cannot publish imported run"
+        rmdir "$reservation" 2>/dev/null || true
+        trap - EXIT HUP INT TERM
+        printf '%s\n' "$run_dir" ;;
+    feedback)
+        run_id="${1:-}"; rating="${2:-}"; shift 2 2>/dev/null || true
+        valid_id "$run_id" || die "invalid run id"
+        case "$rating" in good|bad) ;; *) die "feedback must be good or bad" ;; esac
+        reason=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --reason) [ $# -ge 2 ] || die "--reason requires a value"; reason="$2"; shift 2 ;;
+                *) die "unknown feedback option: $1" ;;
+            esac
+        done
+        run_dir="$RUNS_DIR/$run_id"; [ -f "$run_dir/metadata.json" ] || die "unknown run: $run_id"
+        jq -cn --arg rating "$rating" --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version:1,rating:$rating,reason:(if $reason=="" then null else $reason end),recorded_at:$at}' \
+            > "$run_dir/feedback.json" || die "feedback write failed"
+        # metadata.json carries a `feedback` field and is the documented record
+        # for a run; leaving it null after a rating makes every consumer that
+        # reads metadata alone treat a rated run as unlabelled.
+        meta_tmp="$run_dir/metadata.json.$$"
+        jq -c --slurpfile feedback "$run_dir/feedback.json" '.feedback = $feedback[0]' \
+            "$run_dir/metadata.json" > "$meta_tmp" \
+            && mv -f "$meta_tmp" "$run_dir/metadata.json" \
+            || { rm -f "$meta_tmp" 2>/dev/null; die "metadata feedback update failed"; }
+        jq -c . "$run_dir/feedback.json" ;;
+    show)
+        run_id="${1:-}"; valid_id "$run_id" || die "invalid run id"
+        run_dir="$RUNS_DIR/$run_id"; [ -f "$run_dir/metadata.json" ] || die "unknown run: $run_id"
+        jq -n --slurpfile metadata "$run_dir/metadata.json" --slurpfile trajectory "$run_dir/trajectory.json" \
+            --slurpfile feedback "$( [ -f "$run_dir/feedback.json" ] && printf '%s' "$run_dir/feedback.json" || printf '%s' /dev/null )" \
+            '{metadata:$metadata[0],trajectory:$trajectory[0],feedback:($feedback[0] // null)}' ;;
+    promote)
+        run_id="${1:-}"; slug="${2:-}"; valid_id "$run_id" || die "invalid run id"
+        HARNESS_RUNS_DIR="$RUNS_DIR" bash "$ROOT/scripts/harness/eval-author" from-run "$run_id" "$slug" ;;
+    -h|--help|'') usage; [ -n "$action" ] && exit 0 || exit 64 ;;
+    *) usage >&2; exit 64 ;;
+esac

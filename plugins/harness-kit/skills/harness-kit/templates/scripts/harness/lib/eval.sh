@@ -96,6 +96,8 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$ROOT" || exit 1
 # shellcheck source=/dev/null
 . "$ROOT/scripts/harness/lib/eval-lib.sh"
+# shellcheck source=/dev/null
+. "$ROOT/scripts/harness/lib/trace-lib.sh"
 
 die() { echo "eval.sh: $*" >&2; exit 1; }
 command -v jq  >/dev/null 2>&1 || die "jq is required (JSON results). Install jq and retry."
@@ -156,6 +158,9 @@ if [ "${DIRTY_COUNT:-0}" -gt 0 ]; then
 fi
 
 TASK_DIR="$TASKS_DIR/$TASK"
+case "$TASK" in _*) die "task $TASK is a draft/template and cannot be executed or baselined" ;; esac
+[ ! -e "$TASK_DIR/.harness-eval-draft" ] \
+    || die "task $TASK still carries .harness-eval-draft; finalize it before execution"
 [ -f "$TASK_DIR/TASK.md" ] || die "no task at $TASK_DIR (need TASK.md)"
 [ -f "$TASK_DIR/check.sh" ] || die "task $TASK has no check.sh grader"
 
@@ -402,8 +407,18 @@ while [ "$i" -le "$TRIALS" ]; do
     # when the provider reports nothing (or for mock, which has no transcript
     # usage). Efficiency is now a recorded property of every results row.
     usage="$(eval_usage_json "$PROVIDER" "$TRIAL_DIR/transcript.jsonl")"
+    trace="$TRIAL_DIR/trace.jsonl"
+    : > "$trace"
+    case "$PROVIDER" in
+        claude|codex)
+            if ! eval_normalize_trace "$PROVIDER" "$TRIAL_DIR/transcript.jsonl" > "$trace"; then
+                echo "eval.sh: warning: trial $i trace normalization failed; recording an empty trajectory" >&2
+                : > "$trace"
+            fi ;;
+    esac
+    trajectory="$(eval_trajectory_json "$trace")" || trajectory=''
     eval_result_json "$TASK" "$PROVIDER" "$MODEL" "$SUITE" "$POLARITY" "$RUN_ID" \
-        "$i" "$passed" "$dur" "$agent_rc" "$TRIAL_DIR" "$RUN_STARTED_AT" "$outcome" "$usage" "$VARIANT" >> "$RESULTS" \
+        "$i" "$passed" "$dur" "$agent_rc" "$TRIAL_DIR" "$RUN_STARTED_AT" "$outcome" "$usage" "$VARIANT" "$trajectory" >> "$RESULTS" \
         || { rm -rf "$WS_BASE"; die "cannot write results to $RESULTS (trial $i) — a read-only or full disk must not exit 0 with missing rows"; }
 
     printf '  trial %d: %s  (%ds%s)\n' "$i" \

@@ -494,7 +494,8 @@ harness_append_formatterignore() {
 **/.cursor/agents/
 **/.codex/agents/
 **/.opencode/skills/
-**/.opencode/agents/'
+**/.opencode/agents/
+**/.opencode/plugins/'
 
     if [ -L "$pi" ]; then
         echo "ERROR: harness: $pi is a symlink — refusing to write through it" >&2

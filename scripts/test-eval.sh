@@ -51,11 +51,13 @@ if command -v jq >/dev/null 2>&1; then
             .task=="demo" and .provider=="claude" and .pass==true and
             .trial==1 and .duration_s==5 and (has("agent_rc") and has("transcript")) and
             (.run_started_at == 1752345600) and (.run_started_at | type) == "number" and
-            (.outcome == "pass") and (.outcome | type) == "string"' \
+            (.outcome == "pass") and (.outcome | type) == "string" and
+            .trajectory.version == 1 and .trajectory.events == 0 and
+            (.trajectory.files_modified | type) == "array"' \
             >/dev/null 2>&1; then
-        ok "results-JSON schema (run_started_at, outcome)"
+        ok "results-JSON schema (run_started_at, outcome, trajectory)"
     else
-        bad "results-JSON schema (run_started_at, outcome)"
+        bad "results-JSON schema (run_started_at, outcome, trajectory)"
     fi
 else
     ok "results-JSON schema (skipped: jq absent)"
@@ -781,6 +783,10 @@ TASKEOF
     printf '#!/usr/bin/env bash\nexit 0\n' > "$R/tasks/ok-task/check.sh"
     printf '#!/usr/bin/env bash\ntrue\n' > "$R/tasks/ok-task/reference/apply.sh"
 
+    cp -R "$R/tasks/ok-task" "$R/tasks/_draft-task"
+    cp -R "$R/tasks/ok-task" "$R/tasks/draft-marker"
+    printf 'draft=1\n' > "$R/tasks/draft-marker/.harness-eval-draft"
+
     # bad-enum: suite metadata is deliberately misspelled ("regresion").
     mkdir -p "$R/tasks/bad-enum/reference"
     cat > "$R/tasks/bad-enum/TASK.md" <<'TASKEOF'
@@ -972,6 +978,18 @@ TASKEOF
         sed 's/^/    /' "$R_BASE/a-yes.err"
     fi
     rm -f "$R/scratch.txt"
+
+    for draft_task in _draft-task draft-marker; do
+        bash "$R/scripts/harness/run-evals" "$draft_task" --provider mock --trials 1 \
+            --tasks-dir "$R/tasks" --results-dir "$R_BASE/results-draft" --run-id "reject-$draft_task" \
+            >"$R_BASE/draft.out" 2>"$R_BASE/draft.err"
+        rc=$?
+        if [ "$rc" -ne 0 ] && grep -qi 'draft' "$R_BASE/draft.err"; then
+            ok "runner guards: $draft_task cannot execute or enter baselines"
+        else
+            bad "runner guards: $draft_task should be rejected as an unfinalized draft (rc=$rc)"
+        fi
+    done
 
     # (b) enum rejection — pins eval.sh's OWN enum-validation logic directly
     # (not test-eval.sh's private re-implementation of the same enums used

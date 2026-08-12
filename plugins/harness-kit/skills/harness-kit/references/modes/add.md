@@ -26,7 +26,12 @@
   `hook_advise_once` for stop-hooks). Wire the event in each provider config per
   the provider matrix. Add a `test-<name>.sh` regression beside the hook and run
   it as a gate in `.harness/gates.conf` — a guard without a test is a future
-  silent failure. Verify by piping sample payloads (both harness layouts) into
+  silent failure. `verify` marks every gate subprocess with
+  `HARNESS_TESTING=1`, which makes `hook_log` drop synthetic test events; if the
+  test invokes a guard outside `verify`, also set `HARNESS_LOG=0` explicitly.
+  A focused observability assertion may opt back in for only that invocation
+  with `HARNESS_TESTING=0 HARNESS_LOG=1 HARNESS_LOG_FILE=<temp-path>`.
+  Verify by piping sample payloads (both harness layouts) into
   the script and confirming it actually sources `lib.sh` (a wrong relative path
   fails open to a silent no-op). For an enforcement hook the agent must not be
   able to neuter, pin it in `scripts/harness/.harness-manifest` as a

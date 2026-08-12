@@ -183,6 +183,20 @@ proceeding. Detection only — the guards' fail-open posture is unchanged and
    Before declaring `.codex`, verify Python 3.11+ `tomllib` with
    `python3 -I -c 'import tomllib'`; without a complete TOML parser, classify
    that profile as unverifiable and do not adopt it.
+
+   **OpenCode adapter migration (v0.42.0).** The new capability-table row makes
+   `.opencode` hook-capable through a project plugin. For an existing
+   `HARNESS_PROVIDERS` containing `.opencode`, do not let the mechanism update
+   silently turn that fact into an incomplete declared wiring. Present the
+   `templates/providers/opencode/plugins/harness-kit.js` →
+   `.opencode/plugins/harness-kit.js` addition as a separate provider-content
+   diff. On approval, copy it and run the adapter regression plus
+   `check-instructions`, then re-pin so the executable adapter enters the
+   integrity manifest. Preserve and diff any existing plugin file; never
+   replace it wholesale. If the adopter declines the new hooks, explicitly set
+   `HOOK_WIRED_PROVIDERS` to the previously wired subset (excluding `.opencode`)
+   so the override records that choice and the checker does not misrepresent
+   OpenCode as wired. Re-pin a changed `harness.conf` after either choice.
 6. **Offer existing application repos explicit runtime adoption.** Use init's
    app detection and recon to propose boot, health, deterministic seed/reset,
    port, log, and trace mappings. Non-app repos report N/A. For an app without

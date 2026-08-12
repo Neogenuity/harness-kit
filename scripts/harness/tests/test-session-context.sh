@@ -59,5 +59,24 @@ else
     echo "FAIL: non-numeric value should fail safe (rc=$rc)"; fails=$((fails+1))
 fi
 
+# (5) Claude's documented SessionStart environment file receives only a safe,
+# exact session id plus provider; hostile/non-slug input cannot inject shell.
+CLAUDE_FILE="$WORK/claude-env.sh"
+printf '%s' '{"session_id":"session-123"}' | env CLAUDE_ENV_FILE="$CLAUDE_FILE" "$HOOK" >/dev/null 2>&1
+if grep -qx "export HARNESS_SESSION_ID='session-123'" "$CLAUDE_FILE" \
+        && grep -qx "export HARNESS_PROVIDER='claude'" "$CLAUDE_FILE"; then
+    echo "ok:   Claude SessionStart persists exact session attribution"
+else
+    echo "FAIL: Claude env file missing safe session/provider exports"; fails=$((fails+1))
+fi
+before=$(wc -l < "$CLAUDE_FILE" | tr -d '[:space:]')
+printf '%s' '{"session_id":"bad; touch injected"}' | env CLAUDE_ENV_FILE="$CLAUDE_FILE" "$HOOK" >/dev/null 2>&1
+after=$(wc -l < "$CLAUDE_FILE" | tr -d '[:space:]')
+if [ "$before" = "$after" ]; then
+    echo "ok:   unsafe session id is not persisted"
+else
+    echo "FAIL: unsafe session id changed Claude env file"; fails=$((fails+1))
+fi
+
 if [ "$fails" -gt 0 ]; then echo "FAILED: $fails session-context case(s)"; exit 1; fi
 echo "PASSED: all session-context cases"

@@ -27,7 +27,7 @@
         "plan_slug": { "type": "string" },
         "provenance": {
           "type": "object",
-          "description": "Maps every present attribution field to its source; absent when context is empty",
+          "description": "Maps every present attribution field to its source (including provider-env for exact provider-owned environment identifiers); absent when context is empty",
           "additionalProperties": { "type": "string" }
         }
       }

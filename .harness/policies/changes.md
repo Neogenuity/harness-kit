@@ -42,9 +42,9 @@ nobody mistakes a warning for a wall:
   `cat .env`); rephrase the command, or drop `Bash` from the matcher if this
   repo talks about secret filenames constantly. The kit wires no Cursor
   pre-edit hook (Cursor's generic `preToolUse` is pre-edit-capable but not yet
-  wired — see the provider-matrix Cursor-hooks note), and OpenCode has no shell
-  hooks at all, so these denials fire on Claude Code and Codex only — elsewhere
-  the CI detection layer (`check-harness` manifest integrity) is the backstop,
+  wired — see the provider-matrix Cursor-hooks note); OpenCode uses the shipped
+  plugin adapter and throws when the same portable guard exits 2. The CI
+  detection layer (`check-harness` manifest integrity) remains the backstop,
   **for kit mechanism files only**: the manifest pins what the kit installed,
   so `GUARD_PROTECTED_EXTRA` entries have no integrity check there.
 - **CI detection** — `check-harness` manifest integrity + drift checks.

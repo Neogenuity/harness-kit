@@ -23,6 +23,24 @@ continue from the file alone.
 
 Move plans between states with `git mv` — never copy.
 
+New plans carry this exact six-line frontmatter so `audit-log.sh` can report
+completed cycle time without scraping prose:
+
+```yaml
+---
+harness_plan: 1
+status: queued
+started: null
+completed: null
+---
+```
+
+On activation, set `status: active` and `started: YYYY-MM-DD`; on completion,
+set `status: completed` and `completed: YYYY-MM-DD`. The directory, dates, and
+metadata status must agree. `validate-plan` enforces the contract for any plan
+that opts into the header. Existing plans without it remain valid but do not
+contribute cycle metrics; their dates are never inferred from prose or Git.
+
 **Naming.** The active plan carries its release/milestone identifier (its scope
 pins that milestone). Queued plans are named by **theme**, not a number —
 milestones are assigned only when a plan moves to `active/`, because what

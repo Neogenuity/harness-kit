@@ -23,7 +23,12 @@ trap 'rm -rf "$WORK"' EXIT
 cp "$HOOKS_DIR/lib.sh" "$WORK/lib.sh"
 cp "$HOOKS_DIR/../lib/log-lib.sh" "$WORK/log-lib.sh"
 export HARNESS_LOG=1
+export HARNESS_TESTING=0
 export HARNESS_LOG_FILE="$WORK/log.jsonl"
+# The v2-envelope assertions below pin exact context/provenance, so the ambient
+# agent-session attribution (HARNESS_SESSION_ID / HARNESS_PROVIDER, exported by
+# session-context.sh) must not leak in and outrank it.
+unset HARNESS_SESSION_ID HARNESS_PROVIDER HARNESS_PLAN_SLUG
 cat > "$WORK/fixture-hook.sh" <<'EOF'
 #!/usr/bin/env bash
 set -uo pipefail

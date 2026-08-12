@@ -141,11 +141,36 @@ bash scripts/harness/run-evals <slug> --provider claude --model <m> --trials 3  
 bash scripts/harness/run-evals <slug> --provider mock  --trials 1                # plumbing (no model)
 bash scripts/harness/lib/eval-harness.sh                    # score latest vs baseline (fails on a regression/violation)
 bash scripts/harness/lib/eval-harness.sh --update-baseline  # record current numbers
+bash scripts/harness/eval-author new <slug>                 # excluded _draft- scaffold
+bash scripts/harness/eval-author finalize <slug>            # validate grader/reference, then activate
+bash scripts/harness/observe import --provider claude --transcript <path>
 ```
 
 Transcripts land under `.harness/var/eval-results/` (git-ignored). A full run costs
 real model calls — schedule it or run after a harness change, never per-PR.
 `mock` proves the pipeline and the grader; it is not a measurement of any model.
+
+Claude and Codex trials also produce `trace.jsonl`, a versioned provider-neutral
+projection of file, command, and tool events, plus a `trajectory` object on the
+result row. The deterministic fields flag instruction discovery order, test and
+verification execution, failed-command recovery, repeated reads/commands, and
+modified files. They are observational evidence only: `eval-harness.sh` does
+not use traces or trajectory metrics to decide task outcomes, regression state,
+or baselines. Instruction-discovery fields are positive-evidence metrics: they
+are nullable when the trace has no direct successful instruction-read event,
+because shell or provider-internal reads may be unobservable. Unknown is never
+scored as failure. Raw transcripts and normalized traces remain local under
+`.harness/var/` and may contain repository paths or command text.
+
+`eval-author` always creates an underscore-prefixed draft from the shipped
+mechanism template and marks it `.harness-eval-draft`. The runner rejects both
+underscore names and marker-bearing directories, even when named explicitly.
+After replacing every `HARNESS_EVAL_TODO`, use `eval-author finalize <slug>`:
+it activates the task only after the reference solution passes the independent
+grader-validity suite. `observe feedback` records a local good/bad label, and
+`observe promote <run-id> <slug>` attaches path-redacted trajectory metrics to
+a new draft. Raw transcript text, run identity, and modified-file paths stay
+under `.harness/var/`. Use `observe show <run-id>` before promotion.
 
 A ready-made **opt-in scheduled workflow** ships with the kit and installs as
 `.github/workflows/eval-cron.yml`: a weekly cron plus a manual dispatch that
