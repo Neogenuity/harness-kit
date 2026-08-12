@@ -1,7 +1,7 @@
 # harness-kit 0.41.0
 f765112e42bb5b7304cf8a2405ec41b4d9c997e1c47fae7d16ef43d0fe4defa7  .harness/gates.conf # tailored
 9af2143887fdaa870eac1a2c0be38ce89a09d36c6503fb8ec4308eb9d072df40  .harness/hooks/guard-project-policy.sh # tailored
-ace594a1b5029e1ff411a80570746f0e779298f850339e63fe53663c4d0e293f  .opencode/plugins/harness-kit.js
+59ef2d9e5b60da5df86c90f2c60d3f1cf2e15071e219aaeaece610e2d26f8a2b  .opencode/plugins/harness-kit.js
 245079626615bdc1545e362c236472cd763ff649496f8b0d9d8d3540d37c8882  scripts/check-packaging.sh # tailored
 cc7133a128a946575168d954bf7e4b97c020240610838af147d2f49b13798143  scripts/harness/bootstrap
 72889820e98644c033bc6370623e04fe9485e4ef62fee5877a24aa063c74ba68  scripts/harness/check-docs
@@ -57,7 +57,7 @@ a70197144cde96bb1bd1bc0d498586edcf8f283734e16be2704c6f7dfc8d8cd9  scripts/harnes
 2be99e466969fba34016794e2253098a99717e676887368e317882d041ee771f  scripts/harness/tests/test-guard-secrets.sh
 b221c50dea6dcbf806d255409d856c6b88e09aeda957fa893d0aa48722be066e  scripts/harness/tests/test-log.sh
 c0dfa2ad4fa36d8981c0a82574675cd860ab9fa47c205ddba497532b13f4ed6a  scripts/harness/tests/test-observe.sh
-0d5c1e87d5bb6fc3f0ca756ce6de0acb22f4241f8ca093c69cf1291ac0a79460  scripts/harness/tests/test-opencode-adapter.sh
+f2701b5b64dbe0117ef85ca3ccecd96024e8a3d7e20b1127d71786565b3710bd  scripts/harness/tests/test-opencode-adapter.sh
 fdff9b0820441dd1250f3bc43fcc8f8ecb69fe226a208d978e1ed89c1f5f6e2d  scripts/harness/tests/test-session-context.sh
 11860239c84527e390d33aff803c75bed7d81d8a6410ad30a14c89e77c7db4ab  scripts/harness/tests/test-skip-tests-family.sh
 d0e5642fc915b85c58b69acd6b469ce0957528dd4852775e7d0bb9eb598081fb  scripts/harness/tests/test-sync-adapters.sh
