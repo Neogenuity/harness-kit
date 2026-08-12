@@ -29,9 +29,21 @@ exit 2
 HOOK
 chmod +x "$WORK/hang/scripts/harness/hooks/guard-secrets.sh"
 
-HARNESS_TESTING=1 PLUGIN_URL="file://$WORK/module/harness-kit.js" \
-    TEMPLATE_ROOT="$ROOT" HANG_ROOT="$WORK/hang" "${RUNTIME[@]}" <<'NODE'
-const { createHarnessKitHooks } = await import(process.env.PLUGIN_URL)
+PLUGIN_PATH="$WORK/module/harness-kit.js"
+TEMPLATE_ROOT_ENV="$ROOT"
+HANG_ROOT_ENV="$WORK/hang"
+if command -v cygpath >/dev/null 2>&1; then
+    # Native Windows Node cannot resolve MSYS /tmp paths or file:///tmp URLs.
+    # Mixed paths remain valid to Node and to the Git Bash child it spawns.
+    PLUGIN_PATH=$(cygpath -m "$PLUGIN_PATH") || exit 1
+    TEMPLATE_ROOT_ENV=$(cygpath -m "$TEMPLATE_ROOT_ENV") || exit 1
+    HANG_ROOT_ENV=$(cygpath -m "$HANG_ROOT_ENV") || exit 1
+fi
+
+HARNESS_TESTING=1 PLUGIN_PATH="$PLUGIN_PATH" \
+    TEMPLATE_ROOT="$TEMPLATE_ROOT_ENV" HANG_ROOT="$HANG_ROOT_ENV" "${RUNTIME[@]}" <<'NODE'
+import { pathToFileURL } from "node:url"
+const { createHarnessKitHooks } = await import(pathToFileURL(process.env.PLUGIN_PATH).href)
 
 let failures = 0
 const ok = (condition, message) => {
