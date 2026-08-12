@@ -197,16 +197,19 @@ pass@k/pass^k runner, recorded baselines — measure the harness itself)
 mechanics (`install-lib.sh` + `test-install.sh`) + two verified integrity fixes
 (pinned `harness.conf`, missing-manifest ERROR)
 ([completed/v0.7.0-install-update-verification.md](completed/v0.7.0-install-update-verification.md));
+**v0.42.0** — OpenCode hook adapter + the missing audit plumbing (session ids,
+plan lifecycle, deny paths) + eval seed corpus + normalized session tracing
+([completed/v0.42.0-open-issue-hardening.md](completed/v0.42.0-open-issue-hardening.md));
 **v0.6.0** — plans machinery the docs already promised + Copilot/Gemini
 rows + strict Agent Skills validation + matrix stamping
 ([completed/v0.6.0-plans-machinery-and-provider-breadth.md](completed/v0.6.0-plans-machinery-and-provider-breadth.md));
 **v0.5.0** — repackage to `plugins/harness-kit/` + Codex plugin distribution
 ([completed/v0.5.0-repackage-and-codex-distribution.md](completed/v0.5.0-repackage-and-codex-distribution.md)).
 
-**Active:** [Open-issue hardening and observational eval foundations](active/v0.42.0-open-issue-hardening.md)
-is the current mechanism track. [Launch readiness](active/launch-readiness.md)
-remains the parallel maintainer track; its demo recording is still open, while
-the org move (→ Neogenuity) and the public flip both shipped 2026-07-23.
+**Active:** [Launch readiness](active/launch-readiness.md) is the remaining
+maintainer track; its demo recording is still open, while the org move
+(→ Neogenuity) and the public flip both shipped 2026-07-23. The mechanism
+queue is empty again after v0.42.0.
 
 The mechanism queue was empty after v0.18.0 until the validated #29–#36 issue
 set activated as v0.42.0. New work enters as a

@@ -3,6 +3,123 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.42.0 — 2026-08-12
+
+Closes the feedback loop the audit surfaces were pointing at but could not
+fill: OpenCode gains a real hook layer, three permanently-empty audit metrics
+get their missing plumbing, the eval bank ships a seed corpus, and local
+provider sessions can be imported as normalized traces.
+
+Every changed file is mechanism-layer except the OpenCode adapter, which is
+`optional-policy` — see Migration.
+
+### Added
+
+- **OpenCode hook adapter.** `.opencode/plugins/harness-kit.js` translates
+  OpenCode's project-plugin events into the same stdin JSON the portable Bash
+  hooks already speak, and turns exit 2 into a thrown blocking error. Policy
+  stays in `scripts/harness/hooks/`; the adapter only marshals payloads and
+  outcomes. `.opencode` is now derived into the hook-wired provider set, and
+  check #8d validates its event-to-script coverage offline. (#29)
+
+- **A seed eval corpus and an authoring accelerator.** Two adversarially
+  pinned scenarios (`follow-local-convention`, `protect-verification-policy`)
+  ship with the bank so adoption no longer starts at zero tasks, and
+  `scripts/harness/eval-author` scaffolds a draft scenario. Drafts carry a
+  `.harness-eval-draft` marker and a `_`-prefixed slug, and cannot be executed
+  or baselined until finalized. (#33)
+
+- **Provider-neutral session tracing and local observation.** `trace-lib.sh`
+  normalizes Claude and Codex transcripts into `trace-event.v1` JSONL and
+  derives a deterministic trajectory; `scripts/harness/observe` imports a
+  local transcript, records good/bad feedback, and promotes a run into an
+  eval draft with paths redacted. Trajectory fields are evidence for authoring
+  and review — they never feed task outcome or baseline scoring. Nothing
+  uploads; artifacts stay under `.harness/var/`. (progresses #36)
+
+- **Log rotation and retention guidance.** The active stream rotates before an
+  append once it reaches 10 MiB (`HARNESS_LOG_MAX_BYTES`; `0` disables) into
+  timestamped siblings that are never auto-deleted, because choosing a history
+  window is the adopter's call. Audit an archive explicitly with
+  `--log <path>`. (#35)
+
+### Fixed
+
+- **`retry_episodes` was structurally empty** — no session id ever reached the
+  verify runner, so gate events could not be grouped into retry episodes.
+  Sessions are now attributed at their provider-native source: Claude persists
+  the exact id through `CLAUDE_ENV_FILE`, OpenCode injects it per shell call,
+  and Codex reads its thread id. Event context records the provenance of each
+  attribution rather than inferring one. (#31)
+
+- **`plan_cycles` was permanently `not_available`** — nothing declared a plan's
+  lifecycle in machine-readable form. Plans opt in with a six-line frontmatter
+  header (`harness_plan`, `status`, `started`, `completed`); a new check
+  validates it and requires status to agree with the directory. Legacy prose
+  plans stay valid and simply do not contribute cycle metrics — dates are never
+  inferred from filenames or Git history. (#32)
+
+- **Bash-command secret denies logged an empty `file` field**, so the
+  repeat-deny trend could not see the very denials that matter most on Codex,
+  where reads are shell commands. `hook_deny` now takes the matched path
+  explicitly. (#34)
+
+- **Repo-authored guard tests could poison the outcome log.** `verify` marks
+  gate subprocesses with `HARNESS_TESTING=1` and `hook_log` honors it, so a
+  guard exercised by a test cannot append synthetic denies to the operational
+  stream. Suites that assert on log contents opt back in with
+  `HARNESS_TESTING=0`; that suppression is silent, so the switch and its
+  vacuous-pass hazard are documented in `docs/standards/outcome-telemetry.md`.
+  (#30)
+
+- **The OpenCode adapter dropped post-edit feedback and could lose a denial.**
+  `tool.execute.after` read tool arguments from a parameter the runtime never
+  populates, so `format.sh` always saw an empty `tool_input` and never ran; args
+  are now carried from the before-hook by `callID`. Separately, a stdin `EPIPE`
+  killed the hook and resolved success, converting an explicit exit 2 into an
+  allow — the write error is now swallowed and the child's real exit status
+  decides, with the timeout still bounding a hung hook.
+
+- **Three trajectory metrics reported confidently wrong values.**
+  `verification_executed` missed any command after the first line of a
+  multi-line invocation; `edited_before_instruction_discovery` had no reachable
+  `true` branch, so a real violation read as "unknown"; and `repeated_reads`
+  reported `0` rather than `null` for Codex, which emits no read events at all,
+  making a Codex run look better instrumented than it is.
+
+- **`session-context.sh` could hang, and grew `CLAUDE_ENV_FILE` without
+  bound.** It drained stdin whenever stdin was not a TTY, so an open idle pipe
+  blocked the banner forever; it now reads only on the `CLAUDE_ENV_FILE` branch
+  that consumes the payload. That branch appended its two export lines on every
+  SessionStart — which fires on startup, resume, clear, and compact — leaving a
+  previous session's id above the current one; it now replaces its own lines.
+
+- **The OpenCode adapter had no formatter-ignore entry.**
+  `**/.opencode/plugins/` is now in the block `bootstrap --formatter-ignore`
+  writes, so an adopter's `prettier --write .` cannot reformat a byte-exact,
+  checksum-pinned artifact that has no `# tailored` escape hatch.
+
+- **`observe feedback` left `metadata.json` unrated.** It wrote a sibling
+  `feedback.json` but never updated the documented per-run record, so any
+  consumer reading metadata alone treated a rated run as unlabelled.
+
+### Migration
+
+Existing OpenCode adopters must choose one path explicitly, because
+`.opencode/plugins/harness-kit.js` is `optional-policy` — the installer never
+copies executable adapter code into your repo on your behalf:
+
+1. Copy `templates/providers/opencode/plugins/harness-kit.js` to
+   `.opencode/plugins/harness-kit.js`, preserving any existing project plugin,
+   then run `test-opencode-adapter.sh` and `check-instructions`, and re-pin
+   `scripts/harness/.harness-manifest`; or
+2. Exclude `.opencode` from `HOOK_WIRED_PROVIDERS` in `harness.conf`.
+
+A missing adapter while `.opencode` is hook-wired is reported by
+`check-instructions`. Everything else in this release is mechanism: update mode
+replaces those files when your copy still matches its pin, and diffs any you
+have marked `# tailored`.
+
 ## 0.41.0 — 2026-07-30
 
 Windows / Git Bash portability. Every fix here came from one adopter running

@@ -1,4 +1,4 @@
-# harness-kit 0.41.0
+# harness-kit 0.42.0
 f765112e42bb5b7304cf8a2405ec41b4d9c997e1c47fae7d16ef43d0fe4defa7  .harness/gates.conf # tailored
 9af2143887fdaa870eac1a2c0be38ce89a09d36c6503fb8ec4308eb9d072df40  .harness/hooks/guard-project-policy.sh # tailored
 c72e7bc185d86396179561f86d04db8efb4c467e656a3d3ebf8d90a7135d4158  .opencode/plugins/harness-kit.js
