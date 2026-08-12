@@ -24,6 +24,7 @@ EOF
 fails=0
 pass() { echo "ok:   $1"; }
 fail() { echo "FAIL: $1"; fails=$((fails + 1)); }
+skip() { echo "SKIP: $1"; }
 mode_of() {
     local path=$1 mode
     mode=$(stat -c '%a' "$path" 2>/dev/null || true)
@@ -40,12 +41,35 @@ mode_of() {
 run_dir=$(bash "$REPO/scripts/harness/observe" import --provider claude \
     --transcript "$WORK/transcript.jsonl" --run-id run-1); rc=$?
 if [ "$rc" -eq 0 ] && [ -f "$run_dir/transcript.jsonl" ] && [ -f "$run_dir/trace.jsonl" ] \
-    && jq -e '.events == 4 and .files_modified == ["src/private-name.txt"]' "$run_dir/trajectory.json" >/dev/null 2>&1 \
-    && [ "$(mode_of "$run_dir")" = 700 ] \
-    && [ "$(mode_of "$run_dir/transcript.jsonl")" = 600 ]; then
+    && jq -e '.events == 4 and .files_modified == ["src/private-name.txt"]' "$run_dir/trajectory.json" >/dev/null 2>&1; then
     pass "local import preserves raw evidence and computes trajectory metrics"
 else
     fail "local transcript import did not create the expected run artifacts"
+fi
+
+run_mode=$(mode_of "$run_dir")
+transcript_mode=$(mode_of "$run_dir/transcript.jsonl")
+if [ "$run_mode" = 700 ] && [ "$transcript_mode" = 600 ]; then
+    pass "local import keeps observation artifacts private"
+else
+    # Git Bash/MSYS over NTFS reports a mode but does not record non-executable
+    # chmod changes. Prove that host limitation independently before declining
+    # the POSIX-mode assertion; a capable host with wrong run modes still fails.
+    printf 'mode probe\n' > "$WORK/mode-probe"
+    probe_ok=1
+    chmod 644 "$WORK/mode-probe" || probe_ok=0
+    mode_before=$(mode_of "$WORK/mode-probe")
+    chmod 600 "$WORK/mode-probe" || probe_ok=0
+    mode_after=$(mode_of "$WORK/mode-probe")
+    if [ "$probe_ok" -ne 1 ]; then
+        fail "observation mode capability probe could not apply 644 and 600"
+    elif [ "$mode_before" = 644 ] && [ "$mode_after" = 644 ]; then
+        skip "observation modes — this filesystem cannot prove a non-executable permission change (644 -> 600 reads back as 644)"
+    elif [ "$mode_before" != 644 ]; then
+        fail "observation mode capability probe baseline read ${mode_before:-unknown}; expected 644"
+    else
+        fail "local import modes were directory=${run_mode:-unknown}, transcript=${transcript_mode:-unknown}; expected 700 and 600"
+    fi
 fi
 
 feedback=$(bash "$REPO/scripts/harness/observe" feedback run-1 bad --reason "missed convention"); rc=$?
