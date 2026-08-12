@@ -8,6 +8,24 @@ timestamped sibling archives without automatically deleting them.
 Use `bash scripts/harness/lib/audit-log.sh --format table` for deterministic reduction; do
 not recompute rates or joins by hand.
 
+## Suppression switches
+
+Two environment variables stop hook events from being written, and both are
+silent by design — a suppressed event is absent, not marked:
+
+- `HARNESS_LOG=0` disables all logging. This is the documented operator switch.
+- `HARNESS_TESTING=1` makes `hook_log` return without writing. `verify` sets it
+  on every gate subprocess so a guard exercised by a test cannot append
+  synthetic denies to the operational stream. It is inherited by anything a
+  gate spawns, including adopter-authored gates.
+
+The consequence for test authors: **a test that asserts on hook log output must
+set `HARNESS_TESTING=0`, or it passes vacuously under `verify`** — the log is
+simply empty, so "event X was logged" cannot fail and "nothing was logged" is
+unconditionally true. The shipped suites that assert on log contents
+(`test-log.sh`, `test-guard-secrets.sh`, `test-advise-once.sh`,
+`test-format-feedback.sh`) all opt back in this way; copy that when adding one.
+
 ## Retention and windows
 
 The log and its rotated siblings are derived local operational data, not source

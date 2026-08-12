@@ -18,6 +18,13 @@ trap 'rm -rf "$WORK"' EXIT
 # Keep hook_log out of the repo during tests; explicit log cases opt back in.
 export HARNESS_LOG=0
 
+# Attribution asserted below must come from the payload and this script, not
+# from the shell that launched it. An agent session exports HARNESS_SESSION_ID
+# and HARNESS_PROVIDER (session-context.sh persists them), and the env source
+# outranks the payload — so without this the provenance cases fail whenever the
+# suite runs inside an agent session rather than a bare shell.
+unset HARNESS_SESSION_ID HARNESS_PROVIDER HARNESS_PLAN_SLUG
+
 fails=0
 skips=0
 

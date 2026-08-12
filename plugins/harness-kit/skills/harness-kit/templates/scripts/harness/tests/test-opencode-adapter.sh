@@ -29,12 +29,20 @@ sleep 10
 exit 2
 HOOK
 chmod +x "$WORK/hang/scripts/harness/hooks/guard-secrets.sh"
-for fixture in early flood fallback; do
+for fixture in early nodrain flood fallback; do
     mkdir -p "$WORK/$fixture/scripts/harness/hooks"
 done
 cat > "$WORK/early/scripts/harness/hooks/guard-secrets.sh" <<'HOOK'
 #!/usr/bin/env bash
 exit 0
+HOOK
+# Denies WITHOUT draining stdin. With a payload larger than the pipe buffer the
+# adapter's stdin write cannot complete, and an EPIPE there must not be allowed
+# to downgrade this explicit exit 2 into an allow.
+cat > "$WORK/nodrain/scripts/harness/hooks/guard-secrets.sh" <<'HOOK'
+#!/usr/bin/env bash
+echo "nodrain denied" >&2
+exit 2
 HOOK
 cat > "$WORK/flood/scripts/harness/hooks/guard-secrets.sh" <<'HOOK'
 #!/usr/bin/env bash
@@ -53,6 +61,7 @@ printf 'parent survived\n' > "$HARNESS_TIMEOUT_MARKER"
 exit 2
 HOOK
 chmod +x "$WORK/early/scripts/harness/hooks/guard-secrets.sh" \
+    "$WORK/nodrain/scripts/harness/hooks/guard-secrets.sh" \
     "$WORK/flood/scripts/harness/hooks/guard-secrets.sh" \
     "$WORK/fallback/scripts/harness/hooks/guard-secrets.sh"
 
@@ -62,6 +71,7 @@ HANG_ROOT_ENV="$WORK/hang"
 HANG_MARKER_ENV="$WORK/descendant-survived"
 HANG_READY_ENV="$WORK/descendant-launched"
 EARLY_ROOT_ENV="$WORK/early"
+NODRAIN_ROOT_ENV="$WORK/nodrain"
 FLOOD_ROOT_ENV="$WORK/flood"
 FALLBACK_ROOT_ENV="$WORK/fallback"
 FALLBACK_MARKER_ENV="$WORK/parent-survived"
@@ -75,6 +85,7 @@ if command -v cygpath >/dev/null 2>&1; then
     HANG_MARKER_ENV=$(cygpath -m "$HANG_MARKER_ENV") || exit 1
     HANG_READY_ENV=$(cygpath -m "$HANG_READY_ENV") || exit 1
     EARLY_ROOT_ENV=$(cygpath -m "$EARLY_ROOT_ENV") || exit 1
+    NODRAIN_ROOT_ENV=$(cygpath -m "$NODRAIN_ROOT_ENV") || exit 1
     FLOOD_ROOT_ENV=$(cygpath -m "$FLOOD_ROOT_ENV") || exit 1
     FALLBACK_ROOT_ENV=$(cygpath -m "$FALLBACK_ROOT_ENV") || exit 1
     FALLBACK_MARKER_ENV=$(cygpath -m "$FALLBACK_MARKER_ENV") || exit 1
@@ -84,7 +95,7 @@ fi
 HARNESS_TESTING=1 PLUGIN_PATH="$PLUGIN_PATH" \
     TEMPLATE_ROOT="$TEMPLATE_ROOT_ENV" HANG_ROOT="$HANG_ROOT_ENV" \
     HANG_MARKER="$HANG_MARKER_ENV" HANG_READY="$HANG_READY_ENV" \
-    EARLY_ROOT="$EARLY_ROOT_ENV" \
+    EARLY_ROOT="$EARLY_ROOT_ENV" NODRAIN_ROOT="$NODRAIN_ROOT_ENV" \
     FLOOD_ROOT="$FLOOD_ROOT_ENV" FALLBACK_ROOT="$FALLBACK_ROOT_ENV" \
     FALLBACK_MARKER="$FALLBACK_MARKER_ENV" FALLBACK_READY="$FALLBACK_READY_ENV" \
     "${RUNTIME[@]}" <<'NODE'
@@ -150,6 +161,18 @@ try {
 } catch { earlyFailed = true }
 ok(!earlyFailed, "early child exit with a large payload fails open without stdin errors")
 
+// The counterpart that matters: same unread-stdin race, but the hook exits 2.
+// A failed stdin write must never downgrade an explicit deny to an allow.
+const nodrain = createHarnessKitHooks({ directory: process.env.NODRAIN_ROOT })
+let nodrainDenied = false
+try {
+  await nodrain["tool.execute.before"](
+    { tool: "read", sessionID: "session-nodrain" },
+    { args: { filePath: ".env", payload: "x".repeat(4 * 1024 * 1024) } },
+  )
+} catch (error) { nodrainDenied = error.message.includes("nodrain denied") }
+ok(nodrainDenied, "exit 2 survives a large payload the hook never drains from stdin")
+
 const flood = createHarnessKitHooks({ directory: process.env.FLOOD_ROOT })
 let floodMessage = ""
 try {
@@ -165,7 +188,7 @@ ok(
 
 calls.length = 0
 await hooks["tool.execute.before"](
-  { tool: "edit", sessionID: "session-b" },
+  { tool: "edit", sessionID: "session-b", callID: "call-b" },
   { args: { filePath: "src/app.js" } },
 )
 ok(
@@ -173,12 +196,20 @@ ok(
   "write tools traverse both secret and mechanism guards",
 )
 
-const output = { output: "edit complete" }
+// OpenCode gives args to the BEFORE hook only; the after hook's second
+// parameter is the tool result. Passing args on `input` here would fake a
+// payload the runtime never sends and hide an empty tool_input.
+calls.length = 0
+const output = { title: "edit", output: "edit complete", metadata: {} }
 await hooks["tool.execute.after"](
-  { tool: "edit", sessionID: "session-b", args: { filePath: "src/app.js" } },
+  { tool: "edit", sessionID: "session-b", callID: "call-b" },
   output,
 )
 ok(output.output.includes("edit complete") && output.output.includes("lint feedback"), "post-edit lint feedback reaches the model output")
+ok(
+  calls.find((call) => call.script === "format.sh")?.payload?.tool_input?.file_path === "src/app.js",
+  "after-hook carries the before-hook args, so format.sh sees the edited path",
+)
 
 const shell = { env: {} }
 await hooks["shell.env"]({ sessionID: "session-c", cwd: process.cwd() }, shell)

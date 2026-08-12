@@ -118,6 +118,21 @@ else
     fail "a hidden shell mutation became a false edit-before-discovery negative"
 fi
 
+cat > "$WORK/claude-edit-first.jsonl" <<'EOF'
+{"type":"system","subtype":"init","session_id":"s4c"}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"e1","name":"Edit","input":{"file_path":"src/a.sh"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"e1","is_error":false}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"r1","name":"Read","input":{"file_path":"AGENTS.md"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"r1","is_error":false}]}}
+EOF
+eval_normalize_trace claude "$WORK/claude-edit-first.jsonl" > "$WORK/claude-edit-first-trace.jsonl"
+if eval_trajectory_json "$WORK/claude-edit-first-trace.jsonl" \
+    | jq -e '.edited_before_instruction_discovery == true' >/dev/null 2>&1; then
+    pass "an edit with no opaque event before it proves edit-before-discovery"
+else
+    fail "a provable edit-before-discovery violation did not report true"
+fi
+
 cat > "$WORK/malformed-objects.jsonl" <<'EOF'
 {"type":"system","subtype":"init","session_id":"s5"}
 {"type":"assistant","message":"malformed"}

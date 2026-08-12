@@ -289,7 +289,7 @@ eval_result_json() {
     local variant="${15:-}"
     [ -n "$variant" ] || variant="bare"
     local trajectory="${16:-}"
-    [ -n "$trajectory" ] || trajectory='{"version":1,"events":0,"instruction_discovery_available":false,"instructions_discovered":null,"edited_before_instruction_discovery":null,"tests_executed":0,"verification_executed":false,"failed_commands":0,"recovery_successful":false,"repeated_reads":0,"repeated_commands":0,"files_modified":[]}'
+    [ -n "$trajectory" ] || trajectory='{"version":1,"events":0,"instruction_discovery_available":false,"instructions_discovered":null,"edited_before_instruction_discovery":null,"tests_executed":0,"verification_executed":false,"failed_commands":0,"recovery_successful":false,"repeated_reads":null,"repeated_commands":0,"files_modified":[]}'
     jq -cn \
         --arg task "$1" --arg provider "$2" --arg model "$3" \
         --arg suite "$4" --arg polarity "$5" --arg run "$6" \

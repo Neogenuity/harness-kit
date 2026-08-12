@@ -97,7 +97,13 @@ function hookRunner(directory, input) {
 
     child.stdout.on("data", (chunk) => capture(stdout, chunk))
     child.stderr.on("data", (chunk) => capture(stderr, chunk))
-    child.stdin.on("error", () => { stopTree(); finish() })
+    // A stdin write error (EPIPE) only means the hook stopped reading its
+    // payload — a hook that denies before draining stdin is the normal way to
+    // provoke it. It says nothing about the verdict, so swallow it and let the
+    // close handler report the real exit status. Killing the child here would
+    // turn an explicit exit 2 into an allow, the one direction this protocol
+    // must never take; the timeout below still bounds a genuinely hung hook.
+    child.stdin.on("error", () => {})
     child.on("error", () => { stopTree(); finish() })
     child.on("close", (status, signal) => {
       // Adapter/process failures are observability failures, not policy
@@ -108,8 +114,10 @@ function hookRunner(directory, input) {
       stopTree()
       finish()
     }, timeout)
+    // Same reasoning as the stdin error handler: a failed write must not
+    // decide the verdict. Let close or the timeout settle this call.
     try { child.stdin.end(`${JSON.stringify(payload)}\n`) }
-    catch { stopTree(); finish() }
+    catch { /* hook is not reading stdin; its exit status still governs */ }
   })
 }
 
@@ -117,8 +125,17 @@ function message(result) {
   return String(result.stderr || result.stdout || "harness-kit hook denied the tool call").trim()
 }
 
+// OpenCode hands the tool arguments to tool.execute.before on its second
+// parameter and does NOT repeat them on tool.execute.after, whose second
+// parameter carries the tool result instead. Carry them across keyed by
+// callID, or the after-hook builds an empty tool_input and every path-driven
+// hook (format.sh) silently no-ops. Only write tools are ever replayed and
+// each entry is consumed once; the cap bounds a call that never completes.
+const MAX_PENDING_ARGS = 256
+
 export function createHarnessKitHooks({ directory }, runOverride) {
   const contextualized = new Set()
+  const pendingArgs = new Map()
   const run = async (script, payload, input) => {
     try {
       return await (runOverride ? runOverride(script, payload, input) : hookRunner(directory, input)(script, payload))
@@ -132,7 +149,12 @@ export function createHarnessKitHooks({ directory }, runOverride) {
     // harness-hook: tool.execute.before guard-config.sh
     "tool.execute.before": async (input, output) => {
       const tool = String(input?.tool || "").toLowerCase()
-      const payload = normalizedPayload(input, output?.args || {})
+      const args = output?.args || {}
+      const payload = normalizedPayload(input, args)
+      if (WRITE_TOOLS.has(tool) && input?.callID) {
+        if (pendingArgs.size >= MAX_PENDING_ARGS) pendingArgs.clear()
+        pendingArgs.set(input.callID, args)
+      }
       if (SECRET_TOOLS.has(tool)) {
         const result = await run("guard-secrets.sh", payload, input)
         if (result.status === 2) throw new Error(message(result))
@@ -147,7 +169,9 @@ export function createHarnessKitHooks({ directory }, runOverride) {
     "tool.execute.after": async (input, output) => {
       const tool = String(input?.tool || "").toLowerCase()
       if (!WRITE_TOOLS.has(tool)) return
-      const payload = normalizedPayload(input, input?.args || {})
+      const carried = input?.callID ? pendingArgs.get(input.callID) : undefined
+      if (input?.callID) pendingArgs.delete(input.callID)
+      const payload = normalizedPayload(input, carried || input?.args || {})
       const result = await run("format.sh", payload, input)
       const feedback = result.status === 2 ? message(result) : ""
       if (feedback) output.output = [output.output, feedback].filter(Boolean).join("\n\n")

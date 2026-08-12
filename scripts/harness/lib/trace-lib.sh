@@ -92,8 +92,12 @@ eval_trajectory_json() {
     command -v jq >/dev/null 2>&1 || { echo "trace-lib: jq is required" >&2; return 1; }
     [ -r "$trace" ] || { echo "trace-lib: trace is not readable: $trace" >&2; return 1; }
     jq -Rsc '
+      # A newline separates commands exactly as ";" does, and a continuation
+      # line may be indented. Multi-line Bash invocations are the common shape,
+      # so both belong in the leading anchor: without them every command after
+      # the first line is invisible to these matchers.
       def command_matches($body):
-        test("(^|[;&|][[:space:]]*)(?:(?:env[[:space:]]+)?(?:[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]+[[:space:]]+)*)" + $body + "([[:space:]]|$)"; "i");
+        test("(^|[;&|\n])[[:space:]]*(?:(?:env[[:space:]]+)?(?:[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]+[[:space:]]+)*)" + $body + "([[:space:]]|$)"; "i");
       def verification_command:
         command_matches("(?:(?:bash|sh)[[:space:]]+)?(?:\\./)?scripts/harness/(?:verify|check-harness)")
         or command_matches("(?:make|npm|pnpm|yarn)[[:space:]]+(?:run[[:space:]]+)?(?:verify|check-harness)");
@@ -110,10 +114,18 @@ eval_trajectory_json() {
           | select(.attributes.path | test("(^|/)(AGENTS\\.md|CLAUDE\\.md|GEMINI\\.md|SKILL\\.md|\\.github/copilot-instructions\\.md)$")) | .seq] as $instruction_seq
       | (($instruction_seq|length) > 0) as $instruction_available
       | [$e[] | select(.type == "file.write") | .seq] as $write_seq
+      | [$e[] | select(.type == "file.read" or .type == "file.search")] as $read_events
+      # "Opaque" means a tool whose effect this trace cannot classify, so it
+      # might have been the instruction read. Tools we already track — reads,
+      # searches, and writes — are not opaque; excluding the writes matters
+      # because every file.write is preceded by its own tool.started, which
+      # would otherwise mask the very violation this metric looks for.
       | [$e[] | select(.type == "command.started" or .type == "tool.started")
           | select(.seq < ($instruction_seq|min))
           | select(.type == "command.started" or ((.attributes.name // "") as $name
-              | ($name != "Read" and $name != "Grep" and $name != "Glob")))] as $opaque_before_instruction
+              | ($name != "Read" and $name != "Grep" and $name != "Glob"
+                 and $name != "Edit" and $name != "Write" and $name != "NotebookEdit"
+                 and $name != "file_change")))] as $opaque_before_instruction
       | [$e[] | select(.type == "command.started")
           | {seq,command:(if (.attributes.command|type)=="string" then .attributes.command else "" end)}] as $commands
       | [$e[] | select(.type == "command.finished")
@@ -128,18 +140,32 @@ eval_trajectory_json() {
          events:($e|length),
          instruction_discovery_available:$instruction_available,
          instructions_discovered:(if $instruction_available then true else null end),
+         # true and false are both claims that must be provable; anything else
+         # is null. An opaque event may have been a hidden read OR a hidden
+         # write, so it blocks a false verdict outright, and blocks a true
+         # verdict unless the write provably precedes even the earliest opaque
+         # event. Testing the opaque set before the sequence comparison made
+         # `true` unreachable, turning a violation detector into a dead field.
          edited_before_instruction_discovery:(if $instruction_available|not then null
-           elif ($opaque_before_instruction|length)>0 then null
-           elif ($write_seq|length)==0 then false
-           elif ($instruction_seq|min) < ($write_seq|min) then false else null end),
+           elif ($write_seq|length)==0 then
+             (if ($opaque_before_instruction|length)>0 then null else false end)
+           elif ($opaque_before_instruction|length)>0 then
+             (if ($write_seq|min) < ($opaque_before_instruction|map(.seq)|min) then true else null end)
+           elif ($instruction_seq|min) < ($write_seq|min) then false
+           else true end),
          tests_executed:([$commands[] | select(.command | test_command)] | length),
          verification_executed:([$commands[] | select(.command | verification_command)] | length > 0),
          failed_commands:($failures|length),
          recovery_successful:(if ($failures|length)==0 then false
            else any($failures[]; . as $failure
              | any($successes[]; .seq > $failure.seq and .command != "" and .command == $failure.command)) end),
-         repeated_reads:([$e[] | select(.type == "file.read" and (.attributes.path|type)=="string") | .attributes.path]
-           | sort | group_by(.) | map(select(length > 1) | length - 1) | add // 0),
+         # A provider whose transcript carries no read instrumentation at all
+         # (Codex expresses reads as shell commands) must report unknown, not a
+         # confident 0 — a fabricated zero reads as better behavior than a
+         # provider that actually reports its reads.
+         repeated_reads:(if ($read_events|length)==0 then null
+           else ([$e[] | select(.type == "file.read" and (.attributes.path|type)=="string") | .attributes.path]
+             | sort | group_by(.) | map(select(length > 1) | length - 1) | add // 0) end),
          repeated_commands:([$commands[].command | select(length > 0)]
            | sort | group_by(.) | map(select(length > 1) | length - 1) | add // 0),
          files_modified:([$e[] | select(.type == "file.write" and (.attributes.path|type)=="string") | .attributes.path] | unique | sort)}

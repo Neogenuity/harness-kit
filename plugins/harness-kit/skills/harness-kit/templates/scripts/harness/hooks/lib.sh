@@ -159,6 +159,9 @@ hook_log() {
     # verify marks gate subprocesses as tests. A repo-authored guard regression
     # must never append synthetic denies to the operational outcome stream;
     # focused observability tests explicitly opt back in with HARNESS_TESTING=0.
+    # WARNING: this suppression is silent, so a test that asserts on log
+    # contents WITHOUT that opt-in passes vacuously under verify (the file is
+    # empty). See "Suppression switches" in docs/standards/outcome-telemetry.md.
     [ "${HARNESS_TESTING:-0}" = "1" ] && return 0
     root="${HOOK_LIB_ROOT:-}"
     [ -n "$root" ] || return 0

@@ -84,6 +84,14 @@ case "$action" in
         jq -cn --arg rating "$rating" --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{version:1,rating:$rating,reason:(if $reason=="" then null else $reason end),recorded_at:$at}' \
             > "$run_dir/feedback.json" || die "feedback write failed"
+        # metadata.json carries a `feedback` field and is the documented record
+        # for a run; leaving it null after a rating makes every consumer that
+        # reads metadata alone treat a rated run as unlabelled.
+        meta_tmp="$run_dir/metadata.json.$$"
+        jq -c --slurpfile feedback "$run_dir/feedback.json" '.feedback = $feedback[0]' \
+            "$run_dir/metadata.json" > "$meta_tmp" \
+            && mv -f "$meta_tmp" "$run_dir/metadata.json" \
+            || { rm -f "$meta_tmp" 2>/dev/null; die "metadata feedback update failed"; }
         jq -c . "$run_dir/feedback.json" ;;
     show)
         run_id="${1:-}"; valid_id "$run_id" || die "invalid run id"
