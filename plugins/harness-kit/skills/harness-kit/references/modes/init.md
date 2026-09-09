@@ -202,6 +202,14 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      A declared provider makes its accepted profile a semantic drift gate:
      fixed stable tuples, with only the accepted Codex experimental broad
      local/private-network compatibility disjunction as an alternative.
+   - `harness.conf` `NESTED_CHECKOUT_PATHS`: repo-relative roots that hold
+     foreign or nested checkouts — a metarepo's child clones under `repos/`, a
+     second worktree set, a vendored sibling repo. Declared here so
+     `check-harness`'s markdown-link check prunes them instead of failing this
+     repo's gate on a broken link nobody can fix from this checkout. Entries
+     are root-anchored literal paths (`repos` never means `packages/repos`);
+     `.claude/worktrees` is built in, as are `.git`, `node_modules` and
+     `vendor`. Leave empty when the repo holds no such tree.
    - `hooks/guard-config.sh`: extend `PROTECTED_PATHS` with the repo's
      linter/formatter configs — the files an agent could edit to make
      findings disappear. The harness mechanism is protected by default, now
