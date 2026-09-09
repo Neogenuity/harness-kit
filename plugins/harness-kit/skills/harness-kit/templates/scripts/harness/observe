@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Import local provider transcripts, compute deterministic trajectory evidence,
-# record human feedback, and scaffold untrusted eval drafts. Nothing uploads.
+# Import local provider transcripts and their optional outcome diff, compute
+# deterministic trajectory evidence, record human feedback, and scaffold
+# untrusted eval drafts. Nothing uploads. An imported diff stays under
+# .harness/var/ with the transcript: it is raw local evidence that may carry
+# secrets or private paths, so `promote` never copies it into a draft scenario.
 set -uo pipefail
 umask 077
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -8,29 +11,45 @@ RUNS_DIR="${HARNESS_RUNS_DIR:-$ROOT/.harness/var/runs}"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/harness/lib/trace-lib.sh"
 usage() {
-    echo "usage: scripts/harness/observe import --provider claude|codex --transcript PATH [--run-id ID]"
+    echo "usage: scripts/harness/observe import --provider claude|codex --transcript PATH [--diff PATH] [--run-id ID]"
     echo "       scripts/harness/observe feedback <run-id> good|bad [--reason TEXT]"
     echo "       scripts/harness/observe show <run-id>"
     echo "       scripts/harness/observe promote <run-id> <slug>"
 }
 die() { echo "observe: $*" >&2; exit 1; }
+# --diff belongs to import alone. The positional subcommands accepted (and
+# silently ignored) trailing words, so without this an operator who typed
+# `observe promote <run> <slug> --diff out.patch` would believe a diff had been
+# attached to something.
+reject_diff_option() {
+    while [ $# -gt 0 ]; do
+        case "$1" in --diff|--diff=*) die "--diff is only accepted by 'observe import'" ;; esac
+        shift
+    done
+}
 valid_id() { case "$1" in ''|*[!A-Za-z0-9._-]*|*..*) return 1 ;; *) return 0 ;; esac; }
 command -v jq >/dev/null 2>&1 || die "jq is required"
 
 action="${1:-}"; [ $# -gt 0 ] && shift
 case "$action" in
     import)
-        provider=""; transcript=""; run_id=""
+        provider=""; transcript=""; run_id=""; diff_path=""
         while [ $# -gt 0 ]; do
             case "$1" in
                 --provider) [ $# -ge 2 ] || die "--provider requires a value"; provider="$2"; shift 2 ;;
                 --transcript) [ $# -ge 2 ] || die "--transcript requires a value"; transcript="$2"; shift 2 ;;
+                --diff) [ $# -ge 2 ] || die "--diff requires a value"; diff_path="$2"; shift 2 ;;
                 --run-id) [ $# -ge 2 ] || die "--run-id requires a value"; run_id="$2"; shift 2 ;;
                 *) die "unknown import option: $1" ;;
             esac
         done
         case "$provider" in claude|codex) ;; *) die "--provider must be claude or codex" ;; esac
         [ -r "$transcript" ] || die "transcript is not readable: $transcript"
+        # Both inputs are validated before the reservation and staging directory
+        # exist, so a bad --diff cannot leave a half-built run behind.
+        if [ -n "$diff_path" ]; then
+            [ -f "$diff_path" ] && [ -r "$diff_path" ] || die "diff is not a readable file: $diff_path"
+        fi
         if [ -z "$run_id" ]; then run_id="$(date -u +%Y%m%dT%H%M%SZ)-$provider"; fi
         valid_id "$run_id" || die "run id may contain only letters, digits, dot, underscore, and hyphen"
         mkdir -p "$RUNS_DIR" || die "cannot create $RUNS_DIR"
@@ -46,6 +65,28 @@ case "$action" in
         trap cleanup_import EXIT HUP INT TERM
         mkdir "$stage" || die "cannot stage run $run_id"
         cp "$transcript" "$stage/transcript.jsonl" || die "cannot copy transcript"
+        # Outcome diff: optional, copied verbatim into the same private staging
+        # dir (umask 077). The file count is deterministic and states its own
+        # source, because the two shapes are not interchangeable: `git diff`
+        # emits one `diff --git` header per file, while a plain `diff -u` or a
+        # `git diff --no-index` fragment has only `+++` target headers. Counting
+        # `+++` is approximate — a context line whose added text itself starts
+        # with `++ ` inflates it — which is exactly why the fallback is labelled
+        # rather than silently merged into one number.
+        diff_present=false; diff_files=null; diff_source=""
+        if [ -n "$diff_path" ]; then
+            cp "$diff_path" "$stage/diff.patch" || die "cannot copy diff"
+            diff_present=true
+            diff_files=$(grep -c '^diff --git ' "$stage/diff.patch" 2>/dev/null || true)
+            case "$diff_files" in ''|*[!0-9]*) diff_files=0 ;; esac
+            if [ "$diff_files" -gt 0 ]; then
+                diff_source="git-diff-headers"
+            else
+                diff_files=$(grep -c '^+++ ' "$stage/diff.patch" 2>/dev/null || true)
+                case "$diff_files" in ''|*[!0-9]*) diff_files=0 ;; esac
+                diff_source="unified-target-headers"
+            fi
+        fi
         row_counts=$(jq -Rsc '
             [split("\n")[] | select(length > 0)] as $raw
             | [$raw[] | (fromjson? // empty) | select(type == "object")] as $objects
@@ -61,9 +102,17 @@ case "$action" in
             || die "transcript has no recognized session-start anchor"
         eval_trajectory_json "$stage/trace.jsonl" > "$stage/trajectory.json" \
             || die "trajectory analysis failed"
+        # version 2 adds the three diff_* fields. A version-1 run predates the
+        # option, so its silence about a diff is not the same statement as a
+        # version-2 run's explicit `diff_present: false`.
         jq -cn --arg provider "$provider" --arg run_id "$run_id" \
             --arg imported_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{version:1,run_id:$run_id,provider:$provider,imported_at:$imported_at,feedback:null}' \
+            --argjson diff_present "$diff_present" --argjson diff_files "$diff_files" \
+            --arg diff_source "$diff_source" \
+            '{version:2,run_id:$run_id,provider:$provider,imported_at:$imported_at,
+              diff_present:$diff_present,diff_files_changed:$diff_files,
+              diff_files_changed_source:(if $diff_source == "" then null else $diff_source end),
+              feedback:null}' \
             > "$stage/metadata.json" || die "metadata write failed"
         mv "$stage" "$run_dir" || die "cannot publish imported run"
         rmdir "$reservation" 2>/dev/null || true
@@ -77,6 +126,7 @@ case "$action" in
         while [ $# -gt 0 ]; do
             case "$1" in
                 --reason) [ $# -ge 2 ] || die "--reason requires a value"; reason="$2"; shift 2 ;;
+                --diff|--diff=*) die "--diff is only accepted by 'observe import'" ;;
                 *) die "unknown feedback option: $1" ;;
             esac
         done
@@ -95,12 +145,28 @@ case "$action" in
         jq -c . "$run_dir/feedback.json" ;;
     show)
         run_id="${1:-}"; valid_id "$run_id" || die "invalid run id"
+        [ $# -gt 0 ] && shift
+        if [ $# -gt 0 ]; then reject_diff_option "$@"; fi
         run_dir="$RUNS_DIR/$run_id"; [ -f "$run_dir/metadata.json" ] || die "unknown run: $run_id"
+        # The `diff` block reads metadata (the documented record), not the
+        # directory listing, and defaults a version-1 run to absent — which is
+        # accurate for those runs, since no import before version 2 could store
+        # a diff at all.
         jq -n --slurpfile metadata "$run_dir/metadata.json" --slurpfile trajectory "$run_dir/trajectory.json" \
             --slurpfile feedback "$( [ -f "$run_dir/feedback.json" ] && printf '%s' "$run_dir/feedback.json" || printf '%s' /dev/null )" \
-            '{metadata:$metadata[0],trajectory:$trajectory[0],feedback:($feedback[0] // null)}' ;;
+            '$metadata[0] as $m
+             | {metadata:$m,trajectory:$trajectory[0],feedback:($feedback[0] // null),
+                diff:{present:($m.diff_present // false),
+                      files_changed:($m.diff_files_changed // null),
+                      counted_by:($m.diff_files_changed_source // null)}}' ;;
     promote)
         run_id="${1:-}"; slug="${2:-}"; valid_id "$run_id" || die "invalid run id"
+        [ $# -gt 0 ] && shift
+        [ $# -gt 0 ] && shift
+        if [ $# -gt 0 ]; then reject_diff_option "$@"; fi
+        # eval-author scaffolds from the shipped scenario template and adds only
+        # a path-redacted trajectory summary; diff.patch and transcript.jsonl are
+        # deliberately left behind in .harness/var/. Drafts get committed.
         HARNESS_RUNS_DIR="$RUNS_DIR" bash "$ROOT/scripts/harness/eval-author" from-run "$run_id" "$slug" ;;
     -h|--help|'') usage; [ -n "$action" ] && exit 0 || exit 64 ;;
     *) usage >&2; exit 64 ;;
