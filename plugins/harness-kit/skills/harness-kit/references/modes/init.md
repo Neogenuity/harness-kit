@@ -174,7 +174,14 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      the repo's actual secret files — this is the single source
      (`guard-secrets.sh` enforces it, `check-harness` verifies the native
      deny lists against it). Mirror additions into
-     `tests/test-guard-secrets.sh` cases.
+     `tests/test-guard-secrets.sh` cases. Be explicit with the repo owner that
+     an allow pattern reopens a file in the hook (and therefore in Bash) and in
+     OpenCode, but **not** in Claude Code, whose native list is deny-only
+     because that platform evaluates deny before allow — so with the default
+     patterns `.env.example` is Read-tool-denied there. The two ways out: read
+     or edit such a file through Bash, which the guard allow-lists; or narrow
+     `SECRET_PATTERNS` until no glob matches it, then re-run
+     `bash scripts/harness/sync secrets` and re-pin the manifest.
    - `harness.conf` `MCP_ALLOWED_SERVERS`: one
      `<name> <identity-substring>` per line for each server approved in the
      interview — the substring is matched fixed-string against the server's
@@ -301,7 +308,15 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      Extend `permissions.allow` with the quality-gate
      commands and `permissions.deny` with `Read(...)` entries covering every
      tailored `SECRET_PATTERNS` glob — `check-harness` fails when the deny
-     list misses one. When `.claude` is in `EXECUTION_PROFILE_PROVIDERS`, merge
+     list misses one. That list is **deny-only on purpose**: Claude Code
+     evaluates deny before allow and a deny rule carries no allowlist
+     exception, so `SECRET_ALLOW_PATTERNS` cannot reopen anything here and a
+     file matching both lists (`.env.example` under the defaults) is
+     Read-tool-denied. Tell the repo owner the two remedies: reach such a file
+     through Bash, which `guard-secrets.sh` allow-lists, or narrow
+     `SECRET_PATTERNS` until no glob matches it, then re-run
+     `bash scripts/harness/sync secrets` and re-pin the manifest.
+     When `.claude` is in `EXECUTION_PROFILE_PROVIDERS`, merge
      the template's `sandbox` object too; otherwise omit that optional subtree
      even on a fresh install. Stop if the installed Claude Code is older than
      2.1.187. Merge, don't clobber, an existing file.

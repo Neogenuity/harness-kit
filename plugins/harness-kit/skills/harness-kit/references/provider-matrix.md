@@ -19,7 +19,7 @@ surfaces re-verified 2026-07-14 — see Sources.)
 | Skills <br>_verified 2026-07_ | `.claude/skills/<slug>/SKILL.md` (stub) | `.cursor/skills/` (stub) | reads `.agents/skills/` (no `.codex/skills/`) | `.opencode/skills/` (stub; also reads `.claude/` + `.agents/`) | `.agents/skills/` (stub) |
 | Subagents <br>_verified 2026-07_ | `.claude/agents/*.md` (generated stub) | `.cursor/agents/*.md` (generated stub) | `.codex/agents/*.toml` (generated TOML stub) | `.opencode/agents/*.md` (generated stub, `mode: subagent`) | — |
 | Hooks <br>_verified 2026-08_ | `.claude/settings.json` → `hooks` | `.cursor/hooks.json` | `.codex/hooks.json` (or `config.toml` `[hooks]`; trust-gated) | shipped `.opencode/plugins/harness-kit.js` adapter over project plugin hooks | — |
-| Permissions <br>_verified 2026-07_ | `.claude/settings.json` → `permissions` | (harness UI) | (trust model + `PermissionRequest` hook) | `opencode.json` `permission.read` denies (mirror `harness.conf` `SECRET_PATTERNS`) | — |
+| Permissions <br>_verified 2026-07_ | `.claude/settings.json` → `permissions`; rules evaluate deny, then ask, then allow — deny evaluated before allow, and a deny rule carries no allowlist exceptions, so `Read(**/.env.*)` also denies `.env.example` (_verified 2026-09_) | (harness UI) | (trust model + `PermissionRequest` hook) | `opencode.json` `permission.read` denies (mirror `harness.conf` `SECRET_PATTERNS`) | — |
 | MCP servers <br>_verified 2026-07_ | `.mcp.json` (project) | `.cursor/mcp.json` | `.codex/config.toml` `[mcp_servers.*]` | `opencode.json` `"mcp"` | `~/.agents/mcp-settings.json` (proposed, user-level) |
 | Browser / live-app interaction <br>_verified 2026-07_ | Claude in Chrome extension from Claude Code CLI (`--chrome`/`/chrome`) or VS Code; actions run in a visible Chrome/Edge window and may use its signed-in state | Browser for Agent is GA in the Cursor desktop/editor surface; embedded browser can capture screenshots and pass selected elements/DOM context to Agent | Built-in Browser is in the ChatGPT desktop app, **not** Codex CLI or IDE; local CLI/IDE can instead use an already-configured browser MCP such as Playwright | Use an already-configured local browser MCP such as Playwright through `opencode.json`; this matrix claims no native OpenCode browser | — |
 | Distribution | `.claude-plugin/marketplace.json` → `plugins/harness-kit/.claude-plugin/plugin.json`; `/plugin marketplace add <owner>/harness-kit` (verified 2026-07-10) | — (no plugin channel) | `.agents/plugins/marketplace.json` → `plugins/harness-kit/.codex-plugin/plugin.json`; `codex plugin marketplace add <path>` (verified 2026-07-10) | — (no plugin channel) | `.agents/plugins/marketplace.json` (Codex's channel rides the `.agents` tree) |
@@ -360,6 +360,13 @@ Primary docs to re-validate each section against (all last consulted
   deny shape, the Stop `hookSpecificOutput.additionalContext` channel, and
   `stop_hook_active`'s undocumented-but-still-sent status):
   <https://code.claude.com/docs/en/hooks>
+- Claude Code permissions (rule evaluation order — "Rules are evaluated in
+  order: deny, then ask, then allow" — and the absence of allowlist exceptions
+  on a deny rule; Read rules use gitignore glob semantics, so `.env.*` matches
+  `.env.example` and no negation syntax exists to reopen it. Backs the
+  Permissions row's Claude Code cell, the deny-only `sync secrets` mirror
+  (ADR 011), and doctor check #10f; verified 2026-09):
+  <https://code.claude.com/docs/en/permissions>
 - Claude Code AGENTS.md feature request:
   <https://github.com/anthropics/claude-code/issues/34235>
 - Claude Code CLI reference (flag semantics — `-p`/`--print`, `--model`,

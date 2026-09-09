@@ -747,4 +747,75 @@ if [ -n "$_10e_pc_cfg" ]; then
 fi
 
 
+# 10f. Doctor: a file SECRET_ALLOW_PATTERNS reopens is still natively unreadable
+#      in Claude Code. `sync secrets` emits a DENY-ONLY mirror of SECRET_PATTERNS
+#      into .claude/settings.json because that platform evaluates deny before
+#      allow and a deny rule carries no allowlist exception (ADR 011), so a
+#      tracked file matching BOTH lists — `.env.example` under the default
+#      patterns — is refused by the Read tool there no matter what the hook
+#      allows. The over-denying trade is deliberate and documented; what was
+#      missing is that the platform's refusal names nothing about the kit, so
+#      whoever hits it has no path from the denial to either working remedy
+#      (Neogenuity/harness-kit#39). WARNING only, like every doctor check.
+#
+#      Wiring detection mirrors check #8's positive arm — `.claude/settings.json`
+#      present means the native deny list lives here — and the overlap is
+#      computed from SECRET_PATTERNS, the source `sync secrets` generates that
+#      file FROM. The JSON globs are NOT parsed: a hand-edited deny list that
+#      drifted from the conf is check #8's finding, and the warning says which
+#      list it actually read rather than implying it inspected the settings
+#      file. Glob semantics match guard-secrets.sh classify() (basename
+#      case-folded, conf entries matched verbatim under `set -f`), except that
+#      classify() returns on the first allow match while this check deliberately
+#      asks BOTH questions — the overlap is the whole finding.
+#
+#      Silent without git or outside a work tree: an untracked example file is
+#      not something the repo ships to anyone, and a claim this check cannot
+#      ground is worse than no claim.
+_10f_max=5
+if [ -f "$ROOT/.claude/settings.json" ] \
+    && [ -n "${SECRET_PATTERNS:-}" ] && [ -n "${SECRET_ALLOW_PATTERNS:-}" ] \
+    && command -v git >/dev/null 2>&1 \
+    && [ "$(git -C "$ROOT" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ]; then
+    # One awk pass case-folds every tracked basename so the loop below is
+    # fork-free: the `tr` classify() can afford for a single hook payload would
+    # be one process per tracked file here. -F/ makes $NF the basename ($0 is
+    # untouched because no field is assigned), and git quotes control characters
+    # in paths by default, so the tab separator cannot appear inside a field.
+    # The list is captured into a variable first because assert_loop_ran needs a
+    # printf-fed loop — a bare pipeline yields zero lines in a repo with nothing
+    # committed yet and would report that as a phantom failure.
+    _10f_files=$(git -C "$ROOT" ls-files 2>/dev/null | awk -F/ '{ print tolower($NF) "\t" $0 }')
+    _10f_hits=0
+    _10f_read=0
+    # noglob for the same reason guard-secrets.sh sets it: `for pat in $LIST`
+    # pathname-expands a `*.example` entry against the CWD without it. Restored
+    # right after the loop.
+    set -f
+    while IFS=$'\t' read -r _10f_base _10f_path; do
+        _10f_read=$((_10f_read + 1))
+        { [ -n "$_10f_base" ] && [ -n "$_10f_path" ]; } || continue
+        _10f_allowed=0
+        for _10f_pat in $SECRET_ALLOW_PATTERNS; do
+            # shellcheck disable=SC2254  # conf entries are globs; that is the point
+            case "$_10f_base" in $_10f_pat) _10f_allowed=1; break ;; esac
+        done
+        [ "$_10f_allowed" = "1" ] || continue
+        _10f_secret=0
+        for _10f_pat in $SECRET_PATTERNS; do
+            # shellcheck disable=SC2254
+            case "$_10f_base" in $_10f_pat) _10f_secret=1; break ;; esac
+        done
+        [ "$_10f_secret" = "1" ] || continue
+        _10f_hits=$((_10f_hits + 1))
+        [ "$_10f_hits" -le "$_10f_max" ] || continue
+        echo "WARNING: $_10f_path is allow-listed by SECRET_ALLOW_PATTERNS but its basename also matches SECRET_PATTERNS, so Claude Code refuses the Read tool on it: .claude/settings.json carries a deny-only mirror of SECRET_PATTERNS and that platform evaluates deny before allow, with no allowlist exception a deny rule can carry (ADR 011). Read or edit it through Bash instead — guard-secrets.sh allow-lists it, so a shell read of that path is not denied. Or, to make it natively readable, narrow SECRET_PATTERNS until no glob matches this basename, then run 'bash scripts/harness/sync secrets' and re-pin scripts/harness/.harness-manifest. This overlap is computed from SECRET_PATTERNS, the source 'sync secrets' generates the deny list from — the globs in .claude/settings.json are not parsed here"
+    done < <(printf '%s\n' "$_10f_files")
+    set +f
+    assert_loop_ran "$_10f_read" "native-deny overlap scan #10f"
+    [ "$_10f_hits" -gt "$_10f_max" ] \
+        && echo "WARNING: and $((_10f_hits - _10f_max)) more tracked file(s) are allow-listed by SECRET_ALLOW_PATTERNS while also matching SECRET_PATTERNS — each carries the same Claude Code Read-tool denial and the same two remedies as above; the per-file list is capped at $_10f_max so this check cannot flood the report"
+fi
+
+
 check_trailer "doctor"

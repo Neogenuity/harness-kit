@@ -71,7 +71,13 @@ misfire on the router alone, but the reference carries the steps.
   tailored state.
 - **`SECRET_PATTERNS` in `harness.conf` is the single source** for the secret
   guard — mirror it into every provider deny-list (`check-harness` fails on a
-  miss). Verify with `scripts/harness/verify` + `scripts/harness/check-harness`
+  miss). `SECRET_ALLOW_PATTERNS` reopens a file only in the guard hook (so also
+  in Bash, where reads are shell commands) and in OpenCode, which takes allow
+  keys; Claude Code's native list is **deny-only** and that platform evaluates
+  deny before allow with no allowlist exception, so an allow-listed file
+  matching a secret glob — `.env.example` under the defaults — stays
+  Read-tool-denied there (doctor check #10f names any such tracked file).
+  Verify with `scripts/harness/verify` + `scripts/harness/check-harness`
   before declaring done.
 
 ## audit — grade an existing repo → [references/modes/audit.md](references/modes/audit.md)

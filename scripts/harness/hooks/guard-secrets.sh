@@ -24,7 +24,12 @@
 # it with the harness's native permission deny list (see
 # providers/claude/settings.json) as a second layer; denies are logged to
 # .harness/var/log.jsonl so a noisy or bypassed pattern surfaces in the audit
-# loop.
+# loop. The two layers are NOT symmetric: that native list is deny-only
+# because Claude Code evaluates deny before allow with no allowlist exception,
+# so SECRET_ALLOW_PATTERNS reopens a file HERE (and in Bash, and in OpenCode)
+# while the Read tool still refuses it there — `.env.example` under the default
+# patterns. Reach such a file through Bash, or narrow SECRET_PATTERNS and
+# re-run `sync secrets`; check-harness doctor #10f names the tracked ones.
 #
 # SEARCH COVERAGE IS NARROWER THAN THE `Read|Grep|Bash` WIRING SUGGESTS. This hook
 # can only deny a call that NAMES a secret file. A search scoped to a directory

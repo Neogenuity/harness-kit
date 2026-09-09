@@ -114,7 +114,12 @@ deny-list templates (`providers/claude/settings.json`, opencode
 `permission.read`) must mirror it, and every addition gets a
 `test-guard-secrets.sh` case. `check-harness` verifies the mirrors in
 installed repos — keep the templates consistent so fresh installs start
-consistent.
+consistent. The mirrors are not symmetric, and wording that implies they are
+is a defect: Claude Code's generated list is deny-only because that platform
+evaluates deny before allow with no allowlist exception (ADR 011), so
+`SECRET_ALLOW_PATTERNS` reopens a file in the hook, in Bash, and in OpenCode
+but never against Claude Code's Read tool — doctor check #10f names the
+tracked files caught by that asymmetry.
 
 ## Provider-matrix facts need a verified stamp
 
