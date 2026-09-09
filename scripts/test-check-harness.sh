@@ -84,6 +84,35 @@ assert_flags() {
     rm -rf "$work"
 }
 
+# assert_flags_cwd <description> <work> <cwd> <needle> — assert_flags, but the
+# checker runs with its current directory set to <cwd>. Every other assertion
+# here inherits the suite's own CWD, which is fine because $ROOT is derived
+# from the script's location, not from where it was invoked — except for the
+# one behavior that IS CWD-sensitive: pathname expansion of a configured
+# value. Pinning that needs a CWD the case controls.
+#
+# The -d guard is the same lesson as $WORK's mktemp guard above: `cd ""` is a
+# silent rc=0 no-op, so an empty or vanished <cwd> would quietly run the
+# checker from the host repo and the case would prove nothing.
+assert_flags_cwd() {
+    local desc="$1" work="$2" cwd="$3" needle="$4" out rc
+    if [ -z "$cwd" ] || [ ! -d "$cwd" ]; then
+        echo "FAIL: $desc — cwd '$cwd' is not a directory"
+        fails=$((fails + 1))
+        rm -rf "$work"
+        return
+    fi
+    out=$(cd "$cwd" && bash "$work/scripts/harness/check-harness" 2>&1); rc=$?
+    if [ "$rc" = "1" ] && has "$out" "$needle"; then
+        echo "ok:   $desc"
+    else
+        echo "FAIL: $desc — expected exit 1 mentioning '$needle', got exit $rc"
+        printf '%s\n' "$out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$work"
+}
+
 # assert_warns <description> <work> <needle>  — check-harness must PASS (exit 0)
 # but its output must contain <needle>. Doctor WARNINGs never fail the build,
 # so this is how we pin one without conflating it with an ERROR (assert_flags)
@@ -228,14 +257,119 @@ assert_flags "rejected NESTED_CHECKOUT_PATHS entries never prune the repo root" 
 # live — an unescaped '[' or '*' in it silently voids every prune. Exit 0 here
 # needs BOTH the built-in .claude/worktrees prune and the configured repos
 # prune to have matched a $ROOT holding both metacharacters.
+#
+# The name carries all four characters _harness_glob_escape quotes — '\', '[',
+# ']', '*', '?' — because each is a separate branch of that function and an
+# untested branch is an unpinned one. The backslash branch is the subtle one:
+# fnmatch reads '\d' as a literal 'd', so dropping that single line leaves the
+# pattern demanding a 'd' where the real path has a backslash, every prune
+# misses, and this case goes red. (A directory name may legally contain a
+# backslash on every filesystem this suite runs on; only '/' and NUL are
+# reserved.)
 W=$(new_fixture)
-W_META="${W%/*}/fix[t]ure*meta"
+W_META="${W%/*}/fix[t]ure*me?ta\\dir"
 mv "$W" "$W_META"
 printf 'NESTED_CHECKOUT_PATHS="repos"\n' > "$W_META/scripts/harness/harness.conf"
 mkdir -p "$W_META/repos/child" "$W_META/.claude/worktrees/wt"
 printf '# Child\n- [Gone](does-not-exist-anywhere.md)\n' > "$W_META/repos/child/AGENTS.md"
 printf '# Nested\n- [Gone](does-not-exist-anywhere.md)\n' > "$W_META/.claude/worktrees/wt/AGENTS.md"
 assert_ok_without "prunes still match when \$ROOT contains find -path glob metacharacters" "$W_META" "does-not-exist-anywhere.md"
+
+# The positive control for the case above: a metacharacter-laden $ROOT must
+# still SCAN. Without this, an escape bug that over-pruned (or a find
+# expression that matched the start directory and pruned the whole tree) would
+# also exit 0 with nothing reported, and the assertion above would applaud it.
+W=$(new_fixture)
+W_META="${W%/*}/fix[t]ure*me?ta\\dir2"
+mv "$W" "$W_META"
+printf 'NESTED_CHECKOUT_PATHS="repos"\n' > "$W_META/scripts/harness/harness.conf"
+mkdir -p "$W_META/packages/x"
+printf '# Pkg\n- [Gone](does-not-exist-anywhere.md)\n' > "$W_META/packages/x/AGENTS.md"
+assert_flags "a \$ROOT with glob metacharacters is still scanned, not pruned away" "$W_META" "packages/x/AGENTS.md"
+
+# The built-in prunes are ROOT-ANCHORED ("$R/vendor" plus "$R/*/vendor"), not
+# the bare '*/vendor' they replaced, and this is the case that holds the line:
+# the fixture's own directory is NAMED vendor. Against the unanchored form,
+# find's start directory matches at depth 0, the whole tree is pruned, and
+# check #4 exits 0 having examined nothing — a green gate over an unscanned
+# repository, which is the worst failure mode this suite has. The root
+# AGENTS.md below is the tripwire: it must still be read and reported.
+W=$(new_fixture)
+W_VENDOR="${W%/*}/vendor"
+mv "$W" "$W_VENDOR"
+printf '# Root\n- [Gone](does-not-exist-anywhere.md)\n' > "$W_VENDOR/AGENTS.md"
+assert_flags "a checkout whose own directory is named 'vendor' is still scanned" "$W_VENDOR" "AGENTS.md links to 'does-not-exist-anywhere.md'"
+
+# `set -f` around the NESTED_CHECKOUT_PATHS loop is what keeps a configured
+# entry LITERAL. Unquoted word splitting is wanted there (the knob is
+# space-separated); pathname expansion is not — without the guard, bash
+# expands each entry against the CHECKER'S CURRENT DIRECTORY, so what gets
+# pruned depends on where the invoking shell happened to be standing. That is
+# invisible from a CWD holding no matching names, which is why this case
+# supplies its own: a scratch directory whose sole entry is `packages`.
+# Unguarded, "*" becomes "packages", $ROOT/packages is pruned, and the fixture
+# doc below goes unreported.
+W=$(new_fixture)
+CWD_SCRATCH=$(mktemp -d "$WORK/cwd.XXXXXX") || exit 1
+mkdir -p "$CWD_SCRATCH/packages"
+printf 'NESTED_CHECKOUT_PATHS="*"\n' > "$W/scripts/harness/harness.conf"
+mkdir -p "$W/packages/x"
+printf '# Pkg\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/packages/x/AGENTS.md"
+assert_flags_cwd "NESTED_CHECKOUT_PATHS is not glob-expanded against the caller's CWD" "$W" "$CWD_SCRATCH" "packages/x/AGENTS.md"
+rm -rf "$CWD_SCRATCH"
+
+# An interior "//" is a spelling, not a different entry. find prints exactly
+# one separator per component, so the un-normalized "$ROOT/repos//child" is a
+# -path pattern nothing can ever match: it passes every validation and then
+# prunes NOTHING, with no warning to say so. The collapse is what makes the
+# obvious reading the true one.
+W=$(new_fixture)
+printf 'NESTED_CHECKOUT_PATHS="repos//child"\n' > "$W/scripts/harness/harness.conf"
+mkdir -p "$W/repos/child"
+printf '# Child\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/repos/child/AGENTS.md"
+assert_ok_without "an interior double slash in a NESTED_CHECKOUT_PATHS entry still prunes" "$W" "repos/child/AGENTS.md"
+
+# --- the prune reaches EVERY doc producer, not just the AGENTS.md find -----
+# check #4 assembles its doc set from five finds: the repo-wide AGENTS.md
+# sweep plus .harness/policies+agents, .harness/evals, .agents/skills and
+# docs/. Only the first carried the prune, so a declared root under docs/ or
+# .agents/skills/ was pruned from one producer and handed straight back by
+# another — NESTED_CHECKOUT_PATHS="docs/external" read as a no-op, silently,
+# with the conf still promising it "prunes each path".
+W=$(new_fixture)
+printf 'NESTED_CHECKOUT_PATHS="docs/external .agents/skills/vendored"\n' > "$W/scripts/harness/harness.conf"
+mkdir -p "$W/docs/external" "$W/.agents/skills/vendored"
+printf '# Ext\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/docs/external/AGENTS.md"
+printf '# Guide\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/docs/external/guide.md"
+printf -- '---\nname: vendored\ndescription: A vendored sibling skill.\n---\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/.agents/skills/vendored/SKILL.md"
+assert_ok_without "a declared root under docs/ or .agents/skills/ is pruned from every producer" "$W" "does-not-exist-anywhere.md"
+
+# The positive control for the case above, same fixture shape plus one
+# first-party doc: pruning docs/external must not stop docs/ being scanned.
+W=$(new_fixture)
+printf 'NESTED_CHECKOUT_PATHS="docs/external .agents/skills/vendored"\n' > "$W/scripts/harness/harness.conf"
+mkdir -p "$W/docs/external" "$W/.agents/skills/vendored" "$W/docs/other"
+printf '# Ext\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/docs/external/AGENTS.md"
+printf '# Guide\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/docs/external/guide.md"
+printf -- '---\nname: vendored\ndescription: A vendored sibling skill.\n---\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/.agents/skills/vendored/SKILL.md"
+printf '# Other\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/docs/other/guide.md"
+assert_flags "pruning a declared root under docs/ leaves the rest of docs/ scanned" "$W" "docs/other/guide.md links to 'does-not-exist-anywhere.md'"
+
+# The same reach applies to the BUILT-INS, and this is the deliberate
+# behavior change: node_modules/ under docs/ used to be link-checked, because
+# the docs producer never saw a prune. A documentation site vendors thousands
+# of package READMEs there, none of them this repo's to fix.
+W=$(new_fixture)
+mkdir -p "$W/docs/node_modules/pkg"
+printf '# Pkg\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/docs/node_modules/pkg/README.md"
+assert_ok_without "docs/node_modules/ is pruned from the docs producer" "$W" "does-not-exist-anywhere.md"
+
+# ...and its positive control: a real doc beside it is still checked.
+W=$(new_fixture)
+mkdir -p "$W/docs/node_modules/pkg" "$W/docs/real"
+printf '# Pkg\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/docs/node_modules/pkg/README.md"
+printf '# Real\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/docs/real/x.md"
+assert_flags "pruning docs/node_modules/ leaves a real doc beside it checked" "$W" "docs/real/x.md links to 'does-not-exist-anywhere.md'"
 
 # --- the regression: a titled link to a file that EXISTS must not error ---
 # Before the fix, "${link%%#*}" left the title on the target

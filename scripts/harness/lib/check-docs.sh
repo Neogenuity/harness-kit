@@ -106,6 +106,21 @@ for _doc_prune_entry in ${NESTED_CHECKOUT_PATHS:-}; do
     # Absolute paths are not repo-relative. Checked before the trailing-slash
     # trim so a bare "/" is rejected here rather than as an empty string.
     case "$_doc_prune_e" in /*) _doc_prune_e="" ;; esac
+    # Collapse interior runs of '/'. find prints exactly one separator per
+    # component, so "$ROOT/repos//child" is a -path pattern nothing can ever
+    # match: "repos//child" would pass every validation below and then prune
+    # NOTHING, silently. Normalizing it to "repos/child" makes the obvious
+    # reading the true one. A loop, not one substitution: "a///b" needs two
+    # passes, and bash 3.2 has no regex-free way to say "one or more".
+    #
+    # Split-and-rejoin rather than the shorter "${e//\/\//\/}": inside double
+    # quotes bash keeps the backslash of "\/" literally, so that spelling
+    # rewrites "repos//child" to "repos\/child" — a pattern in which the
+    # escape then makes the separator match nothing. Prefix/suffix trimming
+    # has no such escape layer to get wrong.
+    while case "$_doc_prune_e" in *//*) true ;; *) false ;; esac; do
+        _doc_prune_e="${_doc_prune_e%%//*}/${_doc_prune_e#*//}"
+    done
     # "repos/" == "repos"; the loop also collapses "repos///".
     while [ -n "$_doc_prune_e" ] && [ "$_doc_prune_e" != "${_doc_prune_e%/}" ]; do
         _doc_prune_e="${_doc_prune_e%/}"
@@ -139,17 +154,29 @@ _harness_doc_set() {
     # node_modules/ and vendor/ — result filters historically, real prune
     # branches now — and to every path a project declares in
     # NESTED_CHECKOUT_PATHS. DOC_PRUNE above is the assembled expression.
-    # The other doc producers below are already safe: they either name a file
-    # explicitly or start from a .harness/ subtree.
+    #
+    # EVERY producer below carries it, not just the repo-wide AGENTS.md find.
+    # A nested checkout does not politely confine itself to the one tree that
+    # names AGENTS.md: a metarepo's child clone under docs/, a vendored sibling
+    # under .agents/skills/, are exactly the shapes NESTED_CHECKOUT_PATHS
+    # exists to declare, and pruning only the first find left the conf's
+    # promise ("prunes each path") false for all four of the others — the
+    # `docs` find simply re-added everything the AGENTS.md find had pruned.
+    # DOC_PRUNE's patterns are absolute under $ROOT and find's fnmatch '*'
+    # spans '/', so they need no re-anchoring per start directory:
+    # "$ROOT/*/node_modules" matches "$ROOT/docs/site/node_modules" as it
+    # stands. The deliberate consequence is that the built-ins now bite under
+    # docs/, .harness/ and .agents/skills/ too — a docs site's node_modules/,
+    # thousands of package READMEs deep, was being link-checked before this.
     find "$ROOT" \( "${DOC_PRUNE[@]}" \) -prune -o \
         -name AGENTS.md -print 2>/dev/null
     for _f in ARCHITECTURE.md README.md SECURITY.md CONTRIBUTING.md GEMINI.md llms.txt; do
         [ -f "$ROOT/$_f" ] && printf '%s\n' "$ROOT/$_f"
     done
-    [ -d "$ROOT/.harness/policies" ] && find "$ROOT/.harness/policies" "$ROOT/.harness/agents" -name '*.md' 2>/dev/null
-    [ -d "$ROOT/.harness/evals" ] && find "$ROOT/.harness/evals" -name '*.md' 2>/dev/null
-    [ -d "$ROOT/.agents/skills" ] && find "$ROOT/.agents/skills" -name '*.md' 2>/dev/null
-    [ -d "$ROOT/docs" ] && find "$ROOT/docs" -name '*.md' 2>/dev/null
+    [ -d "$ROOT/.harness/policies" ] && find "$ROOT/.harness/policies" "$ROOT/.harness/agents" \( "${DOC_PRUNE[@]}" \) -prune -o -name '*.md' -print 2>/dev/null
+    [ -d "$ROOT/.harness/evals" ] && find "$ROOT/.harness/evals" \( "${DOC_PRUNE[@]}" \) -prune -o -name '*.md' -print 2>/dev/null
+    [ -d "$ROOT/.agents/skills" ] && find "$ROOT/.agents/skills" \( "${DOC_PRUNE[@]}" \) -prune -o -name '*.md' -print 2>/dev/null
+    [ -d "$ROOT/docs" ] && find "$ROOT/docs" \( "${DOC_PRUNE[@]}" \) -prune -o -name '*.md' -print 2>/dev/null
     return 0
 }
 while IFS= read -r doc; do
