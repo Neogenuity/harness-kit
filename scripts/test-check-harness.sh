@@ -1523,13 +1523,21 @@ fi
 # 10f reads `git ls-files`, so every case here needs a real work tree; without
 # git the check is silent by design and the assertions would be vacuous.
 # Reported as issue #39: the platform's own Read-tool refusal names nothing
-# about the kit, so the two working remedies (go through Bash; narrow
-# SECRET_PATTERNS + `sync secrets` + re-pin) were never found.
+# about the kit, so the ONE working remedy (narrow SECRET_PATTERNS +
+# `sync secrets` + re-pin) was never found. "Read it from Bash" is not a second
+# remedy and no case here asserts it: Claude Code builds its OS-level sandbox
+# from the same `Read` deny rules, so under the kit's optional Claude execution
+# profile the shell read is refused too.
 if command -v git >/dev/null 2>&1; then
     # The shipped defaults, so these cases pin what a stock install actually
     # does rather than a pattern set invented for the test.
     _t10f_secrets=".env .env.* auth.json credentials.json *.pem id_rsa id_ed25519 id_ecdsa id_dsa .git-credentials *.ppk *.jks"
     _t10f_allows=".env.example .env.sample .env.dist .env.testing *.example"
+    # The warning's identifying clause, in one place: every case below matches
+    # on it, so a reworded warning fails loudly instead of silently vacuously.
+    # It deliberately excludes the capped-remainder line, which does not carry
+    # this wording — that is what lets the cap cases count named warnings.
+    _t10f_needle="matches both SECRET_ALLOW_PATTERNS and SECRET_PATTERNS"
 
     # new_10f_fixture <secret-patterns> <allow-patterns> <wire-claude 0|1>
     # The native deny list is DERIVED from the secret patterns so check #8 (an
@@ -1574,7 +1582,7 @@ if command -v git >/dev/null 2>&1; then
     W=$(new_10f_fixture "$_t10f_secrets" "$_t10f_allows" 1)
     track_10f "$W" ".env.example"
     assert_warns "10f: a tracked root .env.example under stock patterns warns and names the file" \
-        "$W" "WARNING: .env.example is allow-listed by SECRET_ALLOW_PATTERNS"
+        "$W" "WARNING: .env.example $_t10f_needle"
 
     # (b) nested, because the native deny globs are depth-agnostic (`Read(**/P)`)
     #     and the check matches on BASENAME — a repo whose example env files live
@@ -1582,7 +1590,7 @@ if command -v git >/dev/null 2>&1; then
     W=$(new_10f_fixture "$_t10f_secrets" "$_t10f_allows" 1)
     track_10f "$W" "apps/web/.env.example"
     assert_warns "10f: a tracked nested apps/web/.env.example warns and names the full path" \
-        "$W" "WARNING: apps/web/.env.example is allow-listed by SECRET_ALLOW_PATTERNS"
+        "$W" "WARNING: apps/web/.env.example $_t10f_needle"
 
     # (c) untracked: staged first, file created after, so git never sees it. An
     #     untracked file is not something the repo ships, and 10f must not claim
@@ -1591,14 +1599,14 @@ if command -v git >/dev/null 2>&1; then
     track_10f "$W"
     printf 'EXAMPLE_SETTING=replace-me\n' > "$W/.env.example"
     assert_ok_without "10f: an untracked example env file is not reported" \
-        "$W" "allow-listed by SECRET_ALLOW_PATTERNS"
+        "$W" "$_t10f_needle"
 
     # (d) .claude not wired: no native deny list exists, so there is nothing to
     #     warn about. Same tracked file as (a).
     W=$(new_10f_fixture "$_t10f_secrets" "$_t10f_allows" 0)
     track_10f "$W" ".env.example"
     assert_ok_without "10f: silent when .claude is not wired" \
-        "$W" "allow-listed by SECRET_ALLOW_PATTERNS"
+        "$W" "$_t10f_needle"
 
     # (e) the documented remedy actually silences it: SECRET_PATTERNS narrowed
     #     so no glob matches .env.example (".env.*" dropped, ".env" kept — it
@@ -1607,14 +1615,71 @@ if command -v git >/dev/null 2>&1; then
     W=$(new_10f_fixture ".env auth.json" "$_t10f_allows" 1)
     track_10f "$W" ".env.example"
     assert_ok_without "10f: silent once SECRET_PATTERNS is narrowed so no glob matches" \
-        "$W" "allow-listed by SECRET_ALLOW_PATTERNS"
+        "$W" "$_t10f_needle"
 
     # (f) an empty allow list means nothing is reopened anywhere, so there is no
     #     hook/native disagreement to report — the file is simply a secret.
     W=$(new_10f_fixture "$_t10f_secrets" "" 1)
     track_10f "$W" ".env.example"
     assert_ok_without "10f: silent when SECRET_ALLOW_PATTERNS is empty" \
-        "$W" "allow-listed by SECRET_ALLOW_PATTERNS"
+        "$W" "$_t10f_needle"
+
+    # (f2) the ALLOW half of the overlap test, which nothing above pins: a
+    #      tracked file that matches SECRET_PATTERNS (`*.ppk`) and NO allow
+    #      pattern is just a secret, not a hook/native disagreement, and must
+    #      stay silent. Deleting the allow gate in 10f leaves every other case
+    #      here green, so this is the only case that fails for it.
+    #
+    #      Two files on purpose. The plain one is the natural shape; the
+    #      `.example`-infixed one is the one that actually kills the mutant,
+    #      because 10f's awk prefilter would otherwise drop a `*.ppk` basename
+    #      before the allow gate ever sees it. `sample.example.ppk` contains the
+    #      `.example` literal (so the prefilter keeps it) while matching no
+    #      allow pattern (`*.example` requires the name to END there).
+    W=$(new_10f_fixture "$_t10f_secrets" "$_t10f_allows" 1)
+    track_10f "$W" "deploy.ppk" "sample.example.ppk"
+    assert_ok_without "10f: a tracked secret-shaped file that is NOT allow-listed stays silent" \
+        "$W" "$_t10f_needle"
+
+    # (f3) case folding, which macOS makes invisible unless it is the only
+    #      spelling in the fixture: `.ENV.Example` is the same file to every
+    #      platform whose filesystem case-folds, so 10f lower-cases the basename
+    #      before matching, exactly as guard-secrets.sh classify() does.
+    #      Dropping that tolower() fails here and nowhere else.
+    W=$(new_10f_fixture "$_t10f_secrets" "$_t10f_allows" 1)
+    track_10f "$W" ".ENV.Example"
+    assert_warns "10f: a mixed-case .ENV.Example warns — matching is case-folded" \
+        "$W" "WARNING: .ENV.Example $_t10f_needle"
+
+    # (f4) an allow pattern that reduces to NO literal (`*`, `foo*`) admits no
+    #      containment test, so it must disable 10f's prefilter for the whole
+    #      run rather than filtering every line away. Without that fallback the
+    #      check goes silent on a repo whose allow list is a bare `*`.
+    W=$(new_10f_fixture "$_t10f_secrets" "*" 1)
+    track_10f "$W" ".env.example"
+    assert_warns "10f: a literal-less allow pattern ('*') disables the prefilter instead of dropping everything" \
+        "$W" "WARNING: .env.example $_t10f_needle"
+
+    # (f5) `git ls-files` QUOTES a path holding non-ASCII bytes, `\"` or `\\`, so
+    #      the plain-output basename ends in a `\"` and matches nothing — the
+    #      finding disappears silently. 10f reads `-z` and swaps the delimiter
+    #      with `tr`. The directory name is built with printf escapes to keep
+    #      this file ASCII; the bytes are UTF-8 for "paäth".
+    _t10f_acc=$(printf 'pa\303\244th')
+    W=$(new_10f_fixture "$_t10f_secrets" "$_t10f_allows" 1)
+    track_10f "$W" "$_t10f_acc/.env.example"
+    assert_warns "10f: a path git would quote (non-ASCII bytes) still warns, named unquoted" \
+        "$W" "WARNING: $_t10f_acc/.env.example $_t10f_needle"
+
+    # (f6) a corrupt index exits `git ls-files` 128 while
+    #      `rev-parse --is-inside-work-tree` still answers "true", so without the
+    #      captured pipeline status 10f would report nothing and read as a clean
+    #      pass. One hedged WARNING instead.
+    W=$(new_10f_fixture "$_t10f_secrets" "$_t10f_allows" 1)
+    track_10f "$W" ".env.example"
+    printf 'this is not a git index\n' > "$W/.git/index"
+    assert_warns "10f: a git that FAILS to list files is hedged, not silent" \
+        "$W" "could not list this repo's tracked files"
 
     # (g) the per-file cap: 7 overlapping files must produce 5 named warnings
     #     plus one "and 2 more" line, not 7. Without a case here the cap branch
@@ -1623,11 +1688,28 @@ if command -v git >/dev/null 2>&1; then
     track_10f "$W" "s1/.env.example" "s2/.env.example" "s3/.env.example" "s4/.env.example" \
         "s5/.env.example" "s6/.env.example" "s7/.env.example"
     out=$(bash "$W/scripts/harness/check-harness" 2>&1); rc=$?
-    named=$(printf '%s\n' "$out" | grep -c "is allow-listed by SECRET_ALLOW_PATTERNS")
+    named=$(printf '%s\n' "$out" | grep -c "$_t10f_needle")
     if [ "$rc" = "0" ] && [ "$named" = "5" ] && has "$out" "and 2 more tracked file(s)"; then
         echo "ok:   10f: the per-file list is capped at 5 and the remainder is summarized"
     else
         echo "FAIL: 10f: cap — expected exit 0, 5 named warnings and an 'and 2 more' line; got exit $rc, $named named"
+        printf '%s\n' "$out" | sed 's/^/        /'
+        fails=$((fails + 1))
+    fi
+    rm -rf "$W"
+
+    # (g2) the cap's BOUNDARY, which (g) cannot see: at exactly $_10f_max there
+    #      is no remainder, so no summary line may be printed. `-gt` slipping to
+    #      `-ge` emits "and 0 more tracked file(s)" and only fails here.
+    W=$(new_10f_fixture "$_t10f_secrets" "$_t10f_allows" 1)
+    track_10f "$W" "s1/.env.example" "s2/.env.example" "s3/.env.example" "s4/.env.example" \
+        "s5/.env.example"
+    out=$(bash "$W/scripts/harness/check-harness" 2>&1); rc=$?
+    named=$(printf '%s\n' "$out" | grep -c "$_t10f_needle")
+    if [ "$rc" = "0" ] && [ "$named" = "5" ] && ! has "$out" "more tracked file(s)"; then
+        echo "ok:   10f: exactly 5 overlapping files print 5 warnings and no remainder line"
+    else
+        echo "FAIL: 10f: cap boundary — expected exit 0, 5 named warnings and NO remainder line; got exit $rc, $named named"
         printf '%s\n' "$out" | sed 's/^/        /'
         fails=$((fails + 1))
     fi
