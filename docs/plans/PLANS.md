@@ -208,8 +208,18 @@ rows + strict Agent Skills validation + matrix stamping
 
 **Active:** [Launch readiness](active/launch-readiness.md) is the remaining
 maintainer track; its demo recording is still open, while the org move
-(→ Neogenuity) and the public flip both shipped 2026-07-23. The mechanism
-queue is empty again after v0.42.0.
+(→ Neogenuity) and the public flip both shipped 2026-07-23.
+
+**Queued:** [Automatic session capture for `observe`](observe-auto-capture.md)
+— the intake half of #36, Claude Code first. v0.42.0 shipped the downstream
+half and left capture a manual transcript import; the plan wires an opt-in,
+default-off `SessionEnd` hook into `observe import` for Claude Code, and records
+the measured blocker (the on-disk session-file dialect is not the stream-json
+dialect `eval_normalize_trace` reads). Codex capture is a later phase inside
+that plan, opening with the dialect measurement nobody has taken. The Phase-5
+#36 integrations v0.42.0 also deferred — hosted transcript collection, OTLP and
+third-party observability exports, LLM trajectory judges, observational CI
+gates — stay deferred.
 
 The mechanism queue was empty after v0.18.0 until the validated #29–#36 issue
 set activated as v0.42.0. New work enters as a
