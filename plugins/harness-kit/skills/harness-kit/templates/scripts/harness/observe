@@ -33,12 +33,18 @@ command -v jq >/dev/null 2>&1 || die "jq is required"
 action="${1:-}"; [ $# -gt 0 ] && shift
 case "$action" in
     import)
-        provider=""; transcript=""; run_id=""; diff_path=""
+        provider=""; transcript=""; run_id=""; diff_path=""; diff_given=0
         while [ $# -gt 0 ]; do
             case "$1" in
                 --provider) [ $# -ge 2 ] || die "--provider requires a value"; provider="$2"; shift 2 ;;
                 --transcript) [ $# -ge 2 ] || die "--transcript requires a value"; transcript="$2"; shift 2 ;;
-                --diff) [ $# -ge 2 ] || die "--diff requires a value"; diff_path="$2"; shift 2 ;;
+                # An empty value is rejected here rather than downstream: the staging
+                # branch keys off diff_given, so testing emptiness there would record a
+                # deliberate `--diff ""` as `diff_present: false` — a silent lie about
+                # what the operator asked for.
+                --diff) [ $# -ge 2 ] || die "--diff requires a value"
+                    [ -n "$2" ] || die "--diff requires a non-empty value"
+                    diff_path="$2"; diff_given=1; shift 2 ;;
                 --run-id) [ $# -ge 2 ] || die "--run-id requires a value"; run_id="$2"; shift 2 ;;
                 *) die "unknown import option: $1" ;;
             esac
@@ -46,8 +52,10 @@ case "$action" in
         case "$provider" in claude|codex) ;; *) die "--provider must be claude or codex" ;; esac
         [ -r "$transcript" ] || die "transcript is not readable: $transcript"
         # Both inputs are validated before the reservation and staging directory
-        # exist, so a bad --diff cannot leave a half-built run behind.
-        if [ -n "$diff_path" ]; then
+        # exist, so a bad --diff cannot leave a half-built run behind. The message
+        # is what proves the ordering: once staging has begun the same bad path
+        # fails as "cannot copy diff" instead.
+        if [ "$diff_given" -eq 1 ]; then
             [ -f "$diff_path" ] && [ -r "$diff_path" ] || die "diff is not a readable file: $diff_path"
         fi
         if [ -z "$run_id" ]; then run_id="$(date -u +%Y%m%dT%H%M%SZ)-$provider"; fi
@@ -67,14 +75,18 @@ case "$action" in
         cp "$transcript" "$stage/transcript.jsonl" || die "cannot copy transcript"
         # Outcome diff: optional, copied verbatim into the same private staging
         # dir (umask 077). The file count is deterministic and states its own
-        # source, because the two shapes are not interchangeable: `git diff`
-        # emits one `diff --git` header per file, while a plain `diff -u` or a
+        # source, because the shapes are not interchangeable: `git diff` emits
+        # one `diff --git` header per file, while a plain `diff -u` or a
         # `git diff --no-index` fragment has only `+++` target headers. Counting
         # `+++` is approximate — a context line whose added text itself starts
         # with `++ ` inflates it — which is exactly why the fallback is labelled
-        # rather than silently merged into one number.
+        # rather than silently merged into one number. A file carrying neither
+        # header shape (an empty diff, or operator-supplied prose) is still
+        # accepted as evidence, but its zero is labelled `no-recognized-headers`:
+        # no counting method applied, and naming one that did not would be a
+        # false statement about how the number was reached.
         diff_present=false; diff_files=null; diff_source=""
-        if [ -n "$diff_path" ]; then
+        if [ "$diff_given" -eq 1 ]; then
             cp "$diff_path" "$stage/diff.patch" || die "cannot copy diff"
             diff_present=true
             diff_files=$(grep -c '^diff --git ' "$stage/diff.patch" 2>/dev/null || true)
@@ -84,7 +96,11 @@ case "$action" in
             else
                 diff_files=$(grep -c '^+++ ' "$stage/diff.patch" 2>/dev/null || true)
                 case "$diff_files" in ''|*[!0-9]*) diff_files=0 ;; esac
-                diff_source="unified-target-headers"
+                if [ "$diff_files" -gt 0 ]; then
+                    diff_source="unified-target-headers"
+                else
+                    diff_source="no-recognized-headers"
+                fi
             fi
         fi
         row_counts=$(jq -Rsc '
@@ -126,7 +142,6 @@ case "$action" in
         while [ $# -gt 0 ]; do
             case "$1" in
                 --reason) [ $# -ge 2 ] || die "--reason requires a value"; reason="$2"; shift 2 ;;
-                --diff|--diff=*) die "--diff is only accepted by 'observe import'" ;;
                 *) die "unknown feedback option: $1" ;;
             esac
         done

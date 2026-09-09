@@ -11,13 +11,14 @@ Status: queued
 
 ## Objective
 
-Ordinary agent sessions land in `observe`'s run store without anyone
-remembering to export a transcript. A shipped, opt-in session-end hook writes
-the provider's own transcript (and, where the provider gives one, the outcome
-diff) into `.harness/var/runs/` via the existing `scripts/harness/observe
-import` path, so the deterministic trajectory evidence v0.42.0 built is
-produced by daily work rather than by a manual ritual. Capture stays local,
-default-off, and fail-open; nothing new leaves the repo.
+Ordinary **Claude Code** sessions land in `observe`'s run store without anyone
+remembering to export a transcript. A shipped, opt-in `SessionEnd` hook writes
+Claude Code's own transcript into `.harness/var/runs/` via the existing
+`scripts/harness/observe import` path, so the deterministic trajectory evidence
+v0.42.0 built is produced by daily work rather than by a manual ritual. Capture
+stays local, default-off, and fail-open; nothing new leaves the repo. Claude
+Code is the whole wired set: the outcome diff stays a manual
+`observe import --diff`, and every other provider is a later phase (below).
 
 ## Value
 
@@ -25,7 +26,7 @@ v0.42.0 shipped the whole downstream half of issue #36 — `trace-event.v1`
 normalization, eleven deterministic trajectory fields, `observe
 import|feedback|show|promote`, untrusted drafts
 ([completed/v0.42.0-open-issue-hardening.md](completed/v0.42.0-open-issue-hardening.md)).
-Its one remaining gap is the intake: every run in the store is there because a
+Its open half is the intake: every run in the store is there because a
 human typed an import command. That makes the observational corpus a
 convenience sample of the sessions someone already thought were interesting —
 exactly the sessions least likely to contain the failures the eval bank needs.
@@ -43,7 +44,7 @@ imposes on the provider matrix.
 | Provider | Session-end signal | Transcript path in payload? | Status |
 | --- | --- | --- | --- |
 | Claude Code | `SessionEnd` | yes — `transcript_path` | **verified 2026-09** |
-| Codex | `SessionEnd` | yes — `transcript_path` | **verified 2026-09** |
+| Codex | `SessionEnd` | yes — `transcript_path` | fields **verified 2026-09**; file dialect **unmeasured** |
 | Cursor | `sessionEnd` | **no** | **verified 2026-09** |
 | OpenCode | `session.idle` (bus event) | **no** | **verified 2026-09** |
 
@@ -51,17 +52,23 @@ imposes on the provider matrix.
   <https://code.claude.com/docs/en/hooks>. `SessionEnd` receives `session_id`,
   `transcript_path`, `cwd`, `hook_event_name`, and `reason`; documented `reason`
   values are `clear`, `resume`, `logout`, `prompt_input_exit`, `other`.
-  `SessionEnd` is **not** in the page's exit-code-2 blocking table — it cannot
-  block, which removes the usual guard-hook risk but does **not** remove the
-  time budget (a slow hook still delays teardown).
+  `SessionEnd` **is** a row in the page's hook exit-code table, marked
+  `Can block?: No`, with its output and exit code ignored — so it cannot block.
+  That removes the usual guard-hook risk but does **not** remove the time budget
+  (a slow hook still delays teardown).
 - **Codex — verified 2026-09** against <https://learn.chatgpt.com/docs/hooks>,
   the source the provider matrix already cites for Codex hooks. `SessionEnd` is
   documented ("when a session ends") and receives `session_id`,
   `transcript_path`, `cwd`, `hook_event_name`, `reason`. `Stop` and
-  `SubagentStop` also carry `transcript_path`. Note the matrix's Codex event
-  list (`references/provider-matrix.md`, per-provider notes) predates this and
-  does **not** name `SessionEnd`; correcting that row with its own
-  `verified` stamp is part of this plan's scope.
+  `SubagentStop` also carry `transcript_path`. What is **not** verified is
+  whether that path's file is *normalizable*: no Codex session file has been
+  read on disk here, so its dialect is unmeasured and the Claude Code finding
+  below must not be assumed to transfer. Note the matrix's Codex event list
+  (`plugins/harness-kit/skills/harness-kit/references/provider-matrix.md`,
+  per-provider notes) predates this and does **not** name `SessionEnd`;
+  correcting that row with its own `verified` stamp stays in this plan's Docs
+  scope, because it is a matrix-accuracy fix that stands whether or not Codex
+  capture is ever wired.
 - **Cursor — verified 2026-09** against <https://cursor.com/docs/hooks>. A
   `sessionEnd` hook exists, but its documented input is `session_id`, `reason`,
   `duration_ms`, `is_background_agent`, `final_status`, and optional
@@ -75,11 +82,15 @@ imposes on the provider matrix.
   than a session terminator. OpenCode has no usable session-end capture signal
   today.
 
-**Plainly: only Claude Code and Codex can be auto-captured.** They are also the
-only two providers `eval_normalize_trace` understands, so the capture set and
-the normalization set coincide — no provider is left half-supported.
+**Plainly: only Claude Code and Codex expose a usable session-end signal, and
+this plan wires Claude Code alone.** Cursor and OpenCode have nothing to hook.
+Codex has the signal, but its on-disk transcript dialect has never been measured
+here — and the Claude Code measurement below is exactly the evidence that a
+documented `transcript_path` does not imply an importable file. Codex therefore
+becomes a later phase that opens with that missing measurement, rather than a
+second provider wired on an inference.
 
-## The blocking finding: `transcript_path` is not the shape `import` accepts
+## The blocking finding: Claude Code's `transcript_path` is not the shape `import` accepts
 
 Measured 2026-09-09 on this machine against a real Claude Code session file
 under `~/.claude/projects/<project>/<session>.jsonl` (structure only; no
@@ -117,21 +128,23 @@ unrelated file from being imported as evidence.
    *Acceptance: with the knob unset or `0`, the hook exits 0 having created no
    file under `.harness/var/runs/`; with `1`, the same payload produces exactly
    one run directory.*
-2. **Session-file dialect support** — teach `eval_normalize_trace` the
-   on-disk session-transcript shape, or add an explicit pre-normalization step
-   in the hook, so a real `transcript_path` becomes a valid `trace-event.v1`
-   stream. Whichever is chosen, the `session.started` anchor must come from an
-   observed fact in the file (e.g. the first row's `sessionId`), never
-   synthesized to satisfy the check. Decide and record which of the two
-   approaches is taken before writing code; do not do both.
-   *Acceptance: a committed fixture in the session-file dialect normalizes to
-   the same event vocabulary as the existing stream-json fixture, and
-   `observe import` accepts it; the existing stream-json fixture still passes
-   unchanged.*
+2. **Claude Code session-file dialect support** — teach `eval_normalize_trace`
+   the on-disk Claude Code session-transcript shape, or add an explicit
+   pre-normalization step in the hook, so a real Claude Code `transcript_path`
+   becomes a valid `trace-event.v1` stream. Whichever is chosen, the
+   `session.started` anchor must come from an observed fact in the file (e.g.
+   the first row's `sessionId`), never synthesized to satisfy the check. Decide
+   and record which of the two approaches is taken before writing code; do not
+   do both.
+   *Acceptance: a committed fixture in the Claude Code session-file dialect
+   normalizes to the same event vocabulary as the existing stream-json fixture,
+   and `observe import` accepts it; the existing stream-json fixture still
+   passes unchanged.*
 3. **Shipped hook** — `scripts/harness/hooks/capture-session.sh` under
    `templates/scripts/harness/hooks/`, reading the payload through the existing
-   `lib.sh` helpers rather than a per-provider field layout. It must obey the
-   fail-open contract in
+   `lib.sh` helpers rather than a hand-rolled field layout. It is wired for
+   Claude Code only; nothing here presumes a second provider's payload. It must
+   obey the fail-open contract in
    [docs/standards/templates.md](../standards/templates.md): missing `jq`, empty
    stdin, an unknown JSON shape, an absent or unreadable `transcript_path`, or a
    failed import all `exit 0` silently. It must also carry its own time budget —
@@ -174,12 +187,35 @@ unrelated file from being imported as evidence.
    gate catches the gap).
    *Acceptance: the suite runs standalone, is picked up by the `parallel-each
    template-test` gate, and both manifests list it identically.*
-7. **Docs** — the capture path, the knob, the two-provider limit, and the
-   privacy stance in [.harness/evals/README.md](../../.harness/evals/README.md)
+7. **Docs** — the capture path, the knob, the Claude-Code-only limit and why
+   Codex waits on a measurement, and the privacy stance in
+   [.harness/evals/README.md](../../.harness/evals/README.md)
    and its template counterpart; the Codex `SessionEnd` correction in
-   `references/provider-matrix.md` with a `verified` stamp and a Sources entry.
+   `plugins/harness-kit/skills/harness-kit/references/provider-matrix.md`
+   with a `verified` stamp and a Sources entry.
    *Acceptance: `check-harness` doc-ref and matrix-stamp checks pass; the
    shipped and dogfood READMEs stay consistent.*
+
+## Later phase — Codex capture
+
+Not this plan. Codex has a documented `SessionEnd` carrying `transcript_path`
+(verified above, from its docs), but no Codex session file has been read here,
+so nothing is known about whether that file normalizes. The phase therefore
+opens with a measurement, not an implementation:
+
+1. **Measure the Codex on-disk session-file dialect** — row types present, the
+   session-id field name and its casing, whether a session-start anchor exists
+   at all, and whether tool-call and tool-result blocks appear in the shape
+   `eval_normalize_trace codex` reads. Record the result in this plan the way
+   the Claude Code measurement is recorded above, with the date and what was
+   inspected.
+2. **Then, and only then, decide** whether Codex reuses whatever normalization
+   path Scope item 2 builds, needs its own, or is not worth capturing.
+
+The Claude Code finding must not be carried over to justify skipping step 1:
+the two providers serialize sessions independently, and this plan exists in its
+current size precisely because a documented `transcript_path` turned out not to
+be an importable file.
 
 ## Privacy
 
@@ -199,9 +235,11 @@ still an operator-visible channel.
 Phase 5 integrations, unchanged from
 [completed/v0.42.0-open-issue-hardening.md](completed/v0.42.0-open-issue-hardening.md):
 hosted or uploaded transcript collection, OTLP and third-party observability
-exports, LLM trajectory judges, and any observational CI gate. Cursor and
-OpenCode capture stay out until those providers expose a transcript path —
-re-check their docs, do not reconstruct a transcript from event streams.
+exports, LLM trajectory judges, and any observational CI gate. Codex capture is
+deferred to the later phase above: the signal is verified, the transcript
+dialect is not. Cursor and OpenCode capture stay out entirely until those
+providers expose a transcript path — re-check their docs, do not reconstruct a
+transcript from event streams.
 Automatic *diff* capture is also out: nothing in a session-end payload names
 the outcome diff, and having the hook run `git diff` itself would guess at a
 boundary the operator owns. `observe import --diff` stays manual.
@@ -225,12 +263,19 @@ and the outcome-diff support that ships with it. No new external dependency:
   confirm exactly one run appears under `.harness/var/runs/`, and that
   `observe show <run-id>` reports a trajectory with a non-zero `events` count.
 - `bash scripts/harness/verify` and `bash scripts/harness/check-harness` clean.
+- Nothing in this list exercises Codex, Cursor, or OpenCode capture, because
+  none of them ships here. Codex's first verification step is the measurement
+  in the later phase above.
 
 ## Progress
 
 - 2026-09-09 — Scoped. Provider session-end signals verified for all four
-  providers; the transcript-dialect mismatch measured against a real session
-  file and recorded as the blocking finding.
+  providers; the transcript-dialect mismatch measured against a real Claude Code
+  session file and recorded as the blocking finding.
+- 2026-09-09 — Narrowed to Claude Code after review. The plan had claimed a
+  two-provider capture set while wiring, verifying, and measuring only Claude
+  Code; Codex moved to an explicit later phase that begins with the missing
+  dialect measurement.
 
 ## Decisions
 
@@ -244,12 +289,18 @@ and the outcome-diff support that ships with it. No new external dependency:
   the on-disk dialect. The anchor is what stops an unrelated or truncated file
   from being imported as evidence; the dialect gap is fixed on the
   normalization side.
+- 2026-09-09 — Wire Claude Code only. Codex's `SessionEnd` payload fields are
+  verified from its docs, but its on-disk transcript dialect is unmeasured, so
+  "Codex is normalizable too" was an inference — and the Claude Code measurement
+  is itself the evidence that this class of inference is unsafe. A phase that
+  starts by measuring costs less than a wired provider that silently captures
+  nothing.
 - 2026-09-09 — Automatic diff capture is excluded rather than deferred: the
   session-end payload does not name one, and inferring it from `git diff` would
   make the kit guess where the operator's change began.
 
 ## Next action
 
-Decide Scope item 2 — extend `eval_normalize_trace` with the session-file
-dialect, or pre-normalize inside the hook — and record the choice in this
-plan's Decisions log before any code is written.
+Decide Scope item 2 — extend `eval_normalize_trace` with the Claude Code
+session-file dialect, or pre-normalize inside the hook — and record the choice
+in this plan's Decisions log before any code is written.

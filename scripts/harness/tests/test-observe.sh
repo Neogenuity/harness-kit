@@ -52,6 +52,13 @@ cat > "$WORK/plain.patch" <<'EOF'
 +d
 EOF
 : > "$WORK/empty.patch"
+# Not a diff at all: no `diff --git` header and no `+++ ` target header, so
+# neither counting method applies. Operators do hand `observe` evidence like
+# this; the record has to stay honest about which method produced the zero.
+cat > "$WORK/prose.txt" <<'EOF'
+The operator's note about what changed. Not a diff.
+Nothing here carries a git or unified header to count.
+EOF
 mkdir -p "$WORK/diff-dir"
 fails=0
 pass() { echo "ok:   $1"; }
@@ -147,6 +154,25 @@ else
     fail "show did not summarize the outcome diff"
 fi
 
+# A version-1 run predates --diff entirely, so `show` has to render it without
+# a diff_* field in sight — reporting absence, not inventing a count or a label.
+legacy_dir="$REPO/.harness/var/runs/legacy-v1"
+mkdir -p "$legacy_dir"
+cat > "$legacy_dir/metadata.json" <<'EOF'
+{"version":1,"run_id":"legacy-v1","provider":"claude","imported_at":"2026-08-01T00:00:00Z","feedback":null}
+EOF
+cat > "$legacy_dir/trajectory.json" <<'EOF'
+{"version":1,"events":4,"files_modified":[]}
+EOF
+legacy_shown=$(bash "$REPO/scripts/harness/observe" show legacy-v1); rc=$?
+if [ "$rc" -eq 0 ] && printf '%s' "$legacy_shown" | jq -e \
+        '.metadata.version == 1
+         and .diff == {present:false,files_changed:null,counted_by:null}' >/dev/null 2>&1; then
+    pass "show renders a version-1 run and reports its outcome diff as absent and uncounted"
+else
+    fail "show mis-rendered a version-1 run's outcome-diff block"
+fi
+
 run3_dir=$(bash "$REPO/scripts/harness/observe" import --provider claude \
     --transcript "$WORK/transcript.jsonl" --diff "$WORK/plain.patch" --run-id run-3); rc=$?
 if [ "$rc" -eq 0 ] && jq -e '.diff_present == true and .diff_files_changed == 2
@@ -161,27 +187,64 @@ run4_dir=$(bash "$REPO/scripts/harness/observe" import --provider claude \
     --transcript "$WORK/transcript.jsonl" --diff "$WORK/empty.patch" --run-id run-4); rc=$?
 if [ "$rc" -eq 0 ] && [ -f "$run4_dir/diff.patch" ] && [ ! -s "$run4_dir/diff.patch" ] \
     && jq -e '.diff_present == true and .diff_files_changed == 0
-              and .diff_files_changed_source == "unified-target-headers"' \
+              and .diff_files_changed_source == "no-recognized-headers"' \
         "$run4_dir/metadata.json" >/dev/null 2>&1; then
-    pass "an empty diff is accepted and recorded as present with zero files"
+    pass "an empty diff is accepted, recorded as present, and labelled uncounted"
 else
-    fail "an empty diff was rejected or recorded as absent"
+    fail "an empty diff was rejected, recorded as absent, or claimed a counting method"
 fi
 
-bad_diff=0
-bash "$REPO/scripts/harness/observe" import --provider claude --transcript "$WORK/transcript.jsonl" \
-    --diff "$WORK/missing.patch" --run-id diff-run >/dev/null 2>&1 && bad_diff=1
-bash "$REPO/scripts/harness/observe" import --provider claude --transcript "$WORK/transcript.jsonl" \
-    --diff "$WORK/diff-dir" --run-id diff-dir-run >/dev/null 2>&1 && bad_diff=1
-if [ "$bad_diff" -eq 1 ]; then
-    fail "an unreadable --diff path was accepted"
-elif [ ! -e "$REPO/.harness/var/runs/diff-run" ] && [ ! -e "$REPO/.harness/var/runs/diff-dir-run" ] \
-    && [ -z "$(find "$REPO/.harness/var/runs" -maxdepth 1 \
-        \( -name '.import-diff-run-*' -o -name '.reserve-diff-run' \
-           -o -name '.import-diff-dir-run-*' -o -name '.reserve-diff-dir-run' \) -print)" ]; then
-    pass "an unreadable --diff path fails before staging and leaves no partial run"
+run5_dir=$(bash "$REPO/scripts/harness/observe" import --provider claude \
+    --transcript "$WORK/transcript.jsonl" --diff "$WORK/prose.txt" --run-id run-5); rc=$?
+if [ "$rc" -eq 0 ] && [ -f "$run5_dir/diff.patch" ] \
+    && jq -e '.diff_present == true and .diff_files_changed == 0
+              and .diff_files_changed_source == "no-recognized-headers"' \
+        "$run5_dir/metadata.json" >/dev/null 2>&1; then
+    pass "a file with no recognized diff headers is kept as evidence and labelled uncounted"
 else
-    fail "an unreadable --diff path left partial run artifacts"
+    fail "a non-diff file was rejected or claimed a counting method that did not apply"
+fi
+
+# The exact message, not merely a non-zero exit, is what pins the ORDERING of
+# the validation: the pre-staging `[ -f ] && [ -r ]` check says "diff is not a
+# readable file", while the same bad path reaching `cp` fails later as "cannot
+# copy diff". Delete that pre-staging block and these two cases go red — which
+# is the point, because a FIFO handed to --diff would otherwise block `cp`
+# forever with a run already staged. (No FIFO case here: a regression in it
+# would hang the suite rather than fail it.)
+assert_pre_staging_diff_refusal() {
+    dlabel="$1"; dpath="$2"; drid="$3"
+    derr=$(bash "$REPO/scripts/harness/observe" import --provider claude \
+        --transcript "$WORK/transcript.jsonl" --diff "$dpath" --run-id "$drid" 2>&1 >/dev/null); drc=$?
+    if [ "$drc" -eq 0 ]; then
+        fail "$dlabel was accepted"
+    elif ! printf '%s' "$derr" | grep -qF 'diff is not a readable file'; then
+        fail "$dlabel failed with '$derr'; expected the pre-staging 'diff is not a readable file' refusal"
+    elif [ -e "$REPO/.harness/var/runs/$drid" ] \
+        || [ -n "$(find "$REPO/.harness/var/runs" -maxdepth 1 \
+            \( -name ".import-$drid-*" -o -name ".reserve-$drid" \) -print)" ]; then
+        fail "$dlabel left partial run artifacts"
+    else
+        pass "$dlabel is refused before staging, by the pre-staging check, leaving no partial run"
+    fi
+}
+assert_pre_staging_diff_refusal "a --diff path that does not exist" "$WORK/missing.patch" diff-run
+assert_pre_staging_diff_refusal "a directory passed as --diff" "$WORK/diff-dir" diff-dir-run
+
+# `--diff ""` is a different statement from omitting --diff. Validating on
+# emptiness instead of on "was the flag given" records it as diff_present:false.
+empty_err=$(bash "$REPO/scripts/harness/observe" import --provider claude \
+    --transcript "$WORK/transcript.jsonl" --diff "" --run-id empty-value-run 2>&1 >/dev/null); rc=$?
+if [ "$rc" -eq 0 ]; then
+    fail "an empty --diff value was silently accepted"
+elif ! printf '%s' "$empty_err" | grep -qF -- '--diff requires a non-empty value'; then
+    fail "an empty --diff value failed with '$empty_err'; expected '--diff requires a non-empty value'"
+elif [ -e "$REPO/.harness/var/runs/empty-value-run" ] \
+    || [ -n "$(find "$REPO/.harness/var/runs" -maxdepth 1 \
+        \( -name '.import-empty-value-run-*' -o -name '.reserve-empty-value-run' \) -print)" ]; then
+    fail "an empty --diff value left partial run artifacts"
+else
+    pass "an empty --diff value is refused at parse time, not recorded as an absent diff"
 fi
 
 feedback=$(bash "$REPO/scripts/harness/observe" feedback run-1 bad --reason "missed convention"); rc=$?
@@ -212,6 +275,8 @@ else
     fail "promotion leaked the run's outcome diff into the draft scenario"
 fi
 
+# `feedback` has no --diff arm of its own: its pre-existing catch-all already
+# refuses every unknown option. This leg pins the behavior, not the mechanism.
 reject_ok=1
 bash "$REPO/scripts/harness/observe" feedback run-2 good --diff "$WORK/change.patch" >/dev/null 2>&1 && reject_ok=0
 bash "$REPO/scripts/harness/observe" show run-2 --diff "$WORK/change.patch" >/dev/null 2>&1 && reject_ok=0

@@ -176,15 +176,18 @@ under `.harness/var/`. Use `observe show <run-id>` before promotion.
 The file is copied verbatim to `<run>/diff.patch` beside the transcript, and the
 run metadata (now `version: 2`) gains `diff_present`, `diff_files_changed`, and
 `diff_files_changed_source`. The source names how the count was reached, because
-the two diff shapes are not interchangeable: `git-diff-headers` counts
-`diff --git` lines, and `unified-target-headers` is the fallback `+++` count for
-a plain `diff -u` — approximate, since added content beginning `++ ` inflates it.
-An empty diff is accepted and recorded as present with zero files, and an
-unreadable path fails before any run directory is staged. `observe show` reports
-the same three facts as a top-level `diff` block. Like the transcript, the diff
-is raw local evidence that can carry secrets and private paths, so `promote`
-never copies it into a draft scenario — drafts get committed. `--diff` is
-accepted by `import` alone.
+the diff shapes are not interchangeable: `git-diff-headers` counts `diff --git`
+lines, and `unified-target-headers` is the fallback `+++` count for a plain
+`diff -u` — approximate, since added content beginning `++ ` inflates it. A file
+carrying neither header shape — an empty diff, or operator-supplied prose — is
+still accepted and recorded as present with zero files, labelled
+`no-recognized-headers` so the record never names a counting method that did not
+apply. An unreadable `--diff` path, a directory, or an empty value all fail
+before any run directory is staged. `observe show` reports the same three facts
+as a top-level `diff` block, and reports a pre-`version: 2` run as absent and
+uncounted. Like the transcript, the diff is raw local evidence that can carry
+secrets and private paths, so `promote` never copies it into a draft scenario —
+drafts get committed. `--diff` is accepted by `import` alone.
 
 A ready-made **opt-in scheduled workflow** ships with the kit and installs as
 `.github/workflows/eval-cron.yml`: a weekly cron plus a manual dispatch that
