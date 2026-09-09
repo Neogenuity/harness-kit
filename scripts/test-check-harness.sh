@@ -128,6 +128,115 @@ mkdir -p "$W/.claude/worktrees/wt"
 printf '# Nested\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/.claude/worktrees/wt/AGENTS.md"
 assert_ok_without "check #4 does not walk into a nested .claude/worktrees/ checkout" "$W" "does-not-exist-anywhere.md"
 
+# --- issue #38: projects can prune additional nested checkout roots --------
+# A metarepo holds child clones (repos/<name>/) and a second worktree set
+# (.worktrees/<name>/<alias>/) INSIDE the host checkout. Those are foreign
+# checkouts, outside this repo's documentation graph, but check #4's AGENTS.md
+# find walked straight into them: only .claude/worktrees was ever pruned, and
+# .git / node_modules / vendor were -not -path RESULT filters, which suppress
+# the hit without stopping the descent. NESTED_CHECKOUT_PATHS (harness.conf)
+# turns each declared root into a real -prune branch. Every AGENTS.md written
+# below links to a file that exists nowhere, so each is a check #4 ERROR
+# unless its directory was pruned.
+
+# Positive control, and the "unset changes nothing" pin: with the knob absent
+# the nested clone still fails the gate. Without this, every "does not fail"
+# case below would also pass against a check #4 that had been neutered.
+W=$(new_fixture)
+mkdir -p "$W/repos/child"
+printf '# Child\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/repos/child/AGENTS.md"
+assert_flags "check #4 still reports a nested checkout when NESTED_CHECKOUT_PATHS is unset" "$W" "repos/child/AGENTS.md"
+
+# Declared roots are pruned. Two fixtures, because each assertion consumes its
+# fixture and the two nested trees must be proven absent independently.
+for _needle in "repos/child/AGENTS.md" ".worktrees/proj/alias/AGENTS.md"; do
+    W=$(new_fixture)
+    printf 'NESTED_CHECKOUT_PATHS="repos .worktrees"\n' > "$W/scripts/harness/harness.conf"
+    mkdir -p "$W/repos/child" "$W/.worktrees/proj/alias"
+    printf '# Child\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/repos/child/AGENTS.md"
+    printf '# Alias\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/.worktrees/proj/alias/AGENTS.md"
+    assert_ok_without "NESTED_CHECKOUT_PATHS prunes a declared root ($_needle)" "$W" "$_needle"
+done
+
+# A valid entry is silent — no adopter should see a warning for correct config.
+W=$(new_fixture)
+printf 'NESTED_CHECKOUT_PATHS="repos .worktrees"\n' > "$W/scripts/harness/harness.conf"
+mkdir -p "$W/repos/child" "$W/.worktrees/proj/alias"
+printf '# Child\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/repos/child/AGENTS.md"
+printf '# Alias\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/.worktrees/proj/alias/AGENTS.md"
+assert_ok_without "a valid NESTED_CHECKOUT_PATHS emits no warning" "$W" "WARNING: NESTED_CHECKOUT_PATHS"
+
+# ...and prunes nothing else: an ordinary first-party package under the same
+# config is still checked.
+W=$(new_fixture)
+printf 'NESTED_CHECKOUT_PATHS="repos .worktrees"\n' > "$W/scripts/harness/harness.conf"
+mkdir -p "$W/packages/x"
+printf '# Pkg\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/packages/x/AGENTS.md"
+assert_flags "NESTED_CHECKOUT_PATHS does not over-prune an ordinary nested package" "$W" "packages/x/AGENTS.md"
+
+# The built-in .claude/worktrees prune survives a configured list (the
+# configured entries extend the built-ins, they do not replace them).
+W=$(new_fixture)
+printf 'NESTED_CHECKOUT_PATHS="repos .worktrees"\n' > "$W/scripts/harness/harness.conf"
+mkdir -p "$W/.claude/worktrees/wt"
+printf '# Nested\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/.claude/worktrees/wt/AGENTS.md"
+assert_ok_without "the built-in .claude/worktrees prune survives a configured NESTED_CHECKOUT_PATHS" "$W" ".claude/worktrees/wt/AGENTS.md"
+
+# Entries are ROOT-ANCHORED: "repos" prunes <root>/repos, not every directory
+# named repos. packages/repos/ is a first-party path that merely shares a name.
+W=$(new_fixture)
+printf 'NESTED_CHECKOUT_PATHS="repos"\n' > "$W/scripts/harness/harness.conf"
+mkdir -p "$W/packages/repos"
+printf '# Pkg\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/packages/repos/AGENTS.md"
+assert_flags "NESTED_CHECKOUT_PATHS is root-anchored (packages/repos is not pruned)" "$W" "packages/repos/AGENTS.md"
+
+# A trailing slash is a spelling, not a different entry.
+W=$(new_fixture)
+printf 'NESTED_CHECKOUT_PATHS="repos/"\n' > "$W/scripts/harness/harness.conf"
+mkdir -p "$W/repos/child"
+printf '# Child\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/repos/child/AGENTS.md"
+assert_ok_without "a trailing-slash NESTED_CHECKOUT_PATHS entry still prunes" "$W" "repos/child/AGENTS.md"
+
+# Entries are LITERAL paths, never globs. Without the escape, a stray "*"
+# would expand to <root>/* and prune the entire repository — silently reducing
+# check #4 to the root entry pages. assert_flags proves the package was still
+# scanned, i.e. that nothing was pruned by the bare "*".
+W=$(new_fixture)
+printf 'NESTED_CHECKOUT_PATHS="*"\n' > "$W/scripts/harness/harness.conf"
+mkdir -p "$W/packages/x"
+printf '# Pkg\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/packages/x/AGENTS.md"
+assert_flags "a glob metacharacter in NESTED_CHECKOUT_PATHS is literal, not a wildcard" "$W" "packages/x/AGENTS.md"
+
+# Unusable entries WARN by name and are skipped — never an ERROR, and never a
+# prune of $ROOT. assert_flags is doing double duty here: the exit-1 half is
+# what proves the root AGENTS.md was still scanned, i.e. that the rejected
+# entry did not take the whole repository with it.
+for _bad in "." ".." "/" "../x" "repos/../.." "/abs/path"; do
+    W=$(new_fixture)
+    printf 'NESTED_CHECKOUT_PATHS="%s"\n' "$_bad" > "$W/scripts/harness/harness.conf"
+    printf '# Root\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/AGENTS.md"
+    assert_flags "NESTED_CHECKOUT_PATHS entry '$_bad' is rejected with a warning" "$W" "WARNING: NESTED_CHECKOUT_PATHS entry '$_bad' (harness.conf)"
+done
+
+# The same six at once: the gate stays live and still names the root doc.
+W=$(new_fixture)
+printf 'NESTED_CHECKOUT_PATHS=". .. / ../x repos/../.. /abs/path"\n' > "$W/scripts/harness/harness.conf"
+printf '# Root\n- [Gone](does-not-exist-anywhere.md)\n' > "$W/AGENTS.md"
+assert_flags "rejected NESTED_CHECKOUT_PATHS entries never prune the repo root" "$W" "AGENTS.md links to 'does-not-exist-anywhere.md'"
+
+# find's -path is a GLOB match, and $ROOT is wherever the checkout happens to
+# live — an unescaped '[' or '*' in it silently voids every prune. Exit 0 here
+# needs BOTH the built-in .claude/worktrees prune and the configured repos
+# prune to have matched a $ROOT holding both metacharacters.
+W=$(new_fixture)
+W_META="${W%/*}/fix[t]ure*meta"
+mv "$W" "$W_META"
+printf 'NESTED_CHECKOUT_PATHS="repos"\n' > "$W_META/scripts/harness/harness.conf"
+mkdir -p "$W_META/repos/child" "$W_META/.claude/worktrees/wt"
+printf '# Child\n- [Gone](does-not-exist-anywhere.md)\n' > "$W_META/repos/child/AGENTS.md"
+printf '# Nested\n- [Gone](does-not-exist-anywhere.md)\n' > "$W_META/.claude/worktrees/wt/AGENTS.md"
+assert_ok_without "prunes still match when \$ROOT contains find -path glob metacharacters" "$W_META" "does-not-exist-anywhere.md"
+
 # --- the regression: a titled link to a file that EXISTS must not error ---
 # Before the fix, "${link%%#*}" left the title on the target
 # (guide.md "The Guide") so the path never resolved and check #4 errored.
