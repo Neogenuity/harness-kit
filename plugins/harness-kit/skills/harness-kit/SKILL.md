@@ -71,7 +71,10 @@ misfire on the router alone, but the reference carries the steps.
   tailored state.
 - **`SECRET_PATTERNS` in `harness.conf` is the single source** for the secret
   guard — mirror it into every provider deny-list (`check-harness` fails on a
-  miss). Verify with `scripts/harness/verify` + `scripts/harness/check-harness`
+  miss). The mirrors are asymmetric — Claude Code's native list is **deny-only**
+  and deny beats allow there, so a `SECRET_ALLOW_PATTERNS` file stays
+  Read-tool-denied (see [init.md](references/modes/init.md) and doctor #10f).
+  Verify with `scripts/harness/verify` + `scripts/harness/check-harness`
   before declaring done.
 
 ## audit — grade an existing repo → [references/modes/audit.md](references/modes/audit.md)

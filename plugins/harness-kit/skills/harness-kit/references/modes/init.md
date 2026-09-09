@@ -174,7 +174,20 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      the repo's actual secret files — this is the single source
      (`guard-secrets.sh` enforces it, `check-harness` verifies the native
      deny lists against it). Mirror additions into
-     `tests/test-guard-secrets.sh` cases.
+     `tests/test-guard-secrets.sh` cases. Be explicit with the repo owner that
+     an allow pattern reopens a file in the hook, and in OpenCode only for the
+     allow keys its hand-maintained `permission.read` map lists, but **not** in
+     Claude Code, whose native list is deny-only because that platform
+     evaluates deny before allow — so with the default patterns `.env.example`
+     is Read-tool-denied there. The one remedy: narrow `SECRET_PATTERNS` until
+     no glob matches it, then re-run `bash scripts/harness/sync secrets` and
+     re-pin the manifest. A shell read of the file is allow-listed by the hook,
+     but Claude Code builds its sandbox from the same `Read` deny rules and
+     enforces those paths at the OS level for every command inside it
+     ([sandboxing](https://code.claude.com/docs/en/sandboxing), verified
+     2026-09), so that route holds only outside the sandbox execution profile
+     or via an operator-approved unsandboxed command — never offer it as the
+     fix.
    - `harness.conf` `MCP_ALLOWED_SERVERS`: one
      `<name> <identity-substring>` per line for each server approved in the
      interview — the substring is matched fixed-string against the server's
@@ -309,7 +322,18 @@ doctor keeps WARNing on the same condition on every later run (check #10).
      Extend `permissions.allow` with the quality-gate
      commands and `permissions.deny` with `Read(...)` entries covering every
      tailored `SECRET_PATTERNS` glob — `check-harness` fails when the deny
-     list misses one. When `.claude` is in `EXECUTION_PROFILE_PROVIDERS`, merge
+     list misses one. That list is **deny-only on purpose**: Claude Code
+     evaluates deny before allow and a deny rule carries no allowlist
+     exception, so `SECRET_ALLOW_PATTERNS` cannot reopen anything here and a
+     file matching both lists (`.env.example` under the defaults) is
+     Read-tool-denied. Tell the repo owner the one remedy: narrow
+     `SECRET_PATTERNS` until no glob matches it, then re-run
+     `bash scripts/harness/sync secrets` and re-pin the manifest. Do **not**
+     offer "read it from Bash" — these same `Read` deny rules are what Claude
+     Code builds its sandbox from, enforced at the OS level for every command
+     inside it and their children, so with the `sandbox` object below merged
+     the shell read fails too.
+     When `.claude` is in `EXECUTION_PROFILE_PROVIDERS`, merge
      the template's `sandbox` object too; otherwise omit that optional subtree
      even on a fresh install. Stop if the installed Claude Code is older than
      2.1.187. Merge, don't clobber, an existing file.
