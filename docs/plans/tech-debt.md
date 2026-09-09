@@ -127,3 +127,25 @@ a real plan in [PLANS.md](PLANS.md)'s lifecycle.
   clone and the fix is worth shipping without widening it. Promote on the first
   Windows adopter report, or when adopter-side `.gitattributes` is picked up as
   part of a broader install-time repo-config pass (trigger: either of those).
+- **`guard-config.sh` is blind to edits inside a nested worktree checkout** —
+  the hook derives `ROOT` from its own location, so a file under
+  `.claude/worktrees/<wt>/scripts/test-*.sh` computes a `rel` beginning
+  `.claude/worktrees/…`, which no slash-bearing protected pattern
+  (`GUARD_PROTECTED_EXTRA`, `scripts/harness/*`) can match; the Edit tool is not
+  denied there. Observed 2026-09-09 by two subagents working in `isolation:
+  worktree` (the manifest gate still catches the drift at verify time, so this
+  is advisory-layer only). Fix candidates: strip a leading
+  `.claude/worktrees/<name>/` from `rel` before matching, or resolve `ROOT`
+  from the edited file upward to its own checkout. Promote when a worktree
+  session edits mechanism unnoticed until CI, or when Claude Code resolves hook
+  wiring per worktree (trigger: either).
+- **OpenCode allow keys are hand-maintained, not derived from
+  `SECRET_ALLOW_PATTERNS`** — `sync secrets` emits deny keys only
+  (`secrets_oc_deny`; no allow derivation), the shipped
+  `providers/opencode/opencode.json` lists four of the five default allow
+  patterns (no `*.example`), and no check validates `permission.read` allow
+  keys against the conf. So `.env.mcp.example` is allow in the hook and deny in
+  OpenCode, and any adopter-tailored allow pattern opens the same gap silently.
+  Found by the #39 review, 2026-09-09; the docs on that branch were narrowed to
+  the truth. Promote when an adopter tailors `SECRET_ALLOW_PATTERNS` or on the
+  first OpenCode report of a denied example file (trigger: either).
