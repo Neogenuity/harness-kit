@@ -3,6 +3,90 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
+## 0.43.0 — 2026-09-09
+
+Three validated open issues, each implemented by one engineer and then
+adversarially reviewed twice before its fixes landed (#40). The doc-link
+scan learns about nested checkouts, the doctor names the files Claude Code's
+deny-only secret mirror refuses despite the allow-list, and `observe`
+records an outcome diff.
+
+Every changed file is mechanism-layer except `harness.conf`, which is
+policy and therefore diffed, not replaced — see Migration.
+
+### Added
+
+- **`NESTED_CHECKOUT_PATHS` in `harness.conf`.** Repo-relative directory
+  roots holding foreign or nested checkouts — a metarepo's child clones under
+  `repos/`, a worktree set under `.worktrees/<name>/<alias>/`. Check #4 prunes
+  each from every doc producer, so a broken link in a checkout nobody can fix
+  from the host never fails the host's gate, and the scan no longer walks
+  those trees. Entries are root-anchored and literal (`repos` prunes
+  `<root>/repos` only); an absolute, `.`, or `..` entry is ignored with a
+  WARNING and can never prune the repository root. `.claude/worktrees` stays
+  built in. (#38)
+
+- **Doctor check 10f.** WARN-only: names tracked files whose basename matches
+  both `SECRET_ALLOW_PATTERNS` and `SECRET_PATTERNS` when `.claude/settings.json`
+  is present, because that mirror is deny-only and Claude Code evaluates deny
+  before allow with no allowlist exception — and the same `Read` deny rules
+  build the Bash sandbox, so "read it from the shell" is not a remedy either.
+  The one fix is narrowing `SECRET_PATTERNS`, then `sync secrets` and a
+  re-pin. Silent without git or with no overlap, capped at five files, and an
+  awk prefilter keeps it near 0.3 s on 100k tracked files. (#39, whose
+  requested `allow` entries cannot take effect on that platform)
+
+- **`observe import --diff PATH`.** Stores an operator-supplied unified diff
+  as `<run>/diff.patch` under the same private staging as the transcript and
+  records `diff_present`, `diff_files_changed`, and
+  `diff_files_changed_source` (`git-diff-headers`, `unified-target-headers`,
+  or `no-recognized-headers`) in run metadata, now `version: 2`.
+  `observe show` reports them; `promote` never copies the diff into a
+  committed draft, pinned by a mutation-checked test. (#36)
+
+- **Queued plan: automatic session capture**
+  (`docs/plans/observe-auto-capture.md`). Claude Code first. Records the
+  measured blocker — the on-disk session transcript lacks the `system/init`
+  anchor `observe import` requires — and that only Claude Code and Codex
+  expose a transcript path at session end. (#36 follow-up)
+
+### Fixed
+
+- **Check #4 still traversed the trees it excluded.** `.git`, `node_modules`,
+  and `vendor` were `-not -path` result filters, so `find` walked every file
+  under them before discarding the hits; they are true `-prune` branches now,
+  in every producer, so a docs site's `node_modules` READMEs are no longer
+  link-checked. Built-in prunes are root-anchored and fnmatch-escaped: a
+  checkout whose own directory was named `vendor` used to prune itself at
+  depth 0 and examine nothing, and a `$ROOT` containing `[`, `*`, or `\` lost
+  every prune. (#38)
+
+- **Docs claimed `SECRET_ALLOW_PATTERNS` reopens files in Claude Code and
+  OpenCode.** Claude Code's native list is deny-only (ADR 011) and the sandbox
+  inherits it; OpenCode honors only the allow keys its hand-maintained
+  `permission.read` map lists (`sync secrets` derives deny keys only, and the
+  shipped map omits `*.example`). SKILL.md, init.md, the guard header, the
+  hooks README, `harness.conf`, `templates.md`, and the provider matrix
+  (Permissions cell, `verified 2026-09`, sandboxing source) now say so. (#39)
+
+### Migration
+
+Update mode replaces the mechanism files when your copy still matches its
+pin — `lib/check-docs.sh`, `lib/check-doctor.sh`, `hooks/guard-secrets.sh`,
+`hooks/README.md`, `observe`, `tests/test-observe.sh` — and diffs
+`harness.conf`, which is policy: accept that diff to gain the
+`NESTED_CHECKOUT_PATHS` block and the corrected secret-pattern comment.
+
+- A tailored `harness.conf` that predates the knob leaves
+  `NESTED_CHECKOUT_PATHS` unset, so like every other conf knob it falls
+  through to the ambient environment. Set it explicitly (empty is fine) if
+  your gate runs in a shell that exports an unrelated variable of that name.
+- The pruning is a behaviour change under `docs/`, `.harness/`, and
+  `.agents/skills/`: a real doc placed under a directory named `vendor` or
+  `node_modules` there is no longer link-checked.
+- Run metadata written by 0.42.0 stays readable; `observe show` reports a
+  version-1 run as having no diff.
+
 ## 0.42.0 — 2026-08-12
 
 Closes the feedback loop the audit surfaces were pointing at but could not
