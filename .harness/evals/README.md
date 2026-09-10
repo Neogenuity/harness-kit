@@ -186,7 +186,7 @@ bash scripts/harness/lib/eval-harness.sh --update-baseline
 # Start an excluded draft, or import local observational evidence:
 bash scripts/harness/eval-author new <slug>
 bash scripts/harness/eval-author finalize <slug>
-bash scripts/harness/observe import --provider claude --transcript <path>
+bash scripts/harness/observe import --provider claude --transcript <path> [--diff <path>]
 ```
 
 Transcripts and per-trial logs land under `.harness/var/eval-results/<task>/<run>/`
@@ -214,6 +214,23 @@ grader-validity suite. `observe feedback` records a local good/bad label, and
 `observe promote <run-id> <slug>` attaches path-redacted trajectory metrics to
 a new draft. Raw transcript text, run identity, and modified-file paths stay
 under `.harness/var/`. Use `observe show <run-id>` before promotion.
+
+`observe import --diff <path>` optionally records the run's **outcome diff**.
+The file is copied verbatim to `<run>/diff.patch` beside the transcript, and the
+run metadata (now `version: 2`) gains `diff_present`, `diff_files_changed`, and
+`diff_files_changed_source`. The source names how the count was reached, because
+the diff shapes are not interchangeable: `git-diff-headers` counts `diff --git`
+lines, and `unified-target-headers` is the fallback `+++` count for a plain
+`diff -u` — approximate, since added content beginning `++ ` inflates it. A file
+carrying neither header shape — an empty diff, or operator-supplied prose — is
+still accepted and recorded as present with zero files, labelled
+`no-recognized-headers` so the record never names a counting method that did not
+apply. An unreadable `--diff` path, a directory, or an empty value all fail
+before any run directory is staged. `observe show` reports the same three facts
+as a top-level `diff` block, and reports a pre-`version: 2` run as absent and
+uncounted. Like the transcript, the diff is raw local evidence that can carry
+secrets and private paths, so `promote` never copies it into a draft scenario —
+drafts get committed. `--diff` is accepted by `import` alone.
 
 `eval.sh` clones committed `HEAD` for every trial workspace, so uncommitted
 changes in the repo you're running from are invisible to the agent and would

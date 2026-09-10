@@ -144,7 +144,8 @@ scripts/
     check-docs  detect-drift   #   and the per-family checker entries
     validate-plan  run-evals
     harness.conf               # shared tailoring surface (HARNESS_PROVIDERS, paths,
-                               #   secret patterns, format/lint rules, log toggle) [tailored]
+                               #   nested checkouts, secret patterns, format/lint
+                               #   rules, log toggle) [tailored]
     kit-manifest               # ship contract: layer per shipped path + retired set
     .harness-manifest          # kit version + checksums (upgrade + CI integrity)
     lib/                       # shared code: install-lib, check families,

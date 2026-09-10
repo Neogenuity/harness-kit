@@ -747,4 +747,140 @@ if [ -n "$_10e_pc_cfg" ]; then
 fi
 
 
+# 10f. Doctor: a file SECRET_ALLOW_PATTERNS reopens is still natively unreadable
+#      in Claude Code. `sync secrets` emits a DENY-ONLY mirror of SECRET_PATTERNS
+#      into .claude/settings.json because that platform evaluates deny before
+#      allow and a deny rule carries no allowlist exception (ADR 011), so a
+#      tracked file matching BOTH lists — `.env.example` under the default
+#      patterns — is refused by the Read tool there no matter what the hook
+#      allows. The over-denying trade is deliberate and documented; what was
+#      missing is that the platform's refusal names nothing about the kit, so
+#      whoever hits it has no path from the denial to the ONE working remedy:
+#      narrow SECRET_PATTERNS until no glob matches the file, re-run
+#      `sync secrets`, re-pin (Neogenuity/harness-kit#39). WARNING only, like
+#      every doctor check.
+#
+#      "Read it from Bash instead" is NOT a second remedy and must never be
+#      offered as one. Claude Code builds its OS-level sandbox from the same
+#      `Read` deny rules, and those paths are enforced for every command in the
+#      sandbox including child processes — so wherever the kit's optional Claude
+#      execution profile is enabled, a shell read of the file is refused too
+#      ("Operation not permitted"). Verified 2026-09 against
+#      https://code.claude.com/docs/en/sandboxing and reproduced.
+#
+#      Wiring detection mirrors check #8's positive arm — `.claude/settings.json`
+#      present means the native deny list lives here — and the overlap is
+#      computed from SECRET_PATTERNS, the source `sync secrets` generates that
+#      file FROM. The JSON globs are NOT parsed: a hand-edited deny list that
+#      drifted from the conf is check #8's finding, and the warning hedges on
+#      the mirror having been generated rather than implying it inspected the
+#      settings file. Glob semantics match guard-secrets.sh classify() (basename
+#      case-folded, conf entries matched verbatim under `set -f`), except that
+#      classify() returns on the first allow match while this check deliberately
+#      asks BOTH questions — the overlap is the whole finding.
+#
+#      Silent without git or outside a work tree: an untracked example file is
+#      not something the repo ships to anyone, and a claim this check cannot
+#      ground is worse than no claim. A git that FAILS is a different state from
+#      a git that reports nothing, and gets its own hedged warning.
+_10f_max=5
+if [ -f "$ROOT/.claude/settings.json" ] \
+    && [ -n "${SECRET_PATTERNS:-}" ] && [ -n "${SECRET_ALLOW_PATTERNS:-}" ] \
+    && command -v git >/dev/null 2>&1 \
+    && [ "$(git -C "$ROOT" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ]; then
+    # noglob for the same reason guard-secrets.sh sets it: `for pat in $LIST`
+    # pathname-expands a `*.example` entry against the CWD without it. Restored
+    # after the scan.
+    set -f
+    # Prefilter literals, one per allow pattern: the trailing literal run that
+    # EVERY basename matching that pattern must contain. Strip a `[...]` class
+    # and everything right of it, then everything up to the last `*`, then up to
+    # the last `?` — the fork-free equivalent of
+    # `sed 's/\[.*//; s/.*\*//; s/.*?//'`. `.env.example` yields itself,
+    # `*.example` yields `.example`, `id_[rd]sa` yields `id_`.
+    #
+    # This is a STRICT SUPERSET filter and nothing else: it can only drop
+    # basenames that no allow pattern could ever match, so the bash loop below
+    # stays the authoritative matcher and the reported set is byte-identical.
+    # It exists because that loop is one iteration per TRACKED FILE — measured
+    # 8.0s on a 100k-file repo, 0.33s with this filter, same single finding.
+    #
+    # A pattern whose literal comes out empty (`*`, `foo*`) admits no
+    # containment test, so ONE such pattern disables the prefilter for the whole
+    # run and every line survives to the loop. Without that fallback the filter
+    # would keep nothing and the check would go silent.
+    _10f_pf=1
+    _10f_lits=""
+    for _10f_pat in $SECRET_ALLOW_PATTERNS; do
+        _10f_lit=${_10f_pat%%\[*}
+        _10f_lit=${_10f_lit##*\*}
+        _10f_lit=${_10f_lit##*\?}
+        if [ -z "$_10f_lit" ]; then
+            _10f_pf=0
+            _10f_lits=""
+            break
+        fi
+        _10f_lits="$_10f_lits $_10f_lit"
+    done
+    # `ls-files -z` because git QUOTES any path holding non-ASCII bytes, `"` or
+    # `\` in its default output — the basename would carry a trailing `"` and
+    # match nothing, silently. macOS awk cannot take RS="\0", so `tr` does the
+    # delimiter swap (a path containing a literal newline is the one shape this
+    # splits; both halves still get tested, and quoting used to hide every
+    # non-ASCII path outright). One awk pass then case-folds each basename so
+    # the loop is fork-free, applies the prefilter, and dedupes — an unmerged
+    # index lists a conflicted path once per stage. -F/ makes $NF the basename;
+    # $0 is untouched because no field is assigned. The list is captured into a
+    # variable first because assert_loop_ran needs a printf-fed loop — a bare
+    # pipeline yields zero lines in a repo with nothing committed yet and would
+    # report that as a phantom failure.
+    _10f_git_failed=0
+    _10f_files=$(git -C "$ROOT" ls-files -z 2>/dev/null | tr '\0' '\n' \
+        | awk -F/ -v pf="$_10f_pf" -v lits="$_10f_lits" '
+            BEGIN { n = split(lits, L, " "); for (i = 1; i <= n; i++) L[i] = tolower(L[i]) }
+            {
+                b = tolower($NF)
+                if (pf == 1) {
+                    keep = 0
+                    for (i = 1; i <= n; i++) if (index(b, L[i])) { keep = 1; break }
+                    if (keep == 0) next
+                }
+                if (seen[$0]++) next
+                print b "\t" $0
+            }') || _10f_git_failed=1
+    if [ "$_10f_git_failed" = "1" ]; then
+        set +f
+        # A corrupt index exits 128 here while rev-parse still says "true", so
+        # without this the check would report nothing and read as a clean pass.
+        echo "WARNING: check #10f could not list this repo's tracked files ('git ls-files' failed under $ROOT — a corrupt .git/index does this), so its silence is not a pass: a file matching both SECRET_ALLOW_PATTERNS and SECRET_PATTERNS would go unreported"
+    else
+        _10f_hits=0
+        _10f_read=0
+        while IFS=$'\t' read -r _10f_base _10f_path; do
+            _10f_read=$((_10f_read + 1))
+            { [ -n "$_10f_base" ] && [ -n "$_10f_path" ]; } || continue
+            _10f_allowed=0
+            for _10f_pat in $SECRET_ALLOW_PATTERNS; do
+                # shellcheck disable=SC2254  # conf entries are globs; that is the point
+                case "$_10f_base" in $_10f_pat) _10f_allowed=1; break ;; esac
+            done
+            [ "$_10f_allowed" = "1" ] || continue
+            _10f_secret=0
+            for _10f_pat in $SECRET_PATTERNS; do
+                # shellcheck disable=SC2254
+                case "$_10f_base" in $_10f_pat) _10f_secret=1; break ;; esac
+            done
+            [ "$_10f_secret" = "1" ] || continue
+            _10f_hits=$((_10f_hits + 1))
+            [ "$_10f_hits" -le "$_10f_max" ] || continue
+            echo "WARNING: $_10f_path matches both SECRET_ALLOW_PATTERNS and SECRET_PATTERNS, so wherever 'sync secrets' has generated that deny-only .claude/settings.json mirror the Read tool is denied (deny beats allow, ADR 011). Fix: narrow SECRET_PATTERNS so no glob matches, run 'bash scripts/harness/sync secrets', re-pin; see harness.conf's SECRET_ALLOW_PATTERNS comment"
+        done < <(printf '%s\n' "$_10f_files")
+        set +f
+        assert_loop_ran "$_10f_read" "native-deny overlap scan #10f"
+        [ "$_10f_hits" -gt "$_10f_max" ] \
+            && echo "WARNING: and $((_10f_hits - _10f_max)) more tracked file(s) match both lists — same denial, same fix"
+    fi
+fi
+
+
 check_trailer "doctor"
