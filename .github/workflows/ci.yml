@@ -100,6 +100,24 @@ jobs:
           echo "shasum sep      : [$(shasum -a 256 "$RUNNER_TEMP/hp.txt" | sed 's/^[0-9a-f]*//' | cut -c1-2)]"
           echo "sha256sum sep   : [$(sha256sum "$RUNNER_TEMP/hp.txt" | sed 's/^[0-9a-f]*//' | cut -c1-2)]"
           echo "symlink capable : $(ln -s "$RUNNER_TEMP/hp.txt" "$RUNNER_TEMP/sp" 2>/dev/null && [ -L "$RUNNER_TEMP/sp" ] && echo yes || echo no)"
+          # hook_deny must tell a /dev/null stdout from a real reader (#41).
+          # Record what each candidate check sees for fd 1, per stdout kind,
+          # so a Git Bash mismatch is diagnosable from this log alone.
+          probe="$RUNNER_TEMP/fd1-probe.sh"
+          cat > "$probe" <<'PROBE'
+          #!/usr/bin/env bash
+          exec 3>&1
+          r=""
+          for t in "/dev/fd/1 -ef /dev/null" "/dev/stdout -ef /dev/null" "/proc/self/fd/1 -ef /dev/null" "-e /dev/fd/1" "-c /dev/fd/1" "-p /dev/fd/1" "-t 1"; do
+            if eval "[ $t ]"; then r="$r y"; else r="$r n"; fi
+          done
+          printf '%s | readlink=%s | stat=%s\n' "$r" "$(readlink /dev/fd/3 2>&1)" "$(stat -L -c %d:%i:%F /dev/fd/3 /dev/null 2>&1 | paste -sd' ' -)" >&2
+          PROBE
+          chmod 755 "$probe"
+          echo "fd1 probe cols  : fd-ef stdout-ef proc-ef fd-e fd-c fd-p tty"
+          echo "fd1 = pipe      :$( { "$probe" | cat >/dev/null; } 2>&1 || true)"
+          echo "fd1 = /dev/null :$("$probe" 2>&1 >/dev/null || true)"
+          echo "fd1 = file      :$("$probe" 2>&1 >"$RUNNER_TEMP/fd1.out" || true)"
 
       # Regression guard for #27. .gitattributes pins eol=lf, so a Windows
       # checkout must NOT be CRLF even though core.autocrlf=true is the Git for
