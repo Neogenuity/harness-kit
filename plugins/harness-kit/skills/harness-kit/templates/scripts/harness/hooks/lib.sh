@@ -222,9 +222,10 @@ hook_log() {
 # row, doesn't document PreToolUse stderr reaching the model). The JSON is
 # round-tripped through jq before being trusted — if construction fails for
 # ANY reason (jq absent, jq error, empty output), the event isn't PreToolUse,
-# or the write to stdout fails, this falls through to the portable exit 2.
-# That fallback is load-bearing: a malformed or unwritten exit-0 "deny" would
-# fail OPEN (allow), the one direction this protocol must never take.
+# stdout is /dev/null, or the write to stdout fails, this falls through to the
+# portable exit 2. That fallback is load-bearing: a malformed or unwritten
+# exit-0 "deny" would fail OPEN (allow), the one direction this protocol must
+# never take.
 hook_deny() {
     local reason="$1" file="${2:-}" event="" json=""
     [ -n "$file" ] || file=$(hook_file_path)
@@ -234,13 +235,23 @@ hook_deny() {
         if [ "$event" = "PreToolUse" ]; then
             json=$(printf '%s' "$reason" | jq -Rs \
                 '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: .}}' 2>/dev/null)
-            # Take the exit-0 JSON deny only if the object verifies AND the write
-            # to stdout actually succeeds. A failed write (closed/broken stdout)
-            # must fall through to the portable exit-2 deny — never exit 0 with
-            # no deny bytes, which a harness reads as ALLOW (the one fail-open
-            # direction this protocol must never take).
+            # Take the exit-0 JSON deny only if the object verifies AND stdout
+            # can carry it to a reader. A closed stdout fails the write; a
+            # /dev/null stdout "succeeds" into nothing, and is not exotic: an
+            # env built on Rust's runtime (uutils, Ubuntu 26.04's default
+            # /usr/bin/env) reopens a closed stdout as /dev/null before
+            # exec'ing a `#!/usr/bin/env bash` hook (#41). Both must fall
+            # through to the portable exit-2 deny — never exit 0 with no deny
+            # bytes, which a harness reads as ALLOW (the one fail-open
+            # direction this protocol must never take). A closed stdout has no
+            # /dev/fd/1, so `-ef` is false there and the printf failure catches
+            # it instead. Keep this a /dev/null test, never a pipe-only
+            # allowlist: Claude Code (Node) hands a hook a Unix socket, not a
+            # pipe. Not covered: a pipe whose reader already exited raises
+            # SIGPIPE at the printf, which kills the hook with 141 unless
+            # SIGPIPE was inherited as ignored.
             if [ -n "$json" ] && printf '%s' "$json" | jq -e 'has("hookSpecificOutput")' >/dev/null 2>&1 \
-                && printf '%s\n' "$json"; then
+                && ! [ /dev/fd/1 -ef /dev/null ] && printf '%s\n' "$json"; then
                 exit 0
             fi
         fi

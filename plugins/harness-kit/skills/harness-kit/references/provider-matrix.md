@@ -202,9 +202,11 @@ matrix in step: a change here that alters membership is a one-row change there.
   JSON is round-tripped through jq before being trusted, so jq being
   absent, a JSON build error, or any non-PreToolUse/unrecognized layout
   (including Cursor's top-level `file_path` shape, which carries no
-  `hook_event_name`) all fall through to the portable exit 2 — a malformed
-  exit-0 "deny" would fail OPEN, the one direction this protocol must never
-  take. `{"decision":"block","reason":...}` (Claude Code, Codex) /
+  `hook_event_name`) all fall through to the portable exit 2, as does a
+  stdout that cannot carry the JSON to a reader (closed, or `/dev/null` —
+  which a Rust-built `env` such as uutils substitutes for a closed stdout) —
+  a malformed or unread exit-0 "deny" would fail OPEN, the one direction
+  this protocol must never take. `{"decision":"block","reason":...}` (Claude Code, Codex) /
   `{"followup_message":...}` (Cursor) remain separately for the stop-hook
   continue-the-turn trick (see Stop-loop guard above) — an unrelated
   channel from the PreToolUse deny.

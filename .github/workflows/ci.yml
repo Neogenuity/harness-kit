@@ -15,8 +15,10 @@ jobs:
       fail-fast: false
       matrix:
         # macOS exercises the BSD awk/tr, shasum, and readlink -f branches
-        # the hooks rely on; Ubuntu covers the GNU userland.
-        os: [ubuntu-latest, macos-latest]
+        # the hooks rely on. ubuntu-24.04 pins the GNU coreutils userland most
+        # adopters still run: ubuntu-latest became 26.04 in 2026-10, whose
+        # coreutils (env included) are uutils, built on Rust (#41).
+        os: [ubuntu-latest, ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
