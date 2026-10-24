@@ -16,10 +16,13 @@ All notable changes to harness-kit. The version is defined in
   exited 0 with no deny bytes reaching anyone, and `check-harness` failed for
   every adopter whose `harness-check.yml` runs on `ubuntu-latest`. The same
   gap existed on every platform for any caller that points a hook's stdout at
-  `/dev/null`. `hook_deny` now treats a `/dev/null` stdout as unwritable and
-  takes the portable exit 2. A pipe or a Unix socket, which is how the
-  providers read hook output (Claude Code, a Node process, hands its hooks a
-  socket), is unchanged.
+  `/dev/null`. `hook_deny` now treats a stdout that is a character device but
+  not a terminal (`/dev/null` and kin) as unwritable and takes the portable
+  exit 2. A pipe, a Unix socket, a regular file or a terminal is unchanged;
+  sockets matter because Claude Code, a Node process, hands its hooks one.
+  The check is by file type rather than identity, because on Git Bash the
+  open descriptor and the `/dev/null` path report different device and inode
+  numbers, so `[ /dev/fd/1 -ef /dev/null ]` never matches there.
 
   The suite now pins both arms on every platform. The closed-stdout case runs
   the fixture through `bash`, so no `env` can reopen the descriptor, and a new
@@ -27,7 +30,8 @@ All notable changes to harness-kit. The version is defined in
   alone would have left a uutils runner exercising the `/dev/null` arm under
   the closed-stdout name, with the write-failure arm untested. This repo's CI
   matrix also adds `ubuntu-24.04`, so GNU coreutils stays covered now that
-  `ubuntu-latest` runs uutils. (#41)
+  `ubuntu-latest` runs uutils, and the Windows floor job logs what each
+  stdout check sees there. (#41)
 
 ### Migration
 

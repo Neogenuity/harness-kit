@@ -203,8 +203,9 @@ matrix in step: a change here that alters membership is a one-row change there.
   absent, a JSON build error, or any non-PreToolUse/unrecognized layout
   (including Cursor's top-level `file_path` shape, which carries no
   `hook_event_name`) all fall through to the portable exit 2, as does a
-  stdout that cannot carry the JSON to a reader (closed, or `/dev/null` —
-  which a Rust-built `env` such as uutils substitutes for a closed stdout) —
+  stdout that cannot carry the JSON to a reader (closed, or a non-terminal
+  character device such as `/dev/null`, which a Rust-built `env` such as
+  uutils substitutes for a closed stdout) —
   a malformed or unread exit-0 "deny" would fail OPEN, the one direction
   this protocol must never take. `{"decision":"block","reason":...}` (Claude Code, Codex) /
   `{"followup_message":...}` (Cursor) remain separately for the stop-hook
