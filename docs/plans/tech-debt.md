@@ -4,6 +4,17 @@ Known, deliberately deferred work that is not big enough for an execution
 plan. One line each: what, why deferred, and the trigger that promotes it to
 a real plan in [PLANS.md](PLANS.md)'s lifecycle.
 
+- **A PreToolUse deny into a pipe whose reader already exited fails open** —
+  `hook_deny`'s JSON `printf` raises SIGPIPE, so the hook dies with 141 and
+  no reason on stderr, and Claude Code treats any exit other than 0 or 2 as a
+  non-blocking error that lets the call through. It predates #41 (its review
+  found it, 2026-10-23, reproduced 3/3 with a FIFO-synchronised reader) and
+  fails closed with exit 2 only where SIGPIPE is inherited as ignored.
+  Deferred because no provider closes a hook's stdout before it writes, and a
+  deterministic test needs a FIFO in a suite the Windows floor also runs. The
+  fix is a `trap '' PIPE` just before the write, pinned by a case whose reader
+  closes its stdin before feeding the hook its payload (trigger: any report of
+  a guard exiting 141, or a provider that closes hook stdout early).
 - **Deep schema validation** — `.harness/schemas/` are documentation-grade
   contracts; check-docs asserts only JSON validity. Promote when a
   dependency-free validator is worth the weight (trigger: a schema drift

@@ -195,14 +195,22 @@ else
     echo "ok:   empty payload — still a portable exit 2 deny"
 fi
 
-# --- extra: fail-closed when the exit-0 JSON write itself fails ---
-# A PreToolUse deny whose JSON can't reach stdout (here: stdout closed with
-# >&-, standing in for any broken/closed pipe) MUST fall through to the
+# --- extra: fail-closed when stdout cannot carry the exit-0 JSON deny ---
+# A PreToolUse deny whose JSON reaches no reader MUST fall through to the
 # portable exit-2 deny — never exit 0 with no deny bytes, which a harness
-# reads as ALLOW. This pins the write-failure arm of the fail-closed invariant
-# that the plain jq-present happy path can't exercise.
+# reads as ALLOW. Stdout can be unusable in two ways, and each case below
+# pins one arm of that invariant on every platform:
+#   closed    — the write fails (stdout closed with >&-; a pipe whose reader
+#               has exited is a different case, SIGPIPE, and is not pinned
+#               here). Run through `bash`, NOT the fixture's
+#               `#!/usr/bin/env bash`: an env built on Rust's runtime (uutils,
+#               Ubuntu 26.04's default) reopens a closed fd 1 as /dev/null
+#               before exec, which silently turned this case into the next one
+#               and left the write-failure arm untested there (#41).
+#   /dev/null — the write "succeeds" into nothing. Run through the shebang,
+#               the way Claude Code and Cursor invoke a hook.
 printf '%s' '{"hook_event_name":"PreToolUse","tool_input":{"file_path":"x.py"}}' \
-    | "$HOOK" >&- 2>"$WORK/stderr7"
+    | bash "$HOOK" >&- 2>"$WORK/stderr7"
 rc=$?
 if [ "$rc" != "2" ]; then
     echo "FAIL: closed-stdout PreToolUse deny — expected exit 2 (fail-closed), got $rc"
@@ -212,6 +220,19 @@ elif ! grep -q 'REASON TEXT' "$WORK/stderr7"; then
     fails=$((fails + 1))
 else
     echo "ok:   closed-stdout PreToolUse deny — falls through to the portable exit 2 (never fails open)"
+fi
+
+printf '%s' '{"hook_event_name":"PreToolUse","tool_input":{"file_path":"x.py"}}' \
+    | "$HOOK" >/dev/null 2>"$WORK/stderr8"
+rc=$?
+if [ "$rc" != "2" ]; then
+    echo "FAIL: /dev/null-stdout PreToolUse deny — expected exit 2 (fail-closed), got $rc"
+    fails=$((fails + 1))
+elif ! grep -q 'REASON TEXT' "$WORK/stderr8"; then
+    echo "FAIL: /dev/null-stdout PreToolUse deny — reason missing from stderr"
+    fails=$((fails + 1))
+else
+    echo "ok:   /dev/null-stdout PreToolUse deny — falls through to the portable exit 2 (never fails open)"
 fi
 
 if [ "$fails" -gt 0 ]; then
