@@ -3,7 +3,13 @@
 All notable changes to harness-kit. The version is defined in
 `plugins/harness-kit/VERSION` and mirrored into both plugin manifests.
 
-## Unreleased
+## 0.44.0 — 2026-11-03
+
+One fail-open fix in the shared deny protocol (#41, #42). A PreToolUse deny
+whose stdout was `/dev/null` exited 0 on every platform, and Ubuntu 26.04's
+uutils `env` turned the suite's closed-stdout case into exactly that, failing
+`check-harness` on `ubuntu-latest`. It is a minor release because
+`hook_deny` now behaves differently in a case it used to get wrong.
 
 ### Fixed
 
